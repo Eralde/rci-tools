@@ -1,0 +1,33 @@
+{
+  "name": "rci-manager",
+  "version": "0.1.0",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "rimraf dist tsconfig.tsbuildinfo",
+    "build": "tsc -b",
+    "dev": "tsc --watch",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@total-typescript/ts-reset": "^0.6.1",
+    "@types/lodash": "^4.17.20"
+  },
+  "dependencies": {
+    "jssha": "^3.3.1",
+    "lodash": "^4.17.21",
+    "rxjs": "^7.8.2",
+    "ts-md5": "^2.0.1"
+  }
+}

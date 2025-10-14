@@ -1,0 +1,16 @@
+{
+  "name": "rci-tools",
+  "private": true,
+  "scripts": {
+    "clean": "pnpm -r run clean",
+    "build:packages": "pnpm -r --filter './packages/*' run build",
+    "build": "pnpm -r run build",
+    "test": "vitest"
+  },
+  "devDependencies": {
+    "@tsconfig/strictest": "^2.0.6",
+    "rimraf": "^5.0.10",
+    "typescript": "^5.9.3",
+    "vitest": "^0.34.6"
+  }
+}
