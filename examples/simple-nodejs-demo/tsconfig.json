@@ -1,0 +1,24 @@
+{
+  "extends": "@tsconfig/strictest/tsconfig.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "rci-manager": ["../../packages/rci-manager/src/index.ts"],
+      "rci-adapter-axios": ["../../packages/rci-adapter-axios/src/index.ts"]
+    }
+  },
+  "include": [
+    "src"
+  ],
+  "references": [
+    {
+      "path": "../../packages/rci-manager"
+    },
+    {
+      "path": "../../packages/rci-adapter-axios"
+    }
+  ]
+}

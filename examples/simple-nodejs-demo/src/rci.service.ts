@@ -1,0 +1,70 @@
+import {catchError, exhaustMap, Observable, of} from 'rxjs';
+import {AxiosTransport} from 'rci-adapter-axios';
+import {
+  GenericObject,
+  GenericResponse$,
+  RciContinuedQuery,
+  RciManager,
+  RciQuery,
+  SessionManager,
+} from 'rci-manager';
+
+export interface DeviceCredentials {
+  address: string;
+  username: string;
+  password: string;
+}
+
+export class RciService {
+  protected transport: AxiosTransport;
+  protected auth: SessionManager;
+  protected manager: RciManager;
+
+  constructor(
+    protected credentials: DeviceCredentials,
+  ) {
+    const {address} = credentials;
+
+    this.transport = new AxiosTransport();
+    this.manager = new RciManager(address, this.transport);
+    this.auth = new SessionManager(address, this.transport);
+  }
+
+  public execute(query: RciQuery | RciQuery[]): GenericResponse$ {
+    return this.ensureAuth()
+      .pipe(
+        exhaustMap(() => this.manager.execute(query)),
+        catchError((error) => {
+          console.log('Failed to execute an RCI query', error);
+
+          return of({});
+        }),
+      );
+  }
+
+  public queueContinuedTask(path: string, data: GenericObject): RciContinuedQuery {
+    console.log('Adding a "continued" task to the queue', path, data);
+
+    const query = this.manager.queueContinuedTask({path, data});
+
+    query.done$
+      .subscribe((done) => {
+        console.warn('"continued" task done', {path, data, done});
+      });
+
+    return query;
+  }
+
+  public ensureAuth(): Observable<boolean> {
+    return this.auth.isAuthenticated()
+      .pipe(
+        exhaustMap((isAuthenticated) => {
+          if (!isAuthenticated) {
+            return this.auth.login(this.credentials.username, this.credentials.password);
+          }
+
+          return of(true);
+        }),
+      );
+  }
+}
