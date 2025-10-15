@@ -18,7 +18,7 @@
     "clean": "rimraf dist tsconfig.tsbuildinfo",
     "build": "tsc -b",
     "dev": "tsc --watch",
-    "test": "vitest run"
+    "test": "node ./scripts/test-runner.js"
   },
   "devDependencies": {
     "@total-typescript/ts-reset": "^0.6.1",
