@@ -34,9 +34,6 @@
     },
     {
       "path": "../../packages/rci-manager"
-    },
-    {
-      "path": "../../packages/rci-adapter-fetch"
     }
   ]
 }

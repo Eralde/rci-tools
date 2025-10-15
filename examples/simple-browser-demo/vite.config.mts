@@ -68,7 +68,6 @@ export default defineConfig(({mode}) => {
     resolve: {
       alias: {
         'rci-manager': resolve(projectRoot, '../../packages/rci-manager/src/index.ts'),
-        'rci-adapter-fetch': resolve(projectRoot, '../../packages/rci-adapter-fetch/src/index.ts'),
       },
     },
     optimizeDeps: {

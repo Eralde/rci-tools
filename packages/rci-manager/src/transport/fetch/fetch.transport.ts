@@ -1,5 +1,6 @@
 import {exhaustMap, from, map, Observable} from 'rxjs';
-import type {BaseHttpResponse, GenericObject, HttpTransport} from 'rci-manager';
+import {GenericObject} from '../../type.utils';
+import type {BaseHttpResponse, HttpTransport} from '../http.transport';
 
 export interface FetchTransportResponse extends BaseHttpResponse {
   headers: Headers;

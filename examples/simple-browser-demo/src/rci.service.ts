@@ -1,5 +1,4 @@
-import {FetchTransport} from 'rci-adapter-fetch';
-import {RciManager, RciQuery, SessionManager} from 'rci-manager';
+import {RciManager, RciQuery, SessionManager, FetchTransport} from 'rci-manager';
 import {catchError, Observable, of} from 'rxjs';
 
 class RciService {

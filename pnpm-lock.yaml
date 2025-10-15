@@ -23,9 +23,6 @@ importers:
 
   examples/simple-browser-demo:
     dependencies:
-      rci-adapter-fetch:
-        specifier: workspace:*
-        version: link:../../packages/rci-adapter-fetch
       rci-manager:
         specifier: workspace:*
         version: link:../../packages/rci-manager
@@ -91,15 +88,6 @@ importers:
       tough-cookie:
         specifier: ^5.1.2
         version: 5.1.2
-
-  packages/rci-adapter-fetch:
-    dependencies:
-      rci-manager:
-        specifier: workspace:*
-        version: link:../rci-manager
-      rxjs:
-        specifier: ^7.8.2
-        version: 7.8.2
 
   packages/rci-manager:
     dependencies:

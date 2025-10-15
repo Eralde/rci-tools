@@ -8,7 +8,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "rci-adapter-fetch": "workspace:*",
     "rci-manager": "workspace:*",
     "rxjs": "^7.8.2"
   },
