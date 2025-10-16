@@ -28,14 +28,15 @@ Before running this example, ensure you have the following:
     pnpm install
     ```
 
-3.  **Configure environment variables:**
-    Copy the `.env.template` file to `.env` and update the `PROXY_ADDR` variable with the URL of your RCI device.
+3.  **(optional) Configure default PROXY_ADDR value:**
+    Copy the `.env.template` file to `.env` and update the `PROXY_ADDR` variable with the IP address of the device
+    you want to proxy requests to.
 
     ```bash
     cp .env.template .env
-    # Open .env and set PROXY_ADDR, e.g., PROXY_ADDR=http://192.168.1.1
+    # Open .env and set PROXY_ADDR, e.g., PROXY_ADDR=192.168.1.1
+    # This value will be used if no --proxy-addr argument is provided to the 'dev' script.
     ```
-    This `PROXY_ADDR` will be used by Vite's development server to proxy RCI requests to your device.
 
 
 ## Running the Application
@@ -43,8 +44,13 @@ Before running this example, ensure you have the following:
 ### Development Mode
 
 To run the application in development mode with hot-reloading:
+You can specify the RCI device address using the `--proxy-addr` (or `-a`) argument:
 
 ```bash
+# Using a specific IP address via CLI (this takes precedence over .env)
+pnpm run dev --proxy-addr http://192.168.1.1
+
+# Or, if PROXY_ADDR is set in your .env file:
 pnpm run dev
 ```
 

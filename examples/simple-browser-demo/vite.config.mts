@@ -7,7 +7,18 @@ export default defineConfig(({mode}) => {
   const projectRoot = __dirname;
   const env = loadEnv(mode, projectRoot, '');
 
-  const proxyAddr = env.PROXY_ADDR;
+  const devAddr = process.env.PROXY_ADDR // set by dev-runner.js
+    || env.PROXY_ADDR; // fallback
+
+  if (!devAddr) {
+    console.error('Error: PROXY_ADDR is not defined. Please set it in .env or pass via --proxy-addr CLI argument.');
+    process.exit(1);
+  }
+
+  const proxyAddr = devAddr.startsWith('http://')
+    ? devAddr
+    : `http://${devAddr}`;
+
   const proxyUrl = new URL(proxyAddr);
 
   // Path to the directory containing local packages in this monorepo.
