@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "deploy": "node scripts/deploy.js"
   },
   "dependencies": {
     "rci-manager": "workspace:*",
@@ -15,6 +16,7 @@
     "@types/node": "^20.11.5",
     "typescript": "^5.3.3",
     "vite": "^5.0.10",
-    "vite-plugin-singlefile": "^1.0.0"
+    "vite-plugin-singlefile": "^1.0.0",
+    "yargs": "^18.0.0"
   }
 }
