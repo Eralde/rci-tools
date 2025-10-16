@@ -22,10 +22,27 @@ const argv = yargs(hideBin(process.argv))
   .alias('help', 'h')
   .argv;
 
+const checkCommand = (command) => {
+  try {
+    execSync(`command -v ${command}`, {stdio: 'ignore'});
+
+    return true;
+  } catch (e) {
+    return false;
+  }
+};
+
 const deploy = async () => {
   const {host, path: remotePath, port} = argv;
 
   console.log('Starting deployment process...\n\n');
+
+  const CMD = 'scp';
+
+  if (!checkCommand(CMD)) {
+    console.error(`Error: "${CMD}" command not found. Please ensure OpenSSH client is installed and available in your PATH.`);
+    process.exit(1);
+  }
 
   try {
     console.log('1. Building the application...\n');
