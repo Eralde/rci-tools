@@ -68,6 +68,7 @@ export default defineConfig(({mode}) => {
       // For vite-plugin-singlefile, base is usually './'
       base: './',
       emptyOutDir: true,
+      minify: 'esbuild', // minify production build
       rollupOptions: {
         input: resolve(projectRoot, 'index.html'),
       },
