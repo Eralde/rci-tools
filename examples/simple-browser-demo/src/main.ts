@@ -1,104 +1,97 @@
-import {map} from 'rxjs';
+import {firstValueFrom} from 'rxjs';
 import {rciService} from './rci.service';
 
-// Get DOM elements
+// DOM elements
 const loginView = document.getElementById('login-view')!;
-const infoView = document.getElementById('info-view')!;
-const loginForm = document.getElementById('login-form') as HTMLFormElement;
-const usernameInput = document.getElementById('username') as HTMLInputElement;
-const passwordInput = document.getElementById('password') as HTMLInputElement;
+const loginForm = document.querySelector<HTMLFormElement>('#login-form')!;
+const usernameInput = document.querySelector<HTMLFormElement>('#username')!;
+const passwordInput = document.querySelector<HTMLFormElement>('#password')!;
 const loginError = document.getElementById('login-error')!;
+
+const infoView = document.getElementById('info-view')!;
 const infoLoading = document.getElementById('info-loading')!;
 const infoError = document.getElementById('info-error')!;
 const infoContent = document.getElementById('info-content')!;
 const logoutButton = document.getElementById('logout-button')!;
 
-// Navigation functions
-function showLogin() {
-  loginView.classList.remove('hidden');
-  infoView.classList.add('hidden');
-  loginError.classList.add('hidden');
+const showElements = (...elements: HTMLElement[]): void => {
+  elements.forEach((el) => el.classList.remove('hidden'));
+};
+
+const hideElements = (...elements: HTMLElement[]): void => {
+  elements.forEach((el) => el.classList.add('hidden'));
+};
+
+const clearLoginError = (): void => {
   loginError.textContent = '';
+
+  hideElements(loginError);
+};
+
+const showLoginError = (message: string): void => {
+  loginError.textContent = message;
+
+  showElements(loginError);
+};
+
+const showLoginForm = (): void => {
+  showElements(loginView);
+  hideElements(infoView);
+  clearLoginError();
+
   passwordInput.value = '';
-}
+};
 
-function showInfo() {
-  loginView.classList.add('hidden');
-  infoView.classList.remove('hidden');
-  loadDeviceInfo();
-}
+const showInfo = async (): Promise<void> => {
+  hideElements(loginView);
+  showElements(infoView);
 
-// Login handler
-loginForm.addEventListener('submit', (e) => {
-  e.preventDefault();
-  loginError.classList.add('hidden');
-  loginError.textContent = '';
+  await loadDeviceInfo();
+};
 
-  const username = usernameInput.value;
-  const password = passwordInput.value;
+loginForm.addEventListener(
+  'submit',
+  (event) => {
+    event.preventDefault();
+    clearLoginError();
 
-  rciService.login(username, password).subscribe({
-    next: (success) => {
-      if (success) {
-        showInfo();
-      } else {
-        loginError.textContent = 'Login failed. Please try again.';
-        loginError.classList.remove('hidden');
-      }
-    },
-    error: (err) => {
-      console.error('Login error:', err);
-      loginError.textContent = 'Login failed. Please try again.';
-      loginError.classList.remove('hidden');
-    },
-  });
-});
+    const username = usernameInput.value;
+    const password = passwordInput.value;
 
-// Logout handler
-logoutButton.addEventListener('click', () => {
-  rciService.logout().subscribe({
-    next: () => {
-      showLogin();
-    },
-    error: (err) => {
-      console.error('Logout error:', err);
-      showLogin();
-    },
-  });
-});
+    rciService.login(username, password)
+      .subscribe(async (success) => {
+        if (success) {
+          await showInfo();
+        } else {
+          showLoginError('Login failed. Please try again.');
+        }
+      });
+  },
+);
 
-// Load device info
-function loadDeviceInfo() {
-  infoLoading.classList.remove('hidden');
-  infoError.classList.add('hidden');
-  infoContent.classList.add('hidden');
+logoutButton.addEventListener(
+  'click',
+  () => {
+    rciService.logout()
+      .subscribe(() => {
+        showLoginForm();
+      });
+  },
+);
+
+const loadDeviceInfo = async (): Promise<void> => {
+  showElements(infoLoading);
+  hideElements(infoError, infoContent);
+
   infoError.textContent = '';
   infoContent.textContent = '';
 
-  rciService.execute([{path: 'show.version'}])
-    .pipe(
-      map((data) => (Array.isArray(data) ? data[0] : data)),
-    )
-    .subscribe({
-      next: (data) => {
-        infoLoading.classList.add('hidden');
-        infoContent.textContent = JSON.stringify(data, null, 2);
-        infoContent.classList.remove('hidden');
-      },
-      error: (err) => {
-        console.error('Failed to get version info:', err);
-        infoLoading.classList.add('hidden');
+  const showVersion = await firstValueFrom(rciService.execute({path: 'show.version'}));
 
-        // If 401 error, redirect to login
-        if (err?.status === 401) {
-          showLogin();
-        } else {
-          infoError.textContent = 'Failed to load device info.';
-          infoError.classList.remove('hidden');
-        }
-      },
-    });
-}
+  infoContent.textContent = JSON.stringify(showVersion, null, 2);
 
-// Initialize app - show login by default
-showLogin();
+  hideElements(infoLoading);
+  showElements(infoContent);
+};
+
+showLoginForm();

@@ -31,7 +31,7 @@ class RciService {
     return this.auth.isAuthenticated();
   }
 
-  public execute(queries: RciQuery[]): Observable<unknown> {
+  public execute(queries: RciQuery | RciQuery[]): Observable<unknown> {
     return this.driver.execute(queries);
   }
 }

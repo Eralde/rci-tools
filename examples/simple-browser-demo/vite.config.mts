@@ -1,4 +1,5 @@
-import {defineConfig, loadEnv} from 'vite';
+import {Connect, defineConfig, HttpProxy, loadEnv, ProxyOptions} from 'vite';
+import {ClientRequest, ServerResponse} from 'node:http';
 import {resolve} from 'path';
 import {viteSingleFile} from 'vite-plugin-singlefile';
 
@@ -13,6 +14,38 @@ export default defineConfig(({mode}) => {
   // This path needs to be accessible from Vite.
   const localPackagesParentDir = resolve(projectRoot, '../');
 
+  const createProxy = (path: string): ProxyOptions => {
+    return {
+      target: proxyAddr,
+      changeOrigin: true,
+      configure: (proxy: HttpProxy.Server, _options: ProxyOptions): void => {
+        proxy.on(
+          'proxyReq',
+          (
+            proxyReq: ClientRequest,
+            _req: Connect.IncomingMessage,
+            _res: ServerResponse<Connect.IncomingMessage>,
+          ): void => {
+            proxyReq.setHeader('Host', proxyUrl.host);
+            proxyReq.setHeader('Origin', proxyUrl.origin);
+            console.log(`[Vite Proxy]: [${path}] Sending to ${proxyReq.protocol}//${proxyReq.host}${proxyReq.path}`);
+          },
+        );
+
+        proxy.on(
+          'error',
+          (
+            err: Error,
+            _req: Connect.IncomingMessage,
+            _res: ServerResponse<Connect.IncomingMessage>,
+          ): void => {
+            console.error(`[Vite Proxy]: [${path}] Proxy Error:`, err);
+          },
+        );
+      },
+    }
+  }
+
   return {
     root: projectRoot,
     envDir: projectRoot,
@@ -26,34 +59,8 @@ export default defineConfig(({mode}) => {
         ],
       },
       proxy: {
-        '/rci': {
-          target: proxyAddr,
-          changeOrigin: true,
-          configure: (proxy, _options) => {
-            proxy.on('proxyReq', (proxyReq, req, _res) => {
-              proxyReq.setHeader('Host', proxyUrl.host);
-              proxyReq.setHeader('Origin', proxyUrl.origin);
-              console.log(`[Vite Proxy]: [/rci/] Sending to ${proxyReq.protocol}//${proxyReq.host}${proxyReq.path}`);
-            });
-            proxy.on('error', (err, _req, _res) => {
-              console.error('[Vite Proxy]: [/rci/] Proxy Error:', err);
-            });
-          },
-        },
-        '/auth': {
-          target: proxyAddr,
-          changeOrigin: true,
-          configure: (proxy, _options) => {
-            proxy.on('proxyReq', (proxyReq, req, _res) => {
-              proxyReq.setHeader('Host', proxyUrl.host);
-              proxyReq.setHeader('Origin', proxyUrl.origin);
-              console.log(`[Vite Proxy]: [/auth/] Sending to ${proxyReq.protocol}//${proxyReq.host}${proxyReq.path}`);
-            });
-            proxy.on('error', (err, _req, _res) => {
-              console.error('[Vite Proxy]: [/auth/] Proxy Error:', err);
-            });
-          },
-        },
+        '/rci': createProxy('/rci'),
+        '/auth': createProxy('/auth'),
       },
     },
     build: {

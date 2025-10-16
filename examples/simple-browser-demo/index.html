@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Vanilla Browser Demo</title>
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Simple Browser Demo</title>
     <style>
       * {
         margin: 0;
@@ -93,32 +93,32 @@
         display: none;
       }
     </style>
-  </head>
-  <body>
-    <div class="container">
-      <div id="login-view">
+</head>
+<body>
+<div class="container">
+    <div id="login-view">
         <h2>Login</h2>
         <form id="login-form">
-          <div class="form-group">
-            <input type="text" id="username" placeholder="Username" required value="admin" />
-          </div>
-          <div class="form-group">
-            <input type="password" id="password" placeholder="Password" required />
-          </div>
-          <button type="submit">Login</button>
+            <div class="form-group">
+                <input type="text" id="username" placeholder="Username" required value="admin"/>
+            </div>
+            <div class="form-group">
+                <input type="password" id="password" placeholder="Password" required/>
+            </div>
+            <button type="submit">Login</button>
         </form>
         <p id="login-error" class="error hidden"></p>
-      </div>
+    </div>
 
-      <div id="info-view" class="hidden">
+    <div id="info-view" class="hidden">
         <h2>Device Info</h2>
         <p id="info-loading" class="loading">Loading...</p>
         <p id="info-error" class="error hidden"></p>
         <pre id="info-content" class="hidden"></pre>
         <button id="logout-button">Logout</button>
-      </div>
     </div>
+</div>
 
-    <script type="module" src="/src/main.ts"></script>
-  </body>
+<script type="module" src="/src/main.ts"></script>
+</body>
 </html>
