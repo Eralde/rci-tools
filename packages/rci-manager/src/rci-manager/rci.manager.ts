@@ -1,8 +1,8 @@
-import _ from 'lodash';
 import {BaseHttpResponse, HttpTransport} from '../transport';
 import type {GenericObject} from '../type.utils';
 import {RciQuery, RciTask} from './query';
 import {RciQueue} from './queue';
+import {RCI_QUEUE_DEFAULT_BATCH_TIMEOUT} from './queue/rci.queue.constants';
 import type {ExecuteOptions, GenericResponse$} from './rci.manager.types';
 import {RciContinuedQuery, RciContinuedQueue} from './continued';
 import type {RciContinuedTaskOptions} from './continued';
@@ -18,15 +18,25 @@ export class RciManager {
   constructor(
     private host: string,
     private httpTransport: HttpTransport<BaseHttpResponse>,
+    private batchTimeout = RCI_QUEUE_DEFAULT_BATCH_TIMEOUT,
   ) {
     this.rciPath = `${this.host}/rci/`;
-    this.priorityQueue = new RciQueue(this.rciPath, this.httpTransport, {batchTimeout: 0});
+    this.priorityQueue = new RciQueue(
+      this.rciPath,
+      this.httpTransport,
+      {
+        batchTimeout: 0,
+      },
+    );
 
     this.batchQueue = new RciQueue(
       this.rciPath,
       this.httpTransport,
       // the batch queue will be blocked any time the priority queue is used to execute something
-      {blockerQueue: this.priorityQueue},
+      {
+        batchTimeout: Math.max(this.batchTimeout, 0),
+        blockerQueue: this.priorityQueue,
+      },
     );
   }
 
