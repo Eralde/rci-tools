@@ -1,107 +1,131 @@
-import {catchError, exhaustMap, forkJoin, of, timeout, TimeoutError} from 'rxjs';
+import {catchError, firstValueFrom, forkJoin, of, timeout, TimeoutError} from 'rxjs';
 import inquirer from 'inquirer';
-import {RciService} from './rci.service';
+import {RciQuery} from 'rci-manager';
+import * as _ from 'lodash';
+import {DeviceCredentials, RciService} from './rci.service';
 
-inquirer
-  .prompt([
-    {
-      type: 'input',
-      name: 'address',
-      message: 'Enter device IPv4 address:',
-      default: '192.168.1.1',
-      filter(input: any): string {
-        return `http://${input}`;
+const getDeviceCredentials = async (): Promise<DeviceCredentials> => {
+  return inquirer
+    .prompt([
+      {
+        type: 'input',
+        name: 'address',
+        message: 'Enter device IPv4 address:',
+        default: '192.168.1.1',
+        filter(input: any): string {
+          return String(input).startsWith('http://')
+            ? input
+            : `http://${input}`;
+        },
       },
-    },
-    {
-      type: 'input',
-      name: 'username',
-      message: 'Enter username:',
-      default: 'admin',
-    },
-    {
-      type: 'password',
-      name: 'password',
-      message: 'Enter password:',
-    },
-  ])
-  .then((answers) => {
-    const rciService = new RciService({
-      address: answers.address,
-      username: answers.username,
-      password: answers.password,
-    });
+      {
+        type: 'input',
+        name: 'username',
+        message: 'Enter username:',
+        default: 'admin',
+      },
+      {
+        type: 'password',
+        name: 'password',
+        message: 'Enter password:',
+      },
+    ]);
+};
 
-    rciService.ensureAuth()
-      .pipe(
-        timeout(3000),
-        catchError((error) => {
-          if (error instanceof TimeoutError) {
-            console.log('Auth attempt timed out', error);
+const executeRegularQueries = async (rciService: RciService): Promise<void> => {
+  console.log('\nExecuting a single RCI query\n');
 
-            return of(false);
-          }
+  const showVersion = await firstValueFrom(rciService.execute({path: 'show.version'}));
 
-          console.log('Auth failed', error);
+  console.log('Response:', showVersion);
+  console.log('\b----------------------------------------------------------\n');
+
+  console.log('\nExecuting multiple RCI queries (batching)');
+
+  const [showIdentification, descriptionReset] = await firstValueFrom(
+    forkJoin([
+      rciService.execute({path: 'show.last-change'}),
+      rciService.execute({path: 'system', data: {description: {no: true}}}),
+    ]),
+  );
+
+  console.log('Responses:', [showIdentification, descriptionReset]);
+  console.log('\b----------------------------------------------------------\n');
+};
+
+const executeContinuedQueries = async (rciService: RciService): Promise<void> => {
+  console.log('\n----------------------------------------------------------\n');
+  console.log('\n\nQueuing "continued" queries\n\n');
+
+  const continuedQueries: RciQuery[] = [
+    {path: 'tools.ping', data: {host: 'google.com', packetsize: 84, count: 5}},
+    {path: 'tools.ping', data: {host: 'google.com', packetsize: 84, count: 5}},
+    {path: 'components.list', data: {sandbox: 'stable'}},
+    {path: 'components.list', data: {sandbox: 'draft'}},
+  ];
+
+  const continuedTasks = continuedQueries.map((query) => {
+    return rciService.queueContinuedTask(query.path, query.data || {});
+  });
+
+  setTimeout(
+    () => {
+      console.log('\n[!] Manually aborting two "continued" tasks [!]\n');
+
+      continuedTasks[0]!.abort();
+      continuedTasks[2]!.abort();
+    },
+    500,
+  );
+
+  const done$ = continuedTasks
+    .map((task) => task.done$);
+
+  const finalResults = await firstValueFrom(forkJoin(done$));
+
+  console.log('\nFinal results for "continued" queries:\n');
+  continuedQueries.forEach((query, index) => {
+    const chunks = [
+      `- Query: ${_.padStart(query.path, 20, ' ')}`,
+      `Data: ${_.padStart(JSON.stringify(query.data || {}), 50, ' ')}`,
+      `Finish reason: ${finalResults[index]}`,
+    ];
+
+    console.warn(chunks.join(' | '));
+  });
+};
+
+const main = async (): Promise<void> => {
+  const credentials = await getDeviceCredentials();
+  const rciService = new RciService(credentials);
+
+  rciService.ensureAuth()
+    .pipe(
+      timeout(3000),
+      catchError((error) => {
+        if (error instanceof TimeoutError) {
+          console.log('Auth attempt timed out', error);
 
           return of(false);
-        }),
-        exhaustMap((isAuthenticated) => {
-          if (!isAuthenticated) {
-            console.warn(
-              `Failed to authenticate with username="${answers.username}" and password="${answers.password}"`,
-            );
+        }
 
-            process.exit(0);
-          }
+        console.log('Auth failed', error);
 
-          console.log('\n----------------------------------------------------------\n');
-          console.log('\n\nBatching a few RCI queries\n\n');
+        return of(false);
+      }),
+    )
+    .subscribe(async (isAuthenticated) => {
+      if (!isAuthenticated) {
+        console.warn(
+          `Failed to authenticate with username="${credentials.username}" and password="${credentials.password}"`,
+        );
 
-          return forkJoin([
-            rciService.execute({path: 'show.identification'}),
-            rciService.execute({path: 'show.last-change'}),
-            rciService.execute({path: 'system', data: {description: {no: true}}}),
-          ]);
-        }),
-        exhaustMap((data) => {
-          console.log('Responses for batched queries:', data);
+        process.exit(0);
+      }
 
-          console.log('\n----------------------------------------------------------\n');
-          console.log('\n\nQueuing "continued" commands\n\n');
+      await executeRegularQueries(rciService);
+      await executeContinuedQueries(rciService);
+    });
+}
 
-          const pingTasks = [
-            rciService.queueContinuedTask('tools.ping', {host: 'google.com', packetsize: 84, count: 5}),
-            rciService.queueContinuedTask('tools.ping', {host: 'reddit.com', packetsize: 84, count: 5}),
-          ];
-
-          const componentsListTasks = [
-            rciService.queueContinuedTask('components.list', {sandbox: 'stable'}),
-            rciService.queueContinuedTask('components.list', {sandbox: 'draft'}),
-          ];
-
-          setTimeout(
-            () => {
-              console.log('\n[!] Manually aborting two "continued" tasks [!]\n');
-
-              pingTasks[0]!.abort();
-              componentsListTasks[1]!.abort();
-            },
-            500,
-          );
-
-          const done$ = [...pingTasks, ...componentsListTasks]
-            .map((task) => task.done$);
-
-          return forkJoin(done$);
-        }),
-      )
-      .subscribe((done) => {
-        console.log('Final data:', done);
-      });
-  })
-  .catch((error) => {
-    console.error('Uncaught error', error);
-
-    process.exit(0);
-  });
+void main();

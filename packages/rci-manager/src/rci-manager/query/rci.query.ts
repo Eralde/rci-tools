@@ -1,3 +1,5 @@
+import {GenericObject} from '../../type.utils';
+
 /**
  * Usage example:
  *
@@ -9,7 +11,7 @@
  */
 export interface RciQuery {
   path: string;
-  data?: unknown; // defaults to {}
+  data?: GenericObject; // defaults to {}
   extractDataByPath?: boolean; // defaults to true
 }
 
