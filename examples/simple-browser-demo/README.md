@@ -71,7 +71,7 @@ This will generate a single `index.html` file in the `dist` directory, containin
 
 ### Deploying the Application
 
-The `deploy` script uses `yargs` to facilitate deploying the production build to a remote server via SCP.
+The `deploy` script copies the production build of this app to a remote server via SCP.
 
 ```bash
 pnpm run deploy --host <user@remote_host> --path <remote_path> [--port <ssh_port>]

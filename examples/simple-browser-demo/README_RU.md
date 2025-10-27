@@ -75,7 +75,7 @@ npm run build
 
 ### Развертывание приложения
 
-Скрипт `deploy` использует `yargs` для удобного развертывания продакшен-сборки на удалённый сервер через SCP.
+Скрипт `deploy` копирует `production`-сборку этого приложения на удалённый сервер через SCP.
 
 ```bash
 pnpm run deploy --host <user@remote_host> --path <remote_path> [--port <ssh_port>]
