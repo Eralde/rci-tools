@@ -37,9 +37,9 @@ export const RCI_CONTINUED_QUEUE_STATE = {
 
 export type RciContinuedQueueState = Values<typeof RCI_CONTINUED_QUEUE_STATE>;
 
-export class RciContinuedQueue {
-  protected tasks: RciContinuedTask[] = [];
-  protected readonly pendingQueries$: ReplaySubject<RciQuery[]> = new ReplaySubject<RciQuery[]>(1);
+export class RciContinuedQueue<QueryPath extends string = string> {
+  protected tasks: RciContinuedTask<QueryPath>[] = [];
+  protected readonly pendingQueries$: ReplaySubject<RciQuery<QueryPath>[]> = new ReplaySubject<RciQuery<QueryPath>[]>(1);
   protected readonly nextQuery$: Subject<RciContinuedTask> = new Subject<RciContinuedTask>();
   protected readonly stateSub$: BehaviorSubject<RciContinuedQueueState> = new BehaviorSubject<RciContinuedQueueState>(
     RCI_CONTINUED_QUEUE_STATE.READY,
@@ -49,7 +49,7 @@ export class RciContinuedQueue {
 
   constructor(
     public readonly rciPath: string,
-    public readonly command: string,
+    public readonly command: QueryPath,
     protected readonly httpTransport: HttpTransport<BaseHttpResponse>,
   ) {
     this.initializePendingTasksQueueSubscription();
@@ -64,7 +64,7 @@ export class RciContinuedQueue {
     return this.addTask(task);
   }
 
-  protected addTask(task: RciContinuedTask): RciContinuedQuery {
+  protected addTask(task: RciContinuedTask<QueryPath>): RciContinuedQuery<QueryPath> {
     if (this.stateSub$.value === RCI_CONTINUED_QUEUE_STATE.AWAITING_RESPONSE) {
       this.tasks.push(task);
       this.updatePendingQueries();

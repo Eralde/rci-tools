@@ -1,18 +1,10 @@
 import {GenericObject} from '../../type.utils';
 
-/**
- * Usage example:
- *
- * const queries: RciQuery[] = [
- *   {path: 'show'},
- *   {path: 'show.interface'},
- *   {path: 'show.sc.interface', data: {name: 'Bridge0'}},
- * ];
- */
-export interface RciQuery {
-  path: string;
+// `PathType` can be narrowed to a subset of valid path strings
+export interface RciQuery<PathType extends string = string> {
+  path: PathType;
   data?: GenericObject; // defaults to {}
   extractDataByPath?: boolean; // defaults to true
 }
 
-export type RciTask = RciQuery | RciQuery[];
+export type RciTask<PathType extends string = string> = RciQuery<PathType> | RciQuery<PathType>[];

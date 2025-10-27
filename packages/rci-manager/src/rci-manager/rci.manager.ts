@@ -8,10 +8,13 @@ import {RciContinuedQuery, RciContinuedQueue} from './continued';
 import type {RciContinuedTaskOptions} from './continued';
 import {DEFAULT_EXECUTE_OPTIONS} from './rci.manager.constants';
 
-export class RciManager {
+export class RciManager<
+  QueryPath extends string = string,
+  ContinuedQueryPath extends string = string
+> {
   protected readonly batchQueue: RciQueue<BaseHttpResponse>;
   protected readonly priorityQueue: RciQueue<BaseHttpResponse>;
-  protected readonly continuedQueues: Record<string, RciContinuedQueue> = {};
+  protected readonly continuedQueues: Record<string, RciContinuedQueue<ContinuedQueryPath>> = {};
 
   protected readonly rciPath: string;
 
@@ -40,7 +43,10 @@ export class RciManager {
     );
   }
 
-  public execute(query: RciTask, options: ExecuteOptions = DEFAULT_EXECUTE_OPTIONS): GenericResponse$ {
+  public execute(
+    query: RciTask<QueryPath>,
+    options: ExecuteOptions = DEFAULT_EXECUTE_OPTIONS
+  ): GenericResponse$ {
     const _options = {
       ...DEFAULT_EXECUTE_OPTIONS,
       ...options,
@@ -54,25 +60,26 @@ export class RciManager {
   }
 
   public executeContinued(
-    query: RciQuery,
+    query: RciQuery<ContinuedQueryPath>,
     options: RciContinuedTaskOptions = {},
   ): RciContinuedQuery {
-    const queue = new RciContinuedQueue(this.rciPath, query.path, this.httpTransport);
+    const queue = new RciContinuedQueue<ContinuedQueryPath>(this.rciPath, query.path, this.httpTransport);
 
     return queue.push(query.data as GenericObject, options);
   }
 
   public queueContinuedTask(
-    query: RciQuery,
+    query: RciQuery<ContinuedQueryPath>,
     options: RciContinuedTaskOptions = {},
   ): RciContinuedQuery {
     const {path} = query;
+    const key = String(path);
     const data = query.data || {};
 
-    if (!this.continuedQueues[path]) {
-      this.continuedQueues[path] = new RciContinuedQueue(this.rciPath, path, this.httpTransport);
+    if (!this.continuedQueues[key]) {
+      this.continuedQueues[key] = new RciContinuedQueue<ContinuedQueryPath>(this.rciPath, path, this.httpTransport);
     }
 
-    return this.continuedQueues[path].push(data as GenericObject, options);
+    return this.continuedQueues[key].push(data as GenericObject, options);
   }
 }

@@ -8,7 +8,7 @@ export interface RciContinuedTaskOptions {
 
 export const DEFAULT_CONTINUED_TASK_OPTIONS: RciContinuedTaskOptions = {duration: 0};
 
-export class RciContinuedTask {
+export class RciContinuedTask<CommandType extends string = string> {
   public readonly responseSub$: Subject<GenericObject | null> = new Subject<GenericObject | null>();
   public readonly doneSub$: Subject<RCI_CONTINUED_QUERY_FINISH_REASON> = new Subject<
     RCI_CONTINUED_QUERY_FINISH_REASON
@@ -16,7 +16,7 @@ export class RciContinuedTask {
   public readonly abortSub$: ReplaySubject<void> = new ReplaySubject<void>(1);
 
   constructor(
-    public readonly command: string,
+    public readonly command: CommandType,
     public readonly data: GenericObject,
     public readonly options: RciContinuedTaskOptions,
   ) {
