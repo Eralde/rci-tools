@@ -1,6 +1,6 @@
 import {from, map, Observable, OperatorFunction, throwError} from 'rxjs';
 import {catchError} from 'rxjs/operators';
-import axios, {AxiosResponse, AxiosResponseHeaders} from 'axios';
+import axios, {type AxiosInstance, AxiosResponse, AxiosResponseHeaders} from 'axios';
 import {CookieJar} from 'tough-cookie';
 import {HttpCookieAgent, HttpsCookieAgent} from 'http-cookie-agent/http';
 import type {GenericObject, HttpTransport} from 'rci-manager';
@@ -29,7 +29,7 @@ const getNetworkErrorHandler = (
 
 export class AxiosTransport implements HttpTransport<AxiosResponse> {
   protected jar: CookieJar;
-  protected client: axios.AxiosInstance;
+  protected client: AxiosInstance;
 
   protected handleNetworkError: OperatorFunction<AxiosResponse, AxiosResponse>;
 

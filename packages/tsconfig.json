@@ -6,9 +6,6 @@
     },
     {
       "path": "./rci-adapter-axios"
-    },
-    {
-      "path": "./rci-adapter-fetch"
     }
   ]
 }

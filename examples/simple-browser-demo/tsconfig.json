@@ -22,7 +22,10 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "esModuleInterop": true
+    "esModuleInterop": true,
+    "paths": {
+      "rci-manager": ["../../packages/rci-manager/src/index.ts"]
+    }
   },
   "include": [
     "src/**/*.ts",
@@ -31,9 +34,6 @@
   "references": [
     {
       "path": "./tsconfig.node.json"
-    },
-    {
-      "path": "../../packages/rci-manager"
     }
   ]
 }
