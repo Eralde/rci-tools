@@ -1,4 +1,4 @@
-[English](AUTH.md) | [Русский](AUTH_RU.md)
+**English** | [Русский](AUTH_RU.md)
 
 # Password-based authentication
 

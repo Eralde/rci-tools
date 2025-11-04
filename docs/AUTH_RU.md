@@ -1,4 +1,4 @@
-[English](AUTH.md) | [Русский](AUTH_RU.md)
+[English](AUTH.md) | **Русский**
 
 # Аутентификация по паролю
 
