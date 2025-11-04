@@ -6,10 +6,12 @@
     "build:packages": "pnpm -r --filter './packages/*' run build",
     "build:simple-browser-demo": "pnpm -r --filter './examples/simple-browser-demo' run build",
     "build:simple-nodejs-demo": "pnpm -r --filter './examples/simple-nodejs-demo' run build",
+    "build:local-monitor": "pnpm -r --filter './examples/local-monitor' run build",
     "build": "pnpm -r run build",
     "test": "vitest",
     "dev:simple-browser-demo": "pnpm --filter simple-browser-demo run dev",
-    "dev:simple-nodejs-demo": "pnpm --filter simple-nodejs-demo run dev"
+    "dev:simple-nodejs-demo": "pnpm --filter simple-nodejs-demo run dev",
+    "dev:local-monitor": "pnpm -r --filter './examples/local-monitor' run dev"
   },
   "devDependencies": {
     "@tsconfig/strictest": "^2.0.6",

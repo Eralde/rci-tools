@@ -1,10 +1,17 @@
-import {exhaustMap, Observable, of} from 'rxjs';
+import {Observable, exhaustMap, from, of} from 'rxjs';
 import {catchError, map, switchMap, tap} from 'rxjs/operators';
-import {Md5} from 'ts-md5';
+import {md5} from 'hash-wasm';
 import jsSha from 'jssha';
 import type {BaseHttpResponse, HttpTransport} from '../transport';
 
 const AUTH_URI = '/auth';
+
+interface PasswordData {
+  token: string;
+  login: string;
+  realm: string;
+  password: string;
+}
 
 export class SessionManager<ResponseType extends BaseHttpResponse = BaseHttpResponse> {
   private readonly authUri: string;
@@ -19,7 +26,7 @@ export class SessionManager<ResponseType extends BaseHttpResponse = BaseHttpResp
   }
 
   public isAuthenticated(): Observable<boolean> {
-    return this.sendAuthRequest()
+    return this.httpTransport.get(this.authUri)
       .pipe(
         catchError((error) => {
           if (this.isLoggingAuthErrors) {
@@ -37,7 +44,7 @@ export class SessionManager<ResponseType extends BaseHttpResponse = BaseHttpResp
   }
 
   public login(username: string, password: string): Observable<boolean> {
-    return this.sendAuthRequest()
+    return this.httpTransport.get(this.authUri)
       .pipe(
         catchError((error) => error?.response ? of(error.response) : of(error)),
         switchMap((response): Observable<boolean> => {
@@ -47,30 +54,16 @@ export class SessionManager<ResponseType extends BaseHttpResponse = BaseHttpResp
             return of(true);
           }
 
-          const encryptedPassword = this.getEncryptedPassword({
+          const passwordData: PasswordData = {
             token: this.httpTransport.getHeader(response, 'X-NDM-Challenge'),
             realm: this.httpTransport.getHeader(response, 'X-NDM-Realm'),
             login: username,
             password,
-          });
-
-          const requestData = {
-            login: username,
-            password: encryptedPassword,
           };
 
-          return this.httpTransport.post(this.authUri, requestData)
+          return this.getEncryptedPassword(passwordData)
             .pipe(
-              catchError((error) => {
-                if (this.isLoggingAuthErrors) {
-                  console.warn(error);
-                }
-
-                return error?.response
-                  ? of(error.response)
-                  : of({status: -1, error: 'Unknown error'});
-              }),
-              exhaustMap(() => this.isAuthenticated()),
+              exhaustMap((encryptedPassword) => this.doAuth(username, encryptedPassword)),
             );
         }),
       );
@@ -90,7 +83,7 @@ export class SessionManager<ResponseType extends BaseHttpResponse = BaseHttpResp
     this.isLoggingAuthErrors = isEnabled;
   }
 
-  private getEncryptedPassword(props: {token: string; login: string; realm: string; password: string}) {
+  private getEncryptedPassword(props: PasswordData): Observable<string> {
     const {
       token,
       login,
@@ -99,14 +92,35 @@ export class SessionManager<ResponseType extends BaseHttpResponse = BaseHttpResp
     } = props;
 
     const sha = new jsSha('SHA-256', 'TEXT');
-    const md5 = Md5.hashStr(`${login}:${realm}:${password}`);
 
-    sha.update(token + String(md5));
+    return from(md5(`${login}:${realm}:${password}`))
+      .pipe(
+        map((md5Hash) => {
+          sha.update(token + String(md5Hash));
 
-    return sha.getHash('HEX');
+          return sha.getHash('HEX');
+        }),
+      );
   }
 
-  private sendAuthRequest(): Observable<ResponseType> {
-    return this.httpTransport.get(this.authUri);
+  private doAuth(username: string, encryptedPassword: string): Observable<boolean> {
+    const requestData = {
+      login: username,
+      password: encryptedPassword,
+    };
+
+    return this.httpTransport.post(this.authUri, requestData)
+      .pipe(
+        catchError((error) => {
+          if (this.isLoggingAuthErrors) {
+            console.warn(error);
+          }
+
+          return error?.response
+            ? of(error.response)
+            : of({status: -1, error: 'Unknown error'});
+        }),
+        exhaustMap(() => this.isAuthenticated()),
+      );
   }
 }

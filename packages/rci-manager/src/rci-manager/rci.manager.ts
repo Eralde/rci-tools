@@ -10,7 +10,7 @@ import {DEFAULT_EXECUTE_OPTIONS} from './rci.manager.constants';
 
 export class RciManager<
   QueryPath extends string = string,
-  ContinuedQueryPath extends string = string
+  ContinuedQueryPath extends string = string,
 > {
   protected readonly batchQueue: RciQueue<BaseHttpResponse>;
   protected readonly priorityQueue: RciQueue<BaseHttpResponse>;
@@ -45,7 +45,7 @@ export class RciManager<
 
   public execute(
     query: RciTask<QueryPath>,
-    options: ExecuteOptions = DEFAULT_EXECUTE_OPTIONS
+    options: ExecuteOptions = DEFAULT_EXECUTE_OPTIONS,
   ): GenericResponse$ {
     const _options = {
       ...DEFAULT_EXECUTE_OPTIONS,

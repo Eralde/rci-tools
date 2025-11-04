@@ -1,0 +1,45 @@
+{
+  "extends": "@tsconfig/strictest/tsconfig.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "noEmit": false,
+    "outDir": "dist",
+    "baseUrl": ".",
+    "paths": {
+      "@components": [
+        "src/components/index.ts"
+      ],
+      "@components/*": [
+        "src/components/*"
+      ],
+      "@services": [
+        "src/services/index.ts"
+      ],
+      "@services/*": [
+        "src/services/*"
+      ],
+      "@queries": [
+        "src/queries/index.ts"
+      ],
+      "@queries/*": [
+        "src/queries/*"
+      ],
+      "@utils": [
+        "src/utils/index.ts"
+      ],
+      "@utils/*": [
+        "src/utils/*"
+      ],
+      "@store/*": [
+        "src/store/*"
+      ]
+    }
+  },
+  "include": [
+    "src"
+  ]
+}
+
+

@@ -3,6 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "scripts": {
+    "clean": "rimraf dist",
     "dev": "node scripts/dev-runner.js",
     "build": "vite build",
     "preview": "vite preview",
