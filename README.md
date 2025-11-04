@@ -11,3 +11,4 @@
 ### Usage examples
 - [Simple browser demo](./examples/simple-browser-demo)
 - [Simple Node.js demo](./examples/simple-nodejs-demo)
+- [Local Monitor (Node.js)](./examples/local-monitor)
