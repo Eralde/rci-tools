@@ -9,7 +9,8 @@
     "check": "svelte-check",
     "fmt": "dprint fmt 'src/**/*.{ts,svelte}'",
     "configure-backend": "tsx scripts/configure-backend.ts",
-    "deploy-frontend": "tsx scripts/deploy-frontend.ts"
+    "deploy-frontend": "tsx scripts/deploy-frontend.ts",
+    "cfg": "tsx scripts/config.ts"
   },
   "dependencies": {
     "@codemirror/lang-json": "^6.0.2",

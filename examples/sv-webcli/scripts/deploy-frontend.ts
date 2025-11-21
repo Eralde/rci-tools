@@ -6,9 +6,9 @@ import * as process from 'node:process';
 import readlineSync from 'readline-sync';
 import path from 'path';
 import {execSync} from 'child_process';
-import {executeRemoteCommand, isSshpassInstalled, scpCopy} from './util/ssh.ts';
-import {ROOT_DIR, SSH_USER} from './conf.ts';
-import {config} from './args.ts';
+import {executeRemoteCommand, isSshpassInstalled, scpCopy} from './util/ssh';
+import {ROOT_DIR, SSH_USER} from './conf';
+import {config} from './args';
 
 const {sshHost, sshPort, sshKey, remoteWwwRoot} = config;
 const DIST_DIR = path.join(ROOT_DIR, 'dist');

@@ -5,7 +5,7 @@ import {Prompt} from 'ssh2-streams';
 import * as process from 'node:process';
 import readlineSync from 'readline-sync';
 import path from 'path';
-import {executeRemoteCommand, isSshpassInstalled, scpCopy} from './util/ssh.ts';
+import {executeRemoteCommand, isSshpassInstalled, scpCopy} from './util/ssh';
 import {
   LIGHTTPD_CONF,
   LIGHTTPD_CONF_REMOTE_DIR,
@@ -13,8 +13,8 @@ import {
   LOCAL_OPKG_DATA_DIR,
   PACKAGES_LIST,
   SSH_USER,
-} from './conf.ts';
-import {config} from './args.ts';
+} from './conf';
+import {config} from './args';
 
 const {sshHost, sshPort, sshKey, httpPort, ttydScriptsDir} = config;
 

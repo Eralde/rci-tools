@@ -5,8 +5,7 @@
     "moduleResolution": "Node",
     "outDir": "dist",
     "esModuleInterop": true,
-    "strict": true,
-    "allowImportingTsExtensions": true
+    "strict": true
   },
   "include": [
     "*.ts"

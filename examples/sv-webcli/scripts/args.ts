@@ -1,7 +1,18 @@
 import yargs from 'yargs';
 import {hideBin} from 'yargs/helpers';
-import {ENV_DEFAULTS} from '../env.defaults.ts';
-import {ENV_FILE} from './conf.ts';
+import {ENV_DEFAULTS} from '../env.defaults';
+import {
+  ENV_FILE,
+  OPTION_TO_ENV,
+  ARG_DEVICE_ADDR,
+  ARG_SSH_HOST,
+  ARG_SSH_PORT,
+  ARG_SSH_KEY,
+  ARG_HTTP_PORT,
+  ARG_REMOTE_WWW_ROOT,
+  ARG_TTYD_PORT,
+  ARG_TTYD_SCRIPTS_DIR,
+} from './conf';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -13,67 +24,67 @@ if (fs.existsSync(ENV_FILE)) {
 const argv = yargs(hideBin(process.argv))
   .version(false)
   .option(
-    'device-addr',
+    ARG_DEVICE_ADDR,
     {
       type: 'string',
       description: 'Device IP address',
-      default: process.env.DEVICE_ADDR,
+      default: process.env[OPTION_TO_ENV[ARG_DEVICE_ADDR]],
     },
   )
   .option(
-    'ssh-host',
+    ARG_SSH_HOST,
     {
       type: 'string',
       description: 'SSH host IP address (defaults to device-addr)',
-      default: process.env.SSH_HOST,
+      default: process.env[OPTION_TO_ENV[ARG_SSH_HOST]],
     },
   )
   .option(
-    'ssh-port',
+    ARG_SSH_PORT,
     {
       type: 'number',
       description: 'SSH port',
-      default: Number(process.env.SSH_PORT) || ENV_DEFAULTS.SSH_PORT,
+      default: Number(process.env[OPTION_TO_ENV[ARG_SSH_PORT]]) || ENV_DEFAULTS.SSH_PORT,
     },
   )
   .option(
-    'ssh-key',
+    ARG_SSH_KEY,
     {
       type: 'string',
       description: 'Path to SSH private key',
-      default: process.env.SSH_KEY,
+      default: process.env[OPTION_TO_ENV[ARG_SSH_KEY]],
     },
   )
   .option(
-    'http-port',
+    ARG_HTTP_PORT,
     {
       type: 'number',
       description: 'HTTP port for the backend service',
-      default: Number(process.env.HTTP_PORT) || ENV_DEFAULTS.HTTP_PORT,
+      default: Number(process.env[OPTION_TO_ENV[ARG_HTTP_PORT]]) || ENV_DEFAULTS.HTTP_PORT,
     },
   )
   .option(
-    'remote-www-root',
+    ARG_REMOTE_WWW_ROOT,
     {
       type: 'string',
       description: 'Remote directory for frontend files',
-      default: process.env.REMOTE_WWW_ROOT || ENV_DEFAULTS.REMOTE_WWW_ROOT,
+      default: process.env[OPTION_TO_ENV[ARG_REMOTE_WWW_ROOT]] || ENV_DEFAULTS.REMOTE_WWW_ROOT,
     },
   )
   .option(
-    'ttyd-port',
+    ARG_TTYD_PORT,
     {
       type: 'number',
       description: 'Port for ttyd WebSocket server',
-      default: Number(process.env.TTYD_PORT) || ENV_DEFAULTS.TTYD_PORT,
+      default: Number(process.env[OPTION_TO_ENV[ARG_TTYD_PORT]]) || ENV_DEFAULTS.TTYD_PORT,
     },
   )
   .option(
-    'ttyd-scripts-dir',
+    ARG_TTYD_SCRIPTS_DIR,
     {
       type: 'string',
       description: 'Remote directory for ttyd control scripts',
-      default: process.env.TTYD_SCRIPTS_DIR || ENV_DEFAULTS.TTYD_SCRIPTS_DIR,
+      default: process.env[OPTION_TO_ENV[ARG_TTYD_SCRIPTS_DIR]] || ENV_DEFAULTS.TTYD_SCRIPTS_DIR,
     },
   )
   .help()
@@ -85,7 +96,7 @@ const isPreviewCommand = process.argv.includes('preview');
 
 if (!argv.deviceAddr && !isBuildCommand && !isPreviewCommand) {
   console.error(
-    'Error: Device address is required. Please provide it via --device-addr argument or DEVICE_ADDR in .env file.',
+    `Error: Device address is required. Please provide it via --${ARG_DEVICE_ADDR} argument or ${OPTION_TO_ENV[ARG_DEVICE_ADDR]} in .env file.`,
   );
   process.exit(1);
 }
