@@ -9,12 +9,12 @@ import {Button, ConfirmDialog, TogglableButtons} from './index.ts';
 let logContentContainer: HTMLElement;
 let autoScrollEnabled = true;
 
-let isHeaderCollapsed = $state(true);
-let logLevelButtonsWrapper: HTMLElement;
-let showFullLabels = $state(false);
+let isFilterPanelCollapsed = $state(true);
+let isLogWide = $state(false);
+let logFiltersRow: HTMLElement;
 
-const toggleHeader = () => {
-  isHeaderCollapsed = !isHeaderCollapsed;
+const toggleFilterPanel = (): void => {
+  isFilterPanelCollapsed = !isFilterPanelCollapsed;
 };
 
 function handleScroll() {
@@ -51,27 +51,30 @@ onDestroy(() => {
   logContentContainer?.removeEventListener('scroll', handleScroll);
 });
 
-// show full/short labels for log level buttons based on container width
+// show full/short labels for log level buttons based on header width
 $effect(() => {
-  if (!isHeaderCollapsed && logLevelButtonsWrapper) {
-    const THRESHOLD = 320;
+  const THRESHOLD = 420;
+  const element = logFiltersRow;
 
-    // initial value
-    showFullLabels = logLevelButtonsWrapper.offsetWidth >= THRESHOLD;
-
-    // observe size changes
-    const resizeObserver = new ResizeObserver((entries) => {
-      const width = entries[0]?.contentRect.width ?? 0;
-
-      showFullLabels = width >= THRESHOLD;
-    });
-
-    resizeObserver.observe(logLevelButtonsWrapper);
-
-    return () => resizeObserver.disconnect();
-  } else {
-    showFullLabels = false;
+  if (!element) {
+    return;
   }
+
+  const updateIsLogWideFlag = () => {
+    isLogWide = element.offsetWidth >= THRESHOLD;
+  };
+
+  updateIsLogWideFlag();
+
+  const resizeObserver = new ResizeObserver(() => {
+    updateIsLogWideFlag();
+  });
+
+  resizeObserver.observe(element);
+
+  return () => {
+    resizeObserver.disconnect();
+  };
 });
 
 $effect(() => {
@@ -117,6 +120,16 @@ const filteredLog = $derived(() => {
   });
 });
 
+const totalLogLength = $derived(shared.log.length);
+const filteredLogLength = $derived(filteredLog().length);
+
+const isFilteringActive = $derived(() => {
+  const hasSubstringFilter = substringFilter.trim().length > 0;
+  const allLevelsActive = activeLogLevels.length === logLevelOptions.length;
+
+  return hasSubstringFilter || !allLevelsActive;
+});
+
 const highlightMatch = (text: string, filter: string): string => {
   if (!filter) {
     return text;
@@ -155,71 +168,96 @@ const handleClearConfirm = () => {
 const handleClearCancel = () => {
   // noop; dialog will close automatically
 };
+
+const handleResetFilters = () => {
+  substringFilter = '';
+  activeLogLevels = logLevelOptions.map(opt => opt.value);
+};
 </script>
 
 <div class="container">
   <div class="log-header">
-    <div class="log-filters-block" class:collapsed={isHeaderCollapsed}>
-      <Button
-        variant="secondary"
-        size="small"
-        onclick={toggleHeader}
-        title={isHeaderCollapsed ? 'Show filters' : 'Hide filters'}
-      >
-        <span class="filter-icon">{@html FilterSvg}</span>
-        <span class="chevron">{isHeaderCollapsed ? '>' : '<'}</span>
-      </Button>
-      {#if !isHeaderCollapsed}
-        <div class="log-filters">
-          <input
-            class="log-substring-filter"
-            type="text"
-            placeholder="Filter by substring"
-            bind:value={substringFilter}
-          />
-
-          <div
-            bind:this={logLevelButtonsWrapper}
-            class="log-level-buttons-wrapper"
-          >
-            <TogglableButtons
-              options={logLevelOptions}
-              bind:activeOptions={activeLogLevels}
-              showFullLabels={showFullLabels}
-              optionColors={new Map([
-                [LOG_ITEM_LEVEL.INFO, 'var(--color-log-info)'],
-                [LOG_ITEM_LEVEL.WARNING, 'var(--color-log-warning)'],
-                [LOG_ITEM_LEVEL.ERROR, 'var(--color-log-error)'],
-                [
-                  LOG_ITEM_LEVEL.CRITICAL,
-                  'var(--color-log-critical)',
-                ],
-                [LOG_ITEM_LEVEL.DEBUG, 'var(--color-log-debug)'],
-              ])}
-            />
+    <div bind:this={logFiltersRow} class="log-header-row">
+      <div class="filter-toggle-wrapper">
+        <Button
+          variant="secondary"
+          size="small"
+          onclick={toggleFilterPanel}
+          title={isFilterPanelCollapsed ? 'Show filters' : 'Hide filters'}
+        >
+          <div class="log-toggle-button-label">
+            <span
+              class="filter-icon"
+              class:active={isFilteringActive()}
+            >{@html FilterSvg}</span>
+            <span class="chevron">{isFilterPanelCollapsed ? '▼' : '▲'}</span>
           </div>
-        </div>
-      {/if}
+        </Button>
+        <span class="log-count">
+          {#if isLogWide}
+            (Showing {filteredLogLength} of {totalLogLength} items)
+          {:else}
+            (Showing {filteredLogLength}/{totalLogLength})
+          {/if}
+        </span>
+        {#if isFilteringActive()}
+          <Button
+            variant="secondary"
+            size="small"
+            onclick={handleResetFilters}
+            title="Reset filters"
+          >
+            Reset
+          </Button>
+        {/if}
+      </div>
+
+      <div class="log-buttons">
+        <Button
+          variant="secondary"
+          size="small"
+          onclick={handleDownloadLog}
+          title="Download log"
+        >
+          {@html DownloadSvg}
+        </Button>
+
+        <Button
+          variant="danger"
+          size="small"
+          onclick={handleClearClick}
+          title="Clear log"
+        >
+          Clear
+        </Button>
+      </div>
     </div>
 
-    <div class="log-buttons">
-      <Button
-        variant="secondary"
-        size="small"
-        onclick={handleDownloadLog}
-        title="Download log"
-      >
-        {@html DownloadSvg}
-      </Button>
+    <div class="log-filters" class:collapsed={isFilterPanelCollapsed}>
+      <input
+        class="log-substring-filter"
+        type="text"
+        placeholder="Filter by substring"
+        bind:value={substringFilter}
+      />
 
-      <Button
-        variant="danger"
-        size="small"
-        onclick={handleClearClick}
-        title="Clear log"
-      >
-        Clear
-      </Button>
+      <div class="log-level-buttons-wrapper">
+        <TogglableButtons
+          options={logLevelOptions}
+          bind:activeOptions={activeLogLevels}
+          showFullLabels={isLogWide}
+          optionColors={new Map([
+            [LOG_ITEM_LEVEL.INFO, 'var(--color-log-info)'],
+            [LOG_ITEM_LEVEL.WARNING, 'var(--color-log-warning)'],
+            [LOG_ITEM_LEVEL.ERROR, 'var(--color-log-error)'],
+            [
+              LOG_ITEM_LEVEL.CRITICAL,
+              'var(--color-log-critical)',
+            ],
+            [LOG_ITEM_LEVEL.DEBUG, 'var(--color-log-debug)'],
+          ])}
+        />
+      </div>
     </div>
   </div>
 
@@ -275,9 +313,26 @@ const handleClearCancel = () => {
   z-index: 1;
   flex-shrink: 0;
   display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.log-header-row {
+  display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: var(--space-md);
-  flex-wrap: wrap;
+}
+
+.filter-toggle-wrapper {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.log-toggle-button-label {
+  display: flex;
+  gap: var(--space-xs);
 }
 
 .filter-icon {
@@ -293,29 +348,33 @@ const handleClearCancel = () => {
   height: 100%;
 }
 
-.log-filters-block {
-  display: flex;
-  align-items: center;
-  min-height: var(--space-3xl);
-  gap: var(--space-sm);
-  overflow: hidden;
-  flex: 1;
-  flex-wrap: wrap;
+.filter-icon.active :global(svg path) {
+  fill: var(--color-primary) !important;
+}
+
+.log-count {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
 }
 
 .log-filters {
-  flex-grow: 1;
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  max-height: 100px;
-  opacity: 1;
   overflow: hidden;
-  transition: max-height 0.2s ease-out, opacity 0.2s ease-out, margin 0.2s ease-out;
-  margin: 0;
-  flex-wrap: wrap;
+  max-height: 0;
+  opacity: 0;
+  transition: max-height 0.3s ease-out, opacity 0.3s ease-out, padding-top 0.3s ease-out;
+  padding: 0;
   container-type: inline-size;
   container-name: log-filters;
+}
+
+.log-filters:not(.collapsed) {
+  max-height: 300px;
+  opacity: 1;
+  padding-top: var(--space-sm);
 }
 
 .log-level-buttons-wrapper {
