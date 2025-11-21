@@ -3,5 +3,5 @@
 ### Start the dev server:
 
 ```
-pnpm dev
+pnpm dev --device-address <IP>
 ```
