@@ -1,4 +1,4 @@
-import {exhaustMap, from, map, Observable} from 'rxjs';
+import {Observable, OperatorFunction, Subject, catchError, exhaustMap, from, map, throwError} from 'rxjs';
 import {GenericObject} from '../../type.utils';
 import type {BaseHttpResponse, HttpTransport} from '../http.transport';
 
@@ -7,6 +7,14 @@ export interface FetchTransportResponse extends BaseHttpResponse {
 }
 
 export class FetchTransport implements HttpTransport<FetchTransportResponse> {
+  protected readonly authErrorSub$: Subject<void>;
+  public readonly authError$: Observable<void>;
+
+  constructor() {
+    this.authErrorSub$ = new Subject<void>();
+    this.authError$ = this.authErrorSub$.asObservable();
+  }
+
   public onAuthRequest(): void {
     // noop; handled by the browser
   }
@@ -25,6 +33,7 @@ export class FetchTransport implements HttpTransport<FetchTransportResponse> {
     return req$
       .pipe(
         exhaustMap((fetchResponse: Response) => this.processResponse(fetchResponse)),
+        this.handleAuthError(),
       );
   }
 
@@ -43,6 +52,7 @@ export class FetchTransport implements HttpTransport<FetchTransportResponse> {
     return req$
       .pipe(
         exhaustMap((fetchResponse: Response) => this.processResponse(fetchResponse)),
+        this.handleAuthError(),
       );
   }
 
@@ -52,6 +62,7 @@ export class FetchTransport implements HttpTransport<FetchTransportResponse> {
     return req$
       .pipe(
         exhaustMap((fetchResponse: Response) => this.processResponse(fetchResponse)),
+        this.handleAuthError(),
       );
   }
 
@@ -59,6 +70,7 @@ export class FetchTransport implements HttpTransport<FetchTransportResponse> {
     return this.post(url, queryArray)
       .pipe(
         map((response) => (response.data as GenericObject[])),
+        this.handleAuthError(),
       );
   }
 
@@ -87,5 +99,25 @@ export class FetchTransport implements HttpTransport<FetchTransportResponse> {
           };
         }),
       );
+  }
+
+  protected handleAuthError<T>(): OperatorFunction<T, T> {
+    return catchError((error) => {
+      if (this.is401Error(error)) {
+        this.authErrorSub$.next();
+
+        return throwError(() => error);
+      }
+
+      return throwError(() => error);
+    });
+  }
+
+  protected is401Error(error: unknown): boolean {
+    if (error && typeof error === 'object' && 'status' in error) {
+      return (error as {status: number}).status === 401;
+    }
+
+    return false;
   }
 }

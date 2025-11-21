@@ -3,5 +3,8 @@ packages:
   - examples/*
 
 onlyBuiltDependencies:
+  - '@parcel/watcher'
   - better-sqlite3
+  - cpu-features
   - esbuild
+  - ssh2

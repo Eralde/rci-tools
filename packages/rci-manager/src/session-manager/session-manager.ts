@@ -43,6 +43,16 @@ export class SessionManager<ResponseType extends BaseHttpResponse = BaseHttpResp
       );
   }
 
+  public getRealmHeader(): Observable<string> {
+    return this.httpTransport.get(this.authUri)
+      .pipe(
+        catchError((error) => of(error)),
+        map((response) => {
+          return String(this.httpTransport.getHeader(response, 'X-NDM-Realm') ?? '');
+        }),
+      );
+  }
+
   public login(username: string, password: string): Observable<boolean> {
     return this.httpTransport.get(this.authUri)
       .pipe(
