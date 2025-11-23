@@ -116,8 +116,8 @@ const configureBackend = async (): Promise<void> => {
       // a) get current `br0` address and replace <DEVICE_HOME_SEGMENT_IP> in the config template with it
       // b) replace <HTTP_PORT> with `httpPortValue`
       const getIpAndFillTemplateCmd = `
-        HOME_IP=$(ip -4 addr show br0 | awk '/inet / {print $2}' | cut -d/ -f1) && \
-        sed \
+        HOME_IP=$(/opt/sbin/ip -4 addr show br0 | /opt/bin/awk '/inet / {print $2}' | /opt/bin/cut -d/ -f1) && \
+        /opt/bin/sed \
             -e "s/<DEVICE_HOME_SEGMENT_IP>/$HOME_IP/g" \
             -e "s/<HTTP_PORT>/${httpPort}/g" \
             ${remoteTemplatePath} > ${remoteConfPath}
