@@ -13,3 +13,6 @@
 - [Simple Node.js demo](./examples/simple-nodejs-demo)
 - [Local Monitor (Node.js)](./examples/local-monitor)
 - [WebCLI (Svelte)](./examples/sv-webcli)
+
+> In order to run the examples, you need to build the packages first.
+> Run `pnpm build:packages` in the repository root to build them.
