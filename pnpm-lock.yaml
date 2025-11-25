@@ -102,6 +102,9 @@ importers:
       '@angular/router':
         specifier: ^19.2.0
         version: 19.2.15(@angular/common@19.2.15(@angular/core@19.2.15(rxjs@7.8.2)(zone.js@0.15.1))(rxjs@7.8.2))(@angular/core@19.2.15(rxjs@7.8.2)(zone.js@0.15.1))(@angular/platform-browser@19.2.15(@angular/common@19.2.15(@angular/core@19.2.15(rxjs@7.8.2)(zone.js@0.15.1))(rxjs@7.8.2))(@angular/core@19.2.15(rxjs@7.8.2)(zone.js@0.15.1)))(rxjs@7.8.2)
+      d3:
+        specifier: ^7.9.0
+        version: 7.9.0
       rci-manager:
         specifier: workspace:*
         version: link:../../packages/rci-manager
@@ -124,6 +127,9 @@ importers:
       '@angular/compiler-cli':
         specifier: ^19.2.0
         version: 19.2.15(@angular/compiler@19.2.15)(typescript@5.7.3)
+      '@types/d3':
+        specifier: ^7.4.3
+        version: 7.4.3
       '@types/jasmine':
         specifier: ~5.1.0
         version: 5.1.13
