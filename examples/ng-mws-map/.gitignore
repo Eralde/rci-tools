@@ -1,0 +1,9 @@
+/dist
+/tmp
+/out-tsc
+/node_modules
+.idea/
+/.angular/cache
+.DS_Store
+Thumbs.db
+proxy.conf.js
