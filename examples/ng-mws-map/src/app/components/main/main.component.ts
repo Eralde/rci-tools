@@ -1,7 +1,9 @@
-import {Component} from '@angular/core';
+import {Component, signal} from '@angular/core';
 import {CommonModule} from '@angular/common';
 import {Router} from '@angular/router';
 import {AuthService} from '../../services/auth.service';
+import {RciService} from '../../core/rci.service';
+import {GenericObject} from 'rci-manager';
 
 @Component({
   selector: 'nmm-main',
@@ -10,10 +12,16 @@ import {AuthService} from '../../services/auth.service';
   styleUrl: './main.component.scss',
 })
 export class MainComponent {
+  public readonly showVersion = signal<GenericObject | null>(null);
+
   constructor(
     private authService: AuthService,
     private router: Router,
-  ) {}
+    private rciService: RciService,
+  ) {
+    this.rciService.execute({path: 'show.version'})
+      .subscribe((data) => this.showVersion.set(data));
+  }
 
   logout(): void {
     this.authService.logout()
