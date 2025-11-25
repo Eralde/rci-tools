@@ -1,6 +1,7 @@
 import {execSync} from 'child_process';
-import {SSH_USER} from '../conf.ts';
 import {NodeSSH} from 'node-ssh';
+import which from 'which';
+import {SSH_USER} from '../conf';
 
 export const executeRemoteCommand = async (
   ssh: NodeSSH,
@@ -62,10 +63,8 @@ export const scpCopy = (
 
 export const isSshpassInstalled = (): boolean => {
   try {
-    execSync('sshpass -V', {stdio: 'pipe'});
-
-    return true;
-  } catch (error) {
+    return Boolean(which.sync('sshpass1'));
+  } catch (err) {
     return false;
   }
 };
