@@ -1,16 +1,21 @@
+import {Injectable} from '@angular/core';
 import {HttpClient, HttpHeaders, HttpResponse} from '@angular/common/http';
-import type {BaseHttpResponse, GenericObject, HttpTransport} from 'rci-manager';
 import {Observable, map} from 'rxjs';
+import type {BaseHttpResponse, GenericObject, HttpTransport} from 'rci-manager';
 
 export interface NgTransportResponse extends BaseHttpResponse {
   headers: HttpHeaders;
   data: GenericObject;
 }
 
+@Injectable({
+  providedIn: 'root',
+})
 export class NgTransport implements HttpTransport<NgTransportResponse> {
   constructor(
     private httpClient: HttpClient,
   ) {
+    console.log('NgTransport constructor');
   }
 
   public onAuthRequest(): void {

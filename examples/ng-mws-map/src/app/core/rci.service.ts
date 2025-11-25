@@ -11,12 +11,10 @@ export class RciService {
   private readonly sessionManager: SessionManager;
 
   constructor(
-    private httpClient: HttpClient,
+    private ngTransport: NgTransport,
   ) {
-    const transport = new NgTransport(this.httpClient);
-
-    this.rciManager = new RciManager(window.origin, transport);
-    this.sessionManager = new SessionManager(window.origin, transport);
+    this.rciManager = new RciManager(window.origin, this.ngTransport);
+    this.sessionManager = new SessionManager(window.origin, this.ngTransport);
   }
 
   public execute(query: RciTask, options?: ExecuteOptions): GenericResponse$ {

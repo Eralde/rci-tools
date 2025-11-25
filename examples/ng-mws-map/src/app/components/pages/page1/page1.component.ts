@@ -5,7 +5,7 @@ import {JsonPipe} from '@angular/common';
 @Component({
   selector: 'nmm-page1',
   imports: [
-    JsonPipe
+    JsonPipe,
   ],
   templateUrl: './page1.component.html',
   styleUrl: './page1.component.scss',

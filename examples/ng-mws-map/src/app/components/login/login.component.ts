@@ -3,6 +3,7 @@ import {CommonModule} from '@angular/common';
 import {FormsModule} from '@angular/forms';
 import {Router} from '@angular/router';
 import {AuthService} from '../../services/auth.service';
+import {finalize} from 'rxjs';
 
 @Component({
   selector: 'nmm-login',
@@ -11,22 +12,21 @@ import {AuthService} from '../../services/auth.service';
   styleUrl: './login.component.scss',
 })
 export class LoginComponent {
-  username = '';
-  password = '';
-  isLoading = false;
-  errorMessage = '';
+  protected username = '';
+  protected password = '';
+  protected isLoading = false;
+  protected errorMessage = '';
 
   constructor(
     private authService: AuthService,
     private router: Router,
   ) {
-    this.authService.isAuthenticated()
-      .subscribe(console.log);
   }
 
-  onSubmit(): void {
+  protected onSubmit(): void {
     if (!this.username || !this.password) {
       this.errorMessage = 'Please enter both username and password';
+
       return;
     }
 
@@ -34,20 +34,17 @@ export class LoginComponent {
     this.errorMessage = '';
 
     this.authService.login(this.username, this.password)
-      .subscribe({
-        next: (success) => {
+      .pipe(
+        finalize(() => {
           this.isLoading = false;
-          if (success) {
-            this.router.navigate(['/main']);
-          } else {
-            this.errorMessage = 'Login failed. Please check your credentials.';
-          }
-        },
-        error: (err) => {
-          this.isLoading = false;
-          this.errorMessage = 'An error occurred during login. Please try again.';
-          console.error('Login error:', err);
-        },
+        }),
+      )
+      .subscribe((success) => {
+        if (success) {
+          this.router.navigate(['/main']);
+        } else {
+          this.errorMessage = 'Login failed. Please check your credentials.';
+        }
       });
   }
 }

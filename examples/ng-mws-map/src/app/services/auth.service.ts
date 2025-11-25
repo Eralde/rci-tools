@@ -1,18 +1,18 @@
 import {Injectable} from '@angular/core';
-import {SessionManager, FetchTransport} from 'rci-manager';
+import {SessionManager} from 'rci-manager';
 import {Observable, catchError, of} from 'rxjs';
+import {NgTransport} from '../core/ng.transport';
 
 @Injectable({
   providedIn: 'root',
 })
 export class AuthService {
-  private transport: FetchTransport;
   private sessionManager: SessionManager;
 
-  constructor() {
-    this.transport = new FetchTransport();
-    // Using window.origin as the host, similar to simple-browser-demo
-    this.sessionManager = new SessionManager(window.origin, this.transport);
+  constructor(
+    private ngTransport: NgTransport,
+  ) {
+    this.sessionManager = new SessionManager(window.origin, this.ngTransport);
   }
 
   public login(username: string, password: string): Observable<boolean> {
@@ -33,4 +33,3 @@ export class AuthService {
     return this.sessionManager.isAuthenticated();
   }
 }
-
