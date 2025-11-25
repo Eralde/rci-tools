@@ -1,0 +1,24 @@
+<div class="layout-container">
+  <header class="layout-header">
+    <div class="header-content">
+      <h1>Application</h1>
+      <nav class="nav-menu">
+        <a 
+          *ngFor="let item of menuItems" 
+          [routerLink]="item.route"
+          routerLinkActive="active"
+          [routerLinkActiveOptions]="{exact: false}"
+          class="nav-link">
+          {{ item.label }}
+        </a>
+      </nav>
+      <button class="logout-button" (click)="logout()">Logout</button>
+    </div>
+    <div class="current-route">
+      Current Route: <strong>{{ currentRoute }}</strong>
+    </div>
+  </header>
+  <main class="layout-content">
+    <router-outlet></router-outlet>
+  </main>
+</div>

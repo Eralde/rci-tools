@@ -65,4 +65,4 @@ export const updateLocalProxyConfiguration = (deviceAddress: string): void => {
   fs.writeFileSync(LOCAL_PROXY_CONFIG_FILENAME, proxyLocalConfig);
 };
 
-updateLocalProxyConfiguration('192.168.10.1');
+updateLocalProxyConfiguration('192.168.38.11');
