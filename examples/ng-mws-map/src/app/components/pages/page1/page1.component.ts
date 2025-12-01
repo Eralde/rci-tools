@@ -1,5 +1,5 @@
 import {Component, signal} from '@angular/core';
-import {RciService} from '../../../core/rci.service';
+import {RciService} from '../../../core/transport/rci.service';
 import {JsonPipe} from '@angular/common';
 
 @Component({

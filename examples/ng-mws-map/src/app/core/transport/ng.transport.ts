@@ -46,9 +46,6 @@ export class NgTransport implements HttpTransport<NgTransportResponse> {
 
   public delete(url: string): Observable<any> {
     return this.httpClient.delete(url);
-    // .pipe(
-    //   map((httpResponse: HttpResponse<unknown>) => this.processResponse(httpResponse)),
-    // );
   }
 
   public sendQueryArray(url: string, queryArray: GenericObject[]): Observable<GenericObject[]> {

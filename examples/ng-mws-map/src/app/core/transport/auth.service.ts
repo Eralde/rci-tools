@@ -1,7 +1,7 @@
 import {Injectable} from '@angular/core';
 import {SessionManager} from 'rci-manager';
 import {Observable, catchError, of} from 'rxjs';
-import {NgTransport} from '../core/ng.transport';
+import {NgTransport} from './ng.transport';
 
 @Injectable({
   providedIn: 'root',

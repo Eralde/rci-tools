@@ -4,7 +4,7 @@ import {LayoutComponent} from './components/layout/layout.component';
 import {Page1Component} from './components/pages/page1/page1.component';
 import {Page2Component} from './components/pages/page2/page2.component';
 import {Page3Component} from './components/pages/page3/page3.component';
-import {AuthGuard} from './guards';
+import {AuthGuard} from './core/guards';
 
 export const routes: Routes = [
   {
