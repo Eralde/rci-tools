@@ -24,6 +24,9 @@
       ],
       "@api/*": [
         "./src/api/*"
+      ],
+      "@domain/*": [
+        "./src/domain/*"
       ]
     }
   },

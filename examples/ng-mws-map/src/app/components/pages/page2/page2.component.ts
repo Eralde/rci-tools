@@ -1,6 +1,8 @@
 import {Component, ElementRef, afterNextRender, viewChild} from '@angular/core';
 import {CommonModule} from '@angular/common';
 import * as d3 from 'd3';
+import {exhaustMap, timer} from 'rxjs';
+import {MwsService} from '@domain/mws/mws.service';
 
 @Component({
   selector: 'nmm-page2',
@@ -16,13 +18,27 @@ export class Page2Component {
   private readonly centerX = this.width / 2;
   private readonly centerY = this.height / 2;
 
-  constructor() {
+  constructor(
+    protected mwsService: MwsService,
+  ) {
     afterNextRender(() => {
       const container = this.zoomContainer();
 
       if (container) {
         this.initZoom(container.nativeElement);
       }
+
+      timer(1000)
+        .pipe(
+          exhaustMap(() => {
+            console.log(1);
+
+            return this.mwsService.getTree();
+          }),
+        )
+        .subscribe((tree) => {
+          console.log(tree);
+        });
     });
   }
 

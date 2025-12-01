@@ -20,5 +20,5 @@ export interface MwsLink {
 export interface MwsNode extends MwsNodeBase {
   parent: MwsLink | null;
   clients: MwsClient[];
-  children: MwsLink;
+  children: MwsLink[];
 }
