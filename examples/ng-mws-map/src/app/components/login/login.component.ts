@@ -1,39 +1,46 @@
 import {Component} from '@angular/core';
 import {CommonModule} from '@angular/common';
-import {FormsModule} from '@angular/forms';
+import {FormBuilder, FormGroup, ReactiveFormsModule, Validators} from '@angular/forms';
 import {Router} from '@angular/router';
 import {AuthService} from '../../services/auth.service';
 import {finalize} from 'rxjs';
 
 @Component({
   selector: 'nmm-login',
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, ReactiveFormsModule],
   templateUrl: './login.component.html',
   styleUrl: './login.component.scss',
 })
 export class LoginComponent {
-  protected username = '';
-  protected password = '';
+  protected loginForm: FormGroup;
   protected isLoading = false;
   protected errorMessage = '';
 
   constructor(
+    private formBuilder: FormBuilder,
     private authService: AuthService,
     private router: Router,
   ) {
+    this.loginForm = this.formBuilder.group({
+      username: ['', Validators.required],
+      password: ['', Validators.required],
+    });
   }
 
   protected onSubmit(): void {
-    if (!this.username || !this.password) {
+    if (this.loginForm.invalid) {
       this.errorMessage = 'Please enter both username and password';
+      this.loginForm.markAllAsTouched();
 
       return;
     }
 
+    const {username, password} = this.loginForm.value;
+
     this.isLoading = true;
     this.errorMessage = '';
 
-    this.authService.login(this.username, this.password)
+    this.authService.login(username, password)
       .pipe(
         finalize(() => {
           this.isLoading = false;

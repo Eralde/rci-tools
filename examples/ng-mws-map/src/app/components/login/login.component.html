@@ -1,15 +1,13 @@
 <div class="login-container">
   <div class="login-card">
     <h1>Login</h1>
-    <form (ngSubmit)="onSubmit()" class="login-form">
+    <form [formGroup]="loginForm" (ngSubmit)="onSubmit()" class="login-form">
       <div class="form-group">
         <label for="username">Username</label>
         <input
           id="username"
           type="text"
-          [(ngModel)]="username"
-          name="username"
-          required
+          formControlName="username"
           [disabled]="isLoading"
           placeholder="Enter your username"
         />
@@ -19,9 +17,7 @@
         <input
           id="password"
           type="password"
-          [(ngModel)]="password"
-          name="password"
-          required
+          formControlName="password"
           [disabled]="isLoading"
           placeholder="Enter your password"
         />
@@ -32,7 +28,7 @@
       <button
         type="submit"
         class="login-button"
-        [disabled]="isLoading"
+        [disabled]="isLoading || loginForm.invalid"
       >
         @if (isLoading) {
           <span>Logging in...</span>
