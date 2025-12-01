@@ -3,8 +3,8 @@
   "version": "0.0.0",
   "scripts": {
     "ng": "ng",
-    "configure-proxy": "node scripts/configure-proxy.ts",
-    "start": "npm run configure-proxy && ng serve",
+    "dev": "tsx scripts/dev.ts",
+    "start": "pnpm run configure-proxy -- && ng serve",
     "fmt": "dprint fmt \"src/**/*.ts\"",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
@@ -31,12 +31,15 @@
     "@angular/compiler-cli": "^19.2.0",
     "@types/d3": "^7.4.3",
     "@types/jasmine": "~5.1.0",
+    "@types/yargs": "^17.0.35",
     "jasmine-core": "~5.6.0",
     "karma": "~6.4.0",
     "karma-chrome-launcher": "~3.2.0",
     "karma-coverage": "~2.2.0",
     "karma-jasmine": "~5.1.0",
     "karma-jasmine-html-reporter": "~2.1.0",
-    "typescript": "~5.7.2"
+    "tsx": "^4.20.6",
+    "typescript": "~5.7.2",
+    "yargs": "^18.0.0"
   }
 }

@@ -133,6 +133,9 @@ importers:
       '@types/jasmine':
         specifier: ~5.1.0
         version: 5.1.13
+      '@types/yargs':
+        specifier: ^17.0.35
+        version: 17.0.35
       jasmine-core:
         specifier: ~5.6.0
         version: 5.6.0
@@ -154,6 +157,9 @@ importers:
       typescript:
         specifier: ~5.7.2
         version: 5.7.3
+      yargs:
+        specifier: ^18.0.0
+        version: 18.0.0
 
   examples/simple-browser-demo:
     dependencies:

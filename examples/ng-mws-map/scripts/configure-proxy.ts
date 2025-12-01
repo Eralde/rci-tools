@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import {fileURLToPath} from 'url';
 import path from 'path';
+import {DEFAULT_ADDR} from './conf';
 
 const SCRIPTS_DIR = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.resolve(path.join(SCRIPTS_DIR, '..'));
@@ -18,7 +19,7 @@ const DEFAULT_PROXY_CONFIG = [
       '/ndmFeatures.json',
       '/ndmLanguages.json',
     ],
-    target: 'http://192.168.1.1',
+    target: `http://${DEFAULT_ADDR}`,
     secure: false,
     changeOrigin: true,
   },
@@ -64,5 +65,3 @@ export const updateLocalProxyConfiguration = (deviceAddress: string): void => {
 
   fs.writeFileSync(LOCAL_PROXY_CONFIG_FILENAME, proxyLocalConfig);
 };
-
-updateLocalProxyConfiguration('192.168.38.11');
