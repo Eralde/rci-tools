@@ -18,7 +18,7 @@ export class MwsService {
   ) {
   }
 
-  public getTree(): Observable<MwsNode> {
+  public getMap(): Observable<MwsNode[]> {
     const obs$ = {
       showVersion: this.showVersion.execute(),
       showIdentification: this.showIdentification.execute(),
@@ -31,25 +31,26 @@ export class MwsService {
         map((data) => {
           const {showVersion, showIdentification, showMwsMember, bridge0Status} = data;
 
-          return this.buildTree(showVersion, showIdentification, showMwsMember, bridge0Status);
+          return this.buildMap(showVersion, showIdentification, showMwsMember, bridge0Status);
         }),
       );
   }
 
-  private buildTree(
+  private buildMap(
     showVersion: ShowVersionResponse,
     showIdentification: ShowIdentificationActionResponse,
     showMwsMember: MwsMemberData[],
     bridge0Status: Record<string, any>,
-  ): MwsNode {
+  ): MwsNode[] {
     const nodeMap = new Map<string, MwsNode>();
-    const rootMac = bridge0Status['mac'];
+    const controllerMac = bridge0Status['mac'];
+    const rootNodes: MwsNode[] = [];
 
     // root node
-    const rootNode: MwsNode = {
+    const controllerNode: MwsNode = {
       id: showIdentification.cid,
       name: showVersion.description,
-      mac: rootMac,
+      mac: controllerMac,
       isController: true,
       isOnline: true,
       model: '',
@@ -58,7 +59,8 @@ export class MwsService {
       children: [],
     };
 
-    nodeMap.set(rootMac, rootNode);
+    rootNodes.push(controllerNode);
+    nodeMap.set(controllerMac, controllerNode);
 
     // create extender nodes
     for (const member of showMwsMember) {
@@ -84,7 +86,13 @@ export class MwsService {
       const memberMac = member.mac;
       const node = nodeMap.get(memberMac);
 
-      if (!node || !member.backhaul) {
+      if (!node) {
+        continue;
+      }
+
+      if (!member.backhaul) {
+        rootNodes.push(node);
+
         continue;
       }
 
@@ -92,6 +100,8 @@ export class MwsService {
       const parentNode = nodeMap.get(parentMac);
 
       if (!parentNode) {
+        rootNodes.push(node);
+
         continue;
       }
 
@@ -110,6 +120,6 @@ export class MwsService {
       });
     }
 
-    return rootNode;
+    return rootNodes;
   }
 }
