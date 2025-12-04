@@ -1,6 +1,5 @@
-import {BehaviorSubject, Observable, of, race, Subject, Subscription, timer} from 'rxjs';
+import {BehaviorSubject, Observable, Subject, Subscription, of, race, timer} from 'rxjs';
 import {buffer, catchError, exhaustMap, filter, map, switchMap, take, takeUntil, timeout} from 'rxjs/operators';
-import _ from 'lodash';
 import {RciTaskHelper} from '../task';
 import type {Task} from '../task';
 import type {BaseHttpResponse, HttpTransport} from '../../transport';
@@ -61,9 +60,9 @@ export class RciQueue<ResponseType extends BaseHttpResponse> {
   }
 
   public static isImpossibleApiResponse(obj: ObjectOrArray): boolean {
-    return _.isArray(obj)
-      && _.isArray(obj?.[0])
-      && _.isEmpty(obj?.[0]);
+    return Array.isArray(obj)
+      && Array.isArray(obj?.[0])
+      && obj?.[0].length === 0;
   }
 
   public addTask(query: RciTask, saveConfiguration: boolean = false): GenericResponse$ {
@@ -192,7 +191,7 @@ export class RciQueue<ResponseType extends BaseHttpResponse> {
 
   private prepareTask(query: RciTask, saveConfiguration: boolean): Task {
     const subject = new Subject<ObjectOrArray>();
-    const isSingleQuery = !_.isArray(query);
+    const isSingleQuery = !Array.isArray(query);
     const queriesList = isSingleQuery
       ? [query] as RciQuery[]
       : query as RciQuery[];

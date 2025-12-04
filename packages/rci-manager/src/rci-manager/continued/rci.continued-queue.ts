@@ -1,22 +1,21 @@
 import {
   BehaviorSubject,
+  NEVER,
+  Observable,
+  ReplaySubject,
+  Subject,
+  Subscription,
   delayWhen,
   map,
   merge,
-  NEVER,
-  Observable,
   of,
   race,
   repeat,
-  ReplaySubject,
   skipWhile,
-  Subject,
-  Subscription,
   switchMap,
   take,
   timer,
 } from 'rxjs';
-import * as _ from 'lodash';
 import type {GenericObject, ObjectOrArray, Values} from '../../type.utils';
 import {RciQuery} from '../query';
 import {BaseHttpResponse, HttpTransport} from '../../transport';
@@ -39,7 +38,9 @@ export type RciContinuedQueueState = Values<typeof RCI_CONTINUED_QUEUE_STATE>;
 
 export class RciContinuedQueue<QueryPath extends string = string> {
   protected tasks: RciContinuedTask<QueryPath>[] = [];
-  protected readonly pendingQueries$: ReplaySubject<RciQuery<QueryPath>[]> = new ReplaySubject<RciQuery<QueryPath>[]>(1);
+  protected readonly pendingQueries$: ReplaySubject<RciQuery<QueryPath>[]> = new ReplaySubject<RciQuery<QueryPath>[]>(
+    1,
+  );
   protected readonly nextQuery$: Subject<RciContinuedTask> = new Subject<RciContinuedTask>();
   protected readonly stateSub$: BehaviorSubject<RciContinuedQueueState> = new BehaviorSubject<RciContinuedQueueState>(
     RCI_CONTINUED_QUEUE_STATE.READY,
@@ -127,7 +128,7 @@ export class RciContinuedQueue<QueryPath extends string = string> {
       .subscribe(({result, task}) => {
         this.stateSub$.next(RCI_CONTINUED_QUEUE_STATE.READY);
 
-        if (_.isString(result)) {
+        if (typeof result === 'string') {
           if (Object.values(RCI_CONTINUED_QUERY_FINISH_REASON).includes(result as RCI_CONTINUED_QUERY_FINISH_REASON)) {
             task.responseSub$.next(null);
             task.doneSub$.next(result as RCI_CONTINUED_QUERY_FINISH_REASON);

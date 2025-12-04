@@ -1,4 +1,4 @@
-import _ from 'lodash';
+import {flatMap, get, mapValues, orderBy, pick, reduce, set, sortBy} from 'lodash-es';
 import type {GenericObject} from '../../type.utils';
 import type {RciQuery} from '../query/';
 import {SAVE_CONFIGURATION_QUERY} from '../queue/rci.queue.constants';
@@ -6,12 +6,12 @@ import type {PartialQueryMap, QueryMap, QueryMapItem, Task} from './rci.task.typ
 
 export class RciTaskHelper {
   public static mergeTaskQueries(tasks: Task[]): {queryMap: QueryMap; queryArray: GenericObject[]} {
-    const allQueries: RciQuery[] = _.flatMap(tasks, 'queries');
+    const allQueries: RciQuery[] = flatMap(tasks, 'queries');
 
-    const partialQueryMap: PartialQueryMap = _.reduce(
+    const partialQueryMap: PartialQueryMap = reduce(
       allQueries,
       (acc, query, index) => {
-        const keyObject = _.pick(query, ['path', 'data']);
+        const keyObject = pick(query, ['path', 'data']);
         const key = JSON.stringify(keyObject);
 
         if (acc[key]) {
@@ -35,7 +35,7 @@ export class RciTaskHelper {
     //    If a query that changes configuration precedes one that reads it, an error may occur.
     //
     // 2. Ensure that 'system configuration save' query is always last
-    const sortedByKey = _.orderBy(
+    const sortedByKey = orderBy(
       partialQueryMap,
       [
         (item) => item.query.path.startsWith(SAVE_CONFIGURATION_QUERY),
@@ -52,7 +52,7 @@ export class RciTaskHelper {
       {},
     );
 
-    const queryMap: QueryMap = _.mapValues(partialQueryMap, (item: Omit<QueryMapItem, 'keyIndex'>) => {
+    const queryMap: QueryMap = mapValues(partialQueryMap, (item: Omit<QueryMapItem, 'keyIndex'>) => {
       return {
         ...item,
         keyIndex: keyIndexes[item.key]!,
@@ -70,18 +70,19 @@ export class RciTaskHelper {
     tasks: Task[],
     queryMap: QueryMap,
   ): GenericObject[][] {
-    const allResults = _
-      .chain(queryMap)
-      .flatMap(({keyIndex, indices}) => {
+    const chunks = flatMap(
+      queryMap,
+      ({keyIndex, indices}) => {
         const response = batchedResponse[keyIndex];
 
         // Index in the 'indices' array is the index in the array
         // resulting from the merge of queries from all tasks
         return indices.map((idx) => ({idx, response}));
-      })
-      .sortBy('idx')
-      .map('response')
-      .value();
+      },
+    );
+
+    const allResults = sortBy(chunks, 'idx')
+      .map((item) => item.response);
 
     const data: {startIdx: number; chunks: GenericObject[][]} = tasks.reduce(
       (acc, {queries}) => {
@@ -111,7 +112,7 @@ export class RciTaskHelper {
   public static toQueryObject(query: RciQuery): GenericObject {
     const {path, data = {}} = query;
 
-    return _.set({}, path, data);
+    return set({}, path, data);
   }
 
   public static prepareResponseData(response: GenericObject, query: RciQuery): GenericObject {
@@ -121,6 +122,6 @@ export class RciTaskHelper {
 
     // We can't know the type of the value inside the `response` object
     // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-    return _.get(response, query.path) as GenericObject;
+    return get(response, query.path) as GenericObject;
   }
 }
