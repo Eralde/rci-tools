@@ -1,13 +1,13 @@
 import yargs from 'yargs';
 import {hideBin} from 'yargs/helpers';
 import {concat, defer, firstValueFrom, forkJoin} from 'rxjs';
-import {FetchTransport, RciManager} from '../../src';
+import {FetchTransport, RciManager, RciQuery} from '../../src';
 import {calculateStats, getRandomSubset, measureObsDuration, normalizeAddress, queryToUrl} from './utils.js';
 
 const NUM_TESTS = 5;
 const NUM_RUNS_PER_TESTS = 5;
 
-const QUERIES = [
+const QUERIES: Array<RciQuery> = [
   {path: 'show.version'},
   {path: 'show.identification'},
   {path: 'show.interface'},
@@ -26,21 +26,20 @@ const QUERIES = [
 ];
 
 const main = async () => {
-  const argv = await yargs(hideBin(process.argv))
+  const argv = yargs(hideBin(process.argv))
     .option(
-      'device-ip',
+      'addr',
       {
         type: 'string',
         description: 'The IP address of the device',
         demandOption: true,
-        alias: 'ip',
+        alias: 'a',
       },
     )
     .help()
-    .argv;
+    .parseSync();
 
-  const deviceIp = argv.deviceIp;
-  const host = normalizeAddress(String(deviceIp));
+  const host = normalizeAddress(argv.addr);
   const rciBasePath = `${host}/rci/`;
 
   const fetchTransport = new FetchTransport();
@@ -86,10 +85,10 @@ const main = async () => {
       const durationParallel = await firstValueFrom(measureObsDuration(parallel$));
       fetchParallelDurations.push(durationParallel);
 
-      // Batched "RciManager.execute" calls
-      const executeObs$ = forkJoin(currentQueries.map((query) => rciManager.execute(query)));
-      const durationExecute = await firstValueFrom(measureObsDuration(executeObs$));
-      batchedExecuteDurations.push(durationExecute);
+      // Batched "RciManager.queue" calls
+      const queueObs$ = forkJoin(currentQueries.map((query) => rciManager.queue(query)));
+      const durationQueue = await firstValueFrom(measureObsDuration(queueObs$));
+      batchedExecuteDurations.push(durationQueue);
     }
 
     const fetchSequentialStats = calculateStats(fetchSequentialDurations);
@@ -98,15 +97,15 @@ const main = async () => {
 
     console.log(`  Fetch [sequential] (${NUM_RUNS_PER_TESTS} runs)`);
     console.log(`    Avg: ${fetchSequentialStats.average.toFixed(2)} ms`);
-    console.log(`    StdDev: ${fetchSequentialStats.stdDev.toFixed(2)} ms`);
+    console.log(`    SD:  ${fetchSequentialStats.stdDev.toFixed(2)} ms`);
 
     console.log(`  Fetch [parallel] (${NUM_RUNS_PER_TESTS} runs)`);
     console.log(`    Avg: ${fetchParallelStats.average.toFixed(2)} ms`);
-    console.log(`    StdDev: ${fetchParallelStats.stdDev.toFixed(2)} ms`);
+    console.log(`    SD:  ${fetchParallelStats.stdDev.toFixed(2)} ms`);
 
-    console.log(`  Batched RciManager.execute (${NUM_RUNS_PER_TESTS} runs)`);
+    console.log(`  RciManager.queue [batched] (${NUM_RUNS_PER_TESTS} runs)`);
     console.log(`    Avg: ${executeStats.average.toFixed(2)} ms`);
-    console.log(`    StdDev: ${executeStats.stdDev.toFixed(2)} ms\n`);
+    console.log(`    SD:  ${executeStats.stdDev.toFixed(2)} ms\n`);
   }
 };
 

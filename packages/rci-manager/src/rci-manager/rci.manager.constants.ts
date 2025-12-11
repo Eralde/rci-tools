@@ -1,13 +1,8 @@
-import {ExecuteContinuedOptions, ExecuteOptions} from './rci.manager.types';
+import {QueueOptions} from './rci.manager.types';
 
-export const DEFAULT_EXECUTE_OPTIONS: ExecuteOptions = {
+export const RCI_QUERY_TIMEOUT = 60_000; // 1 minute
+
+export const DEFAULT_QUEUE_OPTIONS: QueueOptions = {
   saveConfiguration: false,
   isPriorityTask: false,
-};
-
-export const DEFAULT_EXECUTE_CONTINUED_OPTIONS: ExecuteContinuedOptions = {
-  timeout: 1000,
-  skipPostQuery: false,
-  isInfinite: false,
-  onDataUpdate: () => {},
 };

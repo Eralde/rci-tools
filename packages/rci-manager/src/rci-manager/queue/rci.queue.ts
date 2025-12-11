@@ -1,14 +1,13 @@
 import {BehaviorSubject, Observable, Subject, Subscription, of, race, timer} from 'rxjs';
 import {buffer, catchError, exhaustMap, filter, map, switchMap, take, takeUntil, timeout} from 'rxjs/operators';
-import {RciTaskHelper} from '../task';
-import type {Task} from '../task';
+import {RciPayloadHelper} from '../payload';
 import type {BaseHttpResponse, HttpTransport} from '../../transport';
 import type {GenericObject, ObjectOrArray} from '../../type.utils';
-import type {GenericResponse$} from '../rci.manager.types';
+import type {GenericResponse} from '../rci.manager.types';
+import {RCI_QUERY_TIMEOUT} from '../rci.manager.constants';
 import {RciQuery, RciTask} from '../query';
-import {RCI_QUEUE_STATE} from './rci.queue.types';
-import type {RciQueueOptions, RciQueueState} from './rci.queue.types';
-import {RCI_QUEUE_DEFAULT_OPTIONS, RCI_QUEUE_HTTP_TIMEOUT, SAVE_CONFIGURATION_QUERY} from './rci.queue.constants';
+import {RCI_QUEUE_STATE, RciQueueOptions, RciQueueState, Task} from './rci.queue.types';
+import {RCI_QUEUE_DEFAULT_OPTIONS, SAVE_CONFIGURATION_QUERY} from './rci.queue.constants';
 
 export class RciQueue<ResponseType extends BaseHttpResponse> {
   private readonly stateSub$: BehaviorSubject<RciQueueState> = new BehaviorSubject<RciQueueState>(
@@ -65,7 +64,7 @@ export class RciQueue<ResponseType extends BaseHttpResponse> {
       && obj?.[0].length === 0;
   }
 
-  public addTask(query: RciTask, saveConfiguration: boolean = false): GenericResponse$ {
+  public addTask(query: RciTask, saveConfiguration: boolean = false): GenericResponse {
     const task$ = this.processTask(query, saveConfiguration);
 
     if (!this.blockerQueue) {
@@ -106,7 +105,7 @@ export class RciQueue<ResponseType extends BaseHttpResponse> {
       );
   }
 
-  private processTask(query: RciTask, saveConfiguration: boolean = false): GenericResponse$ {
+  private processTask(query: RciTask, saveConfiguration: boolean = false): GenericResponse {
     // Outer Observable is required to avoid adding a new task
     // until returned Observable is actually subscribed to
     return of(true)
@@ -158,13 +157,13 @@ export class RciQueue<ResponseType extends BaseHttpResponse> {
           const {
             queryArray,
             queryMap,
-          } = RciTaskHelper.mergeTaskQueries(tasks);
+          } = RciPayloadHelper.batchTasks(tasks);
 
           // Moving catchError to the outer pipe
           // will cancel the batch$ Observable if an error occurs
           return this.httpTransport.sendQueryArray(this.rciPath, queryArray)
             .pipe(
-              timeout(RCI_QUEUE_HTTP_TIMEOUT),
+              timeout(RCI_QUERY_TIMEOUT),
               map((batchedResponse) => [batchedResponse, null]), // null is a placeholder for possible httpClientError
               catchError((httpClientError) => of([[], httpClientError])),
               map(([batchedResponse, httpClientError]) => {
@@ -180,7 +179,7 @@ export class RciQueue<ResponseType extends BaseHttpResponse> {
         if (httpClientError) {
           this.provideErrorDataToTasks(httpClientError, tasks);
         } else {
-          const chunkedResponses = RciTaskHelper.splitResponses(batchedResponse, tasks, queryMap);
+          const chunkedResponses = RciPayloadHelper.splitResponsesPerTask(batchedResponse, tasks, queryMap);
 
           this.provideDataToTasks(chunkedResponses, tasks);
         }

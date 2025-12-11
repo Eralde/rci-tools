@@ -1,19 +1,20 @@
 import {Observable, Subject} from 'rxjs';
 import process from 'node:process';
+import {GenericObject, RciQuery} from '../../src';
 
-export const normalizeAddress = (addr) => {
+export const normalizeAddress = (addr: string): string => {
   return addr.startsWith('http://')
     ? addr
     : `http://${addr}`;
 };
 
-export const isPlainDict = (a) => {
+export const isPlainDict = (a: any): a is GenericObject => {
   return typeof a === 'object'
     && a !== null
     && Object.keys(a).every((key) => typeof a[key] === 'string');
 };
 
-export const queryToUrl = (rciBasePath, query) => {
+export const queryToUrl = (rciBasePath: string, query: RciQuery): string => {
   const paramsStr = isPlainDict(query.data)
     ? new URLSearchParams(query.data).toString()
     : '';
@@ -22,10 +23,10 @@ export const queryToUrl = (rciBasePath, query) => {
   const suffix = paramsStr ? `?${paramsStr}` : '';
 
   return `${rciBasePath}${resource}${suffix}`;
-}
+};
 
-export const measureObsDuration = (obs$) => {
-  const sub$ = new Subject();
+export const measureObsDuration = (obs$: Observable<unknown>): Observable<number> => {
+  const sub$ = new Subject<number>();
   const t0 = process.hrtime.bigint();
 
   obs$
@@ -42,11 +43,10 @@ export const measureObsDuration = (obs$) => {
       },
     });
 
-
   return sub$.asObservable();
 };
 
-export const calculateStats = (durations) => {
+export const calculateStats = (durations: number[]) => {
   if (durations.length === 0) {
     return {average: 0, stdDev: 0};
   }
@@ -60,7 +60,7 @@ export const calculateStats = (durations) => {
   return {average, stdDev};
 };
 
-export const getRandomSubset = (arr, size) => {
+export const getRandomSubset = <T>(arr: T[], size: number): T[] => {
   const subsetSize = Math.max(0, Math.min(arr.length - 1, size));
   const shuffled = [...arr].sort(() => 0.5 - Math.random());
 

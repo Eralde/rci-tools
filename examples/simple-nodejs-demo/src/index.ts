@@ -65,7 +65,7 @@ const executeContinuedQueries = async (rciService: RciService): Promise<void> =>
   ];
 
   const continuedTasks = continuedQueries.map((query) => {
-    return rciService.queueContinuedTask(query.path, query.data || {});
+    return rciService.queueBackgroundProcess(query.path, query.data || {});
   });
 
   setTimeout(

@@ -16,7 +16,7 @@ interface PasswordData {
 export class SessionManager<ResponseType extends BaseHttpResponse = BaseHttpResponse> {
   private readonly authUri: string;
 
-  private isLoggingAuthErrors: boolean = false;
+  private isLoggingErrors: boolean = false;
 
   constructor(
     private host: string,
@@ -29,9 +29,7 @@ export class SessionManager<ResponseType extends BaseHttpResponse = BaseHttpResp
     return this.httpTransport.get(this.authUri)
       .pipe(
         catchError((error) => {
-          if (this.isLoggingAuthErrors) {
-            console.warn(error);
-          }
+          this.logError(error);
 
           return error?.response ? of(error.response) : of(error);
         }),
@@ -89,8 +87,14 @@ export class SessionManager<ResponseType extends BaseHttpResponse = BaseHttpResp
       );
   }
 
-  public toggleAuthErrorLogging(isEnabled: boolean): void {
-    this.isLoggingAuthErrors = isEnabled;
+  public toggleErrorLogging(isEnabled: boolean): void {
+    this.isLoggingErrors = isEnabled;
+  }
+
+  private logError(error: unknown): void {
+    if (this.isLoggingErrors) {
+      console.warn(error);
+    }
   }
 
   private getEncryptedPassword(props: PasswordData): Observable<string> {
@@ -122,9 +126,7 @@ export class SessionManager<ResponseType extends BaseHttpResponse = BaseHttpResp
     return this.httpTransport.post(this.authUri, requestData)
       .pipe(
         catchError((error) => {
-          if (this.isLoggingAuthErrors) {
-            console.warn(error);
-          }
+          this.logError(error);
 
           return error?.response
             ? of(error.response)

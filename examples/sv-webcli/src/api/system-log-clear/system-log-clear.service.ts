@@ -10,6 +10,6 @@ export class SystemLogClearService {
   public perform(): Observable<unknown> {
     const query: RciQuery = {path: 'system.log.clear'};
 
-    return this.rciService.execute(query);
+    return this.rciService.queue(query);
   }
 }

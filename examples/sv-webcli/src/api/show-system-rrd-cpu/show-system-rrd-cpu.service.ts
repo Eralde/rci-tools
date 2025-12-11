@@ -13,7 +13,7 @@ export class ShowSystemRrdCpuService {
   public read(request: ShowSystemRrdCpuRequest): Observable<ShowSystemRrdCpuResponse> {
     const query: RciQuery = {path: 'show.system.rrd.cpu', data: request};
 
-    return this.rciService.execute(query)
+    return this.rciService.queue(query)
       .pipe(
         map((response) => showSystemRrdCpuResponseSchema.parse(response)),
       );

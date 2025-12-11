@@ -13,7 +13,7 @@ export class ShowSystemRrdMemoryService {
   public read(request: ShowSystemRrdMemoryRequest): Observable<ShowSystemRrdMemoryResponse> {
     const query: RciQuery = {path: 'show.system.rrd.memory', data: request};
 
-    return this.rciService.execute(query)
+    return this.rciService.queue(query)
       .pipe(
         map((response) => showSystemRrdMemoryResponseSchema.parse(response)),
       );

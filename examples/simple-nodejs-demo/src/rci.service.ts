@@ -1,13 +1,6 @@
-import {catchError, exhaustMap, Observable, of} from 'rxjs';
+import {Observable, catchError, exhaustMap, of} from 'rxjs';
 import {AxiosTransport} from 'rci-adapter-axios';
-import {
-  GenericObject,
-  GenericResponse$,
-  RciContinuedQuery,
-  RciManager,
-  RciQuery,
-  SessionManager,
-} from 'rci-manager';
+import {GenericObject, GenericResponse, RciBackgroundProcess, RciManager, RciQuery, SessionManager} from 'rci-manager';
 
 export interface DeviceCredentials {
   address: string;
@@ -30,10 +23,10 @@ export class RciService {
     this.auth = new SessionManager(address, this.transport);
   }
 
-  public execute(query: RciQuery | RciQuery[]): GenericResponse$ {
+  public execute(query: RciQuery | RciQuery[]): GenericResponse {
     return this.ensureAuth()
       .pipe(
-        exhaustMap(() => this.manager.execute(query)),
+        exhaustMap(() => this.manager.queue(query)),
         catchError((error) => {
           console.log('Failed to execute an RCI query', error);
 
@@ -42,10 +35,10 @@ export class RciService {
       );
   }
 
-  public queueContinuedTask(path: string, data: GenericObject): RciContinuedQuery {
+  public queueBackgroundProcess(path: string, data: GenericObject): RciBackgroundProcess {
     console.log('Adding a "continued" task to the queue', path, data);
 
-    const query = this.manager.queueContinuedTask({path, data});
+    const query = this.manager.queueBackgroundProcess({path, data});
 
     query.done$
       .subscribe((done) => {

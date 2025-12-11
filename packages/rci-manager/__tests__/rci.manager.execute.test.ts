@@ -50,7 +50,7 @@ describe('RciManager.execute', () => {
     const query2: RciQuery = {path: SHOW_IDENTIFICATION};
 
     const queries = [query1, query2];
-    const execute$ = queries.map((query) => rciManager.execute(query));
+    const execute$ = queries.map((query) => rciManager.queue(query));
 
     const result = await firstValueFrom(forkJoin(execute$));
 
@@ -84,7 +84,7 @@ describe('RciManager.execute', () => {
       {path: SHOW_VERSION}, // duplicate
     ];
 
-    const result = await firstValueFrom(rciManager.execute(queries));
+    const result = await firstValueFrom(rciManager.queue(queries));
 
     expect(fetchSpy).toHaveBeenCalledTimes(1); // Only one HTTP request should be sent
 

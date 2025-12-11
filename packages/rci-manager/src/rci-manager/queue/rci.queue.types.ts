@@ -1,5 +1,7 @@
+import {Subject} from 'rxjs';
 import type {BaseHttpResponse} from '../../transport';
-import type {Values} from '../../type.utils';
+import type {ObjectOrArray, Values} from '../../type.utils';
+import {RciQuery} from '../query';
 import {RciQueue} from './rci.queue';
 
 export interface RciQueueOptions<ResponseType extends BaseHttpResponse> {
@@ -23,3 +25,9 @@ export const RCI_QUEUE_STATE = {
 } as const;
 
 export type RciQueueState = Values<typeof RCI_QUEUE_STATE>;
+
+export interface Task {
+  isSingleQuery: boolean;
+  queries: RciQuery[];
+  subject: Subject<ObjectOrArray>;
+}

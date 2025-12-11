@@ -32,7 +32,7 @@ class RciService {
   }
 
   public execute(queries: RciQuery | RciQuery[]): Observable<unknown> {
-    return this.driver.execute(queries);
+    return this.driver.queue(queries);
   }
 }
 

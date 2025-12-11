@@ -13,7 +13,7 @@ export class ShowInterfaceService {
   public read(request: ShowInterfaceRequest = {}): Observable<ShowInterfaceResponse> {
     const query: RciQuery = {path: 'show.interface', data: request};
 
-    return this.rciService.execute(query)
+    return this.rciService.queue(query)
       .pipe(
         map((response) => showInterfaceResponseSchema.parse(response)),
       );
