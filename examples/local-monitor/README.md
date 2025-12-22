@@ -1,4 +1,4 @@
-**English** | [Русский](README_RU.md)
+**English** | [Русский](README.ru.md)
 
 # Local Monitor
 
