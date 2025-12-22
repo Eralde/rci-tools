@@ -14,7 +14,7 @@ export class ShowSystemService {
       path: 'show.system',
     };
 
-    return this.rciService.execute(query)
+    return this.rciService.queue(query)
       .pipe(
         map((response) => showSystemResponseSchema.parse(response)),
       );

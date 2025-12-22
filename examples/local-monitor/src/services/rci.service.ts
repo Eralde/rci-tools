@@ -32,13 +32,12 @@ export class RciService {
   public execute(query: RciQuery | RciQuery[]): Observable<unknown> {
     return this.ensureAuth()
       .pipe(
-        exhaustMap(() => this.manager.execute(query)),
+        exhaustMap(() => this.manager.queue(query)),
         catchError(() => {
           return of(null);
         }),
       );
   }
-
 
   public ensureAuth(): Observable<boolean> {
     return this.auth.isAuthenticated()

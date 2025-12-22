@@ -183,7 +183,7 @@ class DeviceService {
 
   public getInterfaces(): Observable<Record<string, GenericObject>> {
     const interfacesQuery: RciQuery = {path: 'show.interface'};
-    return rciService.execute(interfacesQuery) as Observable<Record<string, GenericObject>>;
+    return rciService.queue(interfacesQuery) as Observable<Record<string, GenericObject>>;
   }
 }
 

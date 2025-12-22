@@ -14,7 +14,7 @@ export class ShowVersionService {
       path: 'show.version',
     };
 
-    return this.rciService.execute(query)
+    return this.rciService.queue(query)
       .pipe(
         map((response) => showVersionResponseSchema.parse(response)),
       );

@@ -1,18 +1,16 @@
 import {Observable} from 'rxjs';
 import type {GenericObject, ObjectOrArray} from '../type.utils';
 
-export type OnDataUpdateFunction = (data: GenericObject) => void;
-
-export interface ExecuteOptions {
+export interface QueueOptions {
   saveConfiguration?: boolean;
   isPriorityTask?: boolean;
 }
 
-export interface ExecuteContinuedOptions {
+export interface BackgroundTaskOptions {
   timeout?: number;
   skipPostQuery?: boolean;
-  isInfinite?: boolean; // a common case for log requests
-  onDataUpdate?: OnDataUpdateFunction;
+  isInfinite?: boolean; // certain background tasks (e.g., 'show log') may run indefinitely
+  onDataUpdate?: (data: GenericObject) => void;
 }
 
 export interface RciResponse {
@@ -22,4 +20,4 @@ export interface RciResponse {
   body?: unknown;
 }
 
-export type GenericResponse$ = Observable<ObjectOrArray>;
+export type GenericResponse = Observable<ObjectOrArray>;

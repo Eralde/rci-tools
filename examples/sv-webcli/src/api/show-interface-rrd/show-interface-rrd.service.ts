@@ -13,7 +13,7 @@ export class ShowInterfaceRrdService {
   public read(request: ShowInterfaceRrdRequest): Observable<ShowInterfaceRrdResponse> {
     const query: RciQuery = {path: 'show.interface.rrd', data: request};
 
-    return this.rciService.execute(query)
+    return this.rciService.queue(query)
       .pipe(
         map((response) => showInterfaceRrdResponseSchema.parse(response)),
       );

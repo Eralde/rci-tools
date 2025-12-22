@@ -19,7 +19,7 @@ export class ShowLogService {
       data: {...data, once: true},
     };
 
-    return this.rciService.execute(query)
+    return this.rciService.queue(query)
       .pipe(
         map((response) => showLogResponseSchema.parse(response)),
       );
@@ -33,7 +33,7 @@ export class ShowLogService {
       data,
     };
 
-    const task = this.rciService.executeContinued(query);
+    const task = this.rciService.queueBackgroundProcess(query);
 
     return task.data$
       .pipe(

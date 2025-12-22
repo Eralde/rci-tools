@@ -16,7 +16,7 @@ export class ShowInterfaceStatApiService {
       data: request,
     };
 
-    return this.rciService.execute(query)
+    return this.rciService.queue(query)
       .pipe(
         map((response) => showInterfaceStatResponseSchema.parse(response)),
       );

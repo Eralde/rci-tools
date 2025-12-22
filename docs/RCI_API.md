@@ -1,3 +1,5 @@
+**English** | [Русский](RCI_API.ru.md)
+
 # RCI API
 
 ## 1. Overview
@@ -53,7 +55,11 @@ way.
 <summary>An example of an RCI API request</summary>
 
 ```shell
-$ curl http://192.168.1.1/rci/show/version # sends a GET HTTP request
+curl http://192.168.1.1/rci/show/version # sends a GET HTTP request
+```
+
+```shell
+$ curl http://192.168.1.1/rci/show/version
 
 
 {
@@ -107,8 +113,14 @@ using standard HTTP methods:
 > even if the command has no parameters at all.
 
 The ability to nest JSON objects is what makes RCI quite convenient for developers.
-When using the CLI you usually enter commands one by one. With RCI an entity
+When using the CLI you usually enter commands one by one (**). With RCI an entity
 (e.g. a network interface) can be represented by a JSON object as a whole.
+
+> ** You can paste multiple commands from the clipboard into the CLI,
+> but entering commands one at a time is the standard behavior for any
+> command line interface. RCI, being a REST-like API, allows you to work
+> with resources that are entire objects (each object is the result of
+> executing a set of commands).
 
 <details>
     <summary>Editing an interface configuration via CLI and via RCI</summary>
@@ -122,7 +134,7 @@ When using the CLI you usually enter commands one by one. With RCI an entity
 <td>
 
 <img src="./svg/example-cli.svg"/><br/>
-Creating/editing an object via CLI <br/>is a step-by-step procedure **
+Creating/editing an object via CLI <br/>is a step-by-step procedure
 </td>
 
 <td>
@@ -132,11 +144,6 @@ Creating/editing an object via RCI <br/>can be done as a single action (HTTP req
     </tr>
 </tbody>
 </table>
-
-> ** In CLI, you can paste multiple commands from the clipboard, but entering
-> commands one at a time is standard behavior for any command line interface.
-> RCI, being a REST-like API, allows you to work with resources that are entire
-> objects (each object is the result of executing a set of commands).
 
 </details>
 
@@ -155,7 +162,7 @@ A subset of CLI commands is "read-only" (e.g., if they return current status
 of a certain subsystem/service). Those commands map to RCI actions for which
 `GET` and `POST` requests return the same result. "Read-only" commands usually
 begin with the `show` keyword, but this is not always the case. For example,
-`rci/whoami` or `rci/ip/http/ssl/acme/list` actions are also "read-only".
+`rci/whoami` or `rci/ip/http/ssl/acme/list` resources are also "read-only".
 `rci/eula/accept` and `rci/system/log/clear`, on the other hand, are not:
 `GET` requests are not applicable to those.
 
@@ -186,6 +193,10 @@ section [Background Processes](#4-background-processes).
 <summary>Read a setting (GET)</summary>
 
 ```shell
+curl http://192.168.1.1/rci/ip/http/security-level
+```
+
+```shell
 $ curl http://192.168.1.1/rci/ip/http/security-level
 
 
@@ -197,6 +208,12 @@ $ curl http://192.168.1.1/rci/ip/http/security-level
 
 <details>
 <summary>Write a setting (POST)</summary>
+
+```shell
+curl -X POST http://192.168.1.1/rci/ip/http/security-level \
+  -H "Content-Type: application/json" \
+  -d '{"private": true}'
+```
 
 ```shell
 $ curl -X POST http://192.168.1.1/rci/ip/http/security-level \
@@ -225,6 +242,11 @@ $ curl -X POST http://192.168.1.1/rci/ip/http/security-level \
 
 <details>
 <summary>Read an interface configuration (GET)</summary>
+
+```shell
+# '?' and '=' are escaped for shell
+curl http://192.168.1.1/rci/interface\?name\=Bridge1
+```
 
 ```shell
 $ curl http://192.168.1.1/rci/interface\?name\=Bridge1
@@ -261,6 +283,12 @@ $ curl http://192.168.1.1/rci/interface\?name\=Bridge1
 <summary>Change an existing interface configuration (POST)</summary>
 
 ```shell
+curl -X POST http://192.168.1.1/rci/interface \
+  -H "Content-Type: application/json" \
+  -d '{"Bridge1": {"up": false}}'
+```
+
+```shell
 $ curl -X POST http://192.168.1.1/rci/interface \
   -H "Content-Type: application/json" \
   -d @<(cat <<'EOF'
@@ -294,6 +322,12 @@ EOF
 <summary>OR create an interface (POST)</summary>
 
 ```shell
+curl -X POST http://192.168.1.1/rci/interface \
+  -H "Content-Type: application/json" \
+  -d '{"PPTP0": {}}'
+```
+
+```shell
 $ ~ curl -X POST http://192.168.1.1/rci/interface \
   -H "Content-Type: application/json" \
   -d @<(cat <<'EOF'
@@ -321,6 +355,11 @@ EOF
 
 <details>
 <summary>Delete an interface (DELETE) </summary>
+
+```shell
+curl -X DELETE http://192.168.1.1/rci/interface\?name\=PPTP0 \
+  -H "Content-Type: application/json"
+```
 
 ```shell
 $ curl -X DELETE http://192.168.1.1/rci/interface\?name\=PPTP0 \
@@ -358,6 +397,10 @@ request the command-specific API resource (`ip telnet` -> `GET rci/ip/telnet`)
 
 <details>
 <summary>Requesting command-specific resource</summary>
+
+```shell
+curl http://192.168.1.1/rci/ip/telnet
+```
 
 ```shell
 $ curl http://192.168.1.1/rci/ip/telnet
@@ -399,6 +442,10 @@ via the `'telnet'` "path" in the returned JSON:<br/><br/>
 
 `ip telnet` -> `GET rci/ip` + `'telnet'`
 <br/>
+
+```shell
+curl http://192.168.1.1/rci/ip
+```
 
 ```shell
 $ curl http://192.168.1.1/rci/ip
@@ -447,6 +494,11 @@ $ curl http://192.168.1.1/rci/ip
 <summary>Execute the action (GET) </summary>
 
 ```shell
+curl http://192.168.1.1/rci/show/system
+```
+
+
+```shell
 $ curl http://192.168.1.1/rci/show/system
 
 
@@ -474,6 +526,12 @@ $ curl http://192.168.1.1/rci/show/system
 <summary>Execute the action (POST) </summary>
 
 <br/>
+
+```shell
+curl -X POST http://192.168.1.1/rci/show/system \
+  -H "Content-Type: application/json" \
+  -d '{}' # an empty body is required
+```
 
 ```shell
 $ curl -X POST http://192.168.1.1/rci/show/system \
@@ -508,9 +566,15 @@ $ curl -X POST http://192.168.1.1/rci/show/system \
 <summary>Execute the action (POST) </summary>
 
 ```shell
-$ curl -X POST http://192.168.1.1/rci/system/reboot \
+curl -X POST http://192.168.1.1/rci/system/reboot\
   -H "Content-Type: application/json" \
   -d '{"interval": 5}' # an empty body will start the reboot process immediately
+```
+
+```shell
+$ curl -X POST http://192.168.1.1/rci/system/reboot \
+  -H "Content-Type: application/json" \
+  -d '{"interval": 5}'
 
 
 {
@@ -573,6 +637,28 @@ curl -X POST http://192.168.1.1/rci/ \
 ]
 EOF
 )
+```
+
+```shell
+$ curl -X POST http://192.168.1.1/rci/ \
+  -H "Content-Type: application/json" \
+  -d @<(cat <<'EOF'
+[
+  {
+   "show": {
+     "system": {}
+   }
+ },
+ {
+   "show": {
+     "clock": {
+       "date": {}
+     }
+   }
+ }
+]
+EOF
+)
 
 
 [
@@ -603,7 +689,29 @@ EOF
     <summary>Creating an interface and setting its description</summary>
 
 ```shell
-~ curl -X POST http://192.168.1.1/rci/ \
+curl -X POST http://192.168.1.1/rci/ \
+  -H "Content-Type: application/json" \
+  -d @<(cat <<'EOF'
+[
+  {
+   "interface": {
+     "name": "PPTP0"
+   }
+ },
+ {
+   "interface": {
+     "PPTP0": {
+      "description": "test"
+     }
+   }
+ }
+]
+EOF
+)
+```
+
+```shell
+$ curl -X POST http://192.168.1.1/rci/ \
   -H "Content-Type: application/json" \
   -d @<(cat <<'EOF'
 [
@@ -668,6 +776,44 @@ the `UsbModem0` interface and configures the `ip global order` setting on it.
 
 ```shell
 curl -X POST http://192.168.1.1/rci/ \
+  -H "Content-Type: application/json" \
+  -d @<(cat <<'EOF'
+[
+  {
+    "interface": {
+      "name": "UsbModem0"
+      "ip": {
+        "global": {
+          "enabled": true,
+          "order": 0
+        }
+      }
+    }
+  },
+  {},
+  {
+    "interface": {
+      "name": "UsbModem0"
+      "authentication": {
+        "identity": {"no": true},
+        "password": {"no": true},
+        "no": true
+      }
+    }
+  },
+  {
+    "show": {"last-change": {}}
+  },
+  {
+    "system": {"configuration": {"save": {}}}
+  }
+]
+EOF
+)
+```
+
+```shell
+$ curl -X POST http://192.168.1.1/rci/ \
   -H "Content-Type: application/json" \
   -d @<(cat <<'EOF'
 [
@@ -799,6 +945,12 @@ from the device's **running-config**. The device configuration will not be chang
 <summary>Example request (POST)</summary>
 
 ```shell
+curl -X POST http://192.168.1.1/rci/ \
+  -H "Content-Type: application/json" \
+  -d '{"show": {"rc": {"interface": {"Bridge1": {"description": {}}}}}}'
+```
+
+```shell
 $ curl -X POST http://192.168.1.1/rci/ \
   -H "Content-Type: application/json" \
   -d @<(cat <<'EOF'
@@ -853,6 +1005,12 @@ every time that file changes.
 <summary>Example request (POST)</summary>
 
 ```shell
+curl -X POST http://192.168.1.1/rci/ \
+  -H "Content-Type: application/json" \
+  -d '{"show": {"sc": {"interface": {"Bridge1": {"description": {}}}}}}'
+```
+
+```shell
 $ curl -X POST http://192.168.1.1/rci/ \
   -H "Content-Type: application/json" \
   -d @<(cat <<'EOF'
@@ -898,7 +1056,7 @@ Example 2 (differences between `show rc` and `show sc`)
 > Extra spaces/newlines removed to make the request and response data more compact
 
 ```shell
-$ curl -X POST http://192.168.1.1/rci/ \
+curl -X POST http://192.168.1.1/rci/ \
   -H "Content-Type: application/json" \
   -d @<(cat <<'EOF'
 [
@@ -917,6 +1075,28 @@ $ curl -X POST http://192.168.1.1/rci/ \
 ]
 EOF
 ) | jq -c '.[]' # // to show the response in a more compact way
+```
+
+```shell
+$ curl -X POST http://192.168.1.1/rci/ \
+  -H "Content-Type: application/json" \
+  -d @<(cat <<'EOF'
+[
+  {"show": {"rc": {"interface": {"Bridge1": {"description": {}}}}}},
+  {"show": {"sc": {"interface": {"Bridge1": {"description": {}}}}}},
+
+  {"interface": {"Bridge1": {"description": "A_NEW_VALUE"}}},
+
+  {"show": {"rc": {"interface": {"Bridge1": {"description": {}}}}}},
+  {"show": {"sc": {"interface": {"Bridge1": {"description": {}}}}}},
+
+  {"system": {"configuration": {"save": {}}}},
+
+  {"show": {"rc": {"interface": {"Bridge1": {"description": {}}}}}},
+  {"show": {"sc": {"interface": {"Bridge1": {"description": {}}}}}}
+]
+EOF
+) | jq -c '.[]'
 
 
 {"show":{"rc":{"interface":{"Bridge1":{"description":"Guest network"}}}}}
@@ -960,7 +1140,12 @@ Delete an `ip hotspot host policy` setting (DELETE)
 </summary>
 
 ```shell
-$ curl -X DELETE http://192.168.1.1/rci/ip/hotspot/host/policy?mac=22:22:22:22:22:22
+curl -X DELETE http://192.168.1.1/rci/ip/hotspot/host/policy\?mac\=22:22:22:22:22:22
+```
+
+```shell
+
+$ curl -X DELETE http://192.168.1.1/rci/ip/hotspot/host/policy\?mac\=22:22:22:22:22:22
 
 
 {
@@ -981,6 +1166,12 @@ $ curl -X DELETE http://192.168.1.1/rci/ip/hotspot/host/policy?mac=22:22:22:22:2
 
 Delete an `ip hotspot host policy` setting (POST + `no`)
 </summary>
+
+```shell
+curl -X POST http://192.168.1.1/rci/ip/hotspot/host/policy \
+  -H "Content-Type: application/json" \
+  -d '{"mac": "22:22:22:22:22:22","no" : true}'
+```
 
 ```shell
 $ curl -X POST http://192.168.1.1/rci/ip/hotspot/host/policy \
@@ -1014,8 +1205,14 @@ EOF
 <details>
 <summary>
 
-Reset 'interface Bridge1 description' to default (POST + `no: true`)
+Reset `interface Bridge1 description` to default (POST + `no: true`)
 </summary>
+
+```shell
+curl -X POST http://192.168.1.1/rci/interface \
+  -H "Content-Type: application/json" \
+  -d '{"Bridge1": {"description": {"no": true}}}'
+```
 
 ```shell
 $ curl -X POST http://192.168.1.1/rci/interface \
@@ -1049,6 +1246,12 @@ $ curl -X POST http://192.168.1.1/rci/interface \
 
 Delete the setting (POST + `no`)
 </summary>
+
+```shell
+curl -X POST http://192.168.1.1/rci/ip/nat \
+  -H "Content-Type: application/json" \
+  -d '{"no": true}'
+```
 
 ```shell
 $ curl -X POST http://192.168.1.1/rci/ip/nat \
@@ -1092,11 +1295,17 @@ To check for available firmware updates, send a `POST` request to
 `/rci/components/list`.
 
 Request that starts the background process (`POST`):
+
+```shell
+curl -X POST http://192.168.1.1/rci/components/list \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
 ```shell
 $ curl -X POST http://192.168.1.1/rci/components/list \
   -H "Content-Type: application/json" \
   -d '{}'
-
 
 {
   "continued": true
@@ -1106,6 +1315,10 @@ $ curl -X POST http://192.168.1.1/rci/components/list \
 <br/>
 
 Poll request (`GET`; the background process is not finished):
+```shell
+curl http://192.168.1.1/rci/components/list
+```
+
 ```shell
 $ curl http://192.168.1.1/rci/components/list
 {
@@ -1129,6 +1342,14 @@ $ curl http://192.168.1.1/rci/components/list
 
 Final Response (example shows no update):
 ```shell
+curl http://192.168.1.1/rci/components/list
+```
+
+```shell
+...
+
+$ curl http://192.168.1.1/rci/components/list
+
 {
   "sandbox": "nightly",
   "firmware": {
@@ -1149,10 +1370,15 @@ To send a USSD request (e.g., for mobile data usage), use the
 Starting the background process (`POST`):
 
 ```shell
+curl -X POST http://192.168.1.1/rci/ussd/send \
+  -H "Content-Type: application/json" \
+  -d '{"interface": "UsbLte0", "request": "*100#"}' # both `interface` and `request` are mandatory
+```
+
+```shell
 $ curl -X POST http://192.168.1.1/rci/ussd/send \
   -H "Content-Type: application/json" \
-  -d '{"interface": "UsbLte0", "request": "*100#"}' # both arguments are mandatory
-
+  -d '{"interface": "UsbLte0", "request": "*100#"}'
 
 {
   "continued": true
@@ -1160,6 +1386,10 @@ $ curl -X POST http://192.168.1.1/rci/ussd/send \
 ```
 
 Poll request (GET; process is **not** finished yet)
+```shell
+curl http://192.168.1.1/rci/ussd/send
+```
+
 ```shell
 $ curl http://192.168.1.1/rci/ussd/send
 
@@ -1180,6 +1410,10 @@ $ curl http://192.168.1.1/rci/ussd/send
 
 Final Response (`GET`):
 ```shell
+curl http://192.168.1.1/rci/ussd/send
+```
+
+```shell
 $ curl http://192.168.1.1/rci/ussd/send
 
 
@@ -1193,11 +1427,18 @@ $ curl http://192.168.1.1/rci/ussd/send
 Starting the background process (`POST`):
 
 ```shell
+curl -X POST http://192.168.1.1/rci/tools/ping \
+  -H "Content-Type: application/json" \
+  -d '{"host": "google.com", "packetsize": 84, "count": 5}'
+```
+
+```shell
 $ curl -X POST http://192.168.1.1/rci/tools/ping \
   -H "Content-Type: application/json" \
   -d '{"host": "google.com", "packetsize": 84, "count": 5}'
 
 
+# Event the initial response to the POST request may contain some data already
 {
   "message": [
     "sending ICMP ECHO request to google.com...",
@@ -1211,6 +1452,10 @@ $ curl -X POST http://192.168.1.1/rci/tools/ping \
 <br/>
 
 Poll request (`GET`; process is not finished yet):
+
+```shell
+curl http://192.168.1.1/rci/tools/ping
+```
 
 ```shell
 $ curl http://192.168.1.1/rci/tools/ping
@@ -1228,6 +1473,7 @@ $ curl http://192.168.1.1/rci/tools/ping
   ],
   "continued": true
 }
+
 $ curl http://192.168.1.1/rci/tools/ping
 
 {
@@ -1238,7 +1484,11 @@ $ curl http://192.168.1.1/rci/tools/ping
 }
 ```
 
-Final Response (`GET`):
+Final Response (`GET`; process is finished):
+```shell
+curl http://192.168.1.1/rci/tools/ping
+```
+
 ```shell
 $ curl http://192.168.1.1/rci/tools/ping
 

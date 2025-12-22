@@ -1,33 +1,30 @@
 import {
   BehaviorSubject,
+  NEVER,
+  Observable,
+  ReplaySubject,
+  Subject,
+  Subscription,
   delayWhen,
   map,
   merge,
-  NEVER,
-  Observable,
   of,
   race,
   repeat,
-  ReplaySubject,
   skipWhile,
-  Subject,
-  Subscription,
   switchMap,
   take,
   timer,
 } from 'rxjs';
-import * as _ from 'lodash';
 import type {GenericObject, ObjectOrArray, Values} from '../../type.utils';
 import {RciQuery} from '../query';
 import {BaseHttpResponse, HttpTransport} from '../../transport';
-import type {ExecuteContinuedOptions, GenericResponse$} from '../rci.manager.types';
-import {DEFAULT_EXECUTE_CONTINUED_OPTIONS} from '../rci.manager.constants';
-import {DEFAULT_CONTINUED_TASK_OPTIONS, RciContinuedTask} from './rci.continued-task';
-import type {RciContinuedTaskOptions} from './rci.continued-task';
-import {RciContinuedQuery} from './rci.continued-query';
-import {RCI_CONTINUED_QUERY_FINISH_REASON} from './rci.continued-query.types';
+import {BackgroundTaskOptions, GenericResponse} from '../rci.manager.types';
+import type {RciBackgroundTaskOptions} from './rci.background-task';
+import {DEFAULT_BACKGROUND_TASK_OPTIONS, RciBackgroundTask} from './rci.background-task';
+import {RCI_BACKGROUND_PROCESS_FINISH_REASON, RciBackgroundProcess} from './rci.background-process';
 
-export const RCI_CONTINUED_QUEUE_STATE = {
+export const RCI_BACKGROUND_TASK_QUEUE_STATE = {
   // the queue is ready to process tasks
   READY: 'READY',
 
@@ -35,14 +32,25 @@ export const RCI_CONTINUED_QUEUE_STATE = {
   AWAITING_RESPONSE: 'AWAITING_RESPONSE',
 } as const;
 
-export type RciContinuedQueueState = Values<typeof RCI_CONTINUED_QUEUE_STATE>;
+export type RciBackgroundTaskQueueState = Values<typeof RCI_BACKGROUND_TASK_QUEUE_STATE>;
 
-export class RciContinuedQueue<QueryPath extends string = string> {
-  protected tasks: RciContinuedTask<QueryPath>[] = [];
-  protected readonly pendingQueries$: ReplaySubject<RciQuery<QueryPath>[]> = new ReplaySubject<RciQuery<QueryPath>[]>(1);
-  protected readonly nextQuery$: Subject<RciContinuedTask> = new Subject<RciContinuedTask>();
-  protected readonly stateSub$: BehaviorSubject<RciContinuedQueueState> = new BehaviorSubject<RciContinuedQueueState>(
-    RCI_CONTINUED_QUEUE_STATE.READY,
+export const DEFAULT_QUEUE_BACKGROUND_TASK_OPTIONS: BackgroundTaskOptions = {
+  timeout: 1000,
+  skipPostQuery: false,
+  isInfinite: false,
+  onDataUpdate: () => {},
+};
+
+export class RciBackgroundTaskQueue<QueryPath extends string = string> {
+  protected tasks: RciBackgroundTask<QueryPath>[] = [];
+  protected readonly pendingQueries$: ReplaySubject<RciQuery<QueryPath>[]> = new ReplaySubject<RciQuery<QueryPath>[]>(
+    1,
+  );
+  protected readonly nextTask$: Subject<RciBackgroundTask> = new Subject<RciBackgroundTask>();
+  protected readonly stateSub$: BehaviorSubject<RciBackgroundTaskQueueState> = new BehaviorSubject<
+    RciBackgroundTaskQueueState
+  >(
+    RCI_BACKGROUND_TASK_QUEUE_STATE.READY,
   );
 
   public readonly state$ = this.stateSub$.asObservable();
@@ -57,22 +65,22 @@ export class RciContinuedQueue<QueryPath extends string = string> {
 
   public push(
     data: GenericObject,
-    options: RciContinuedTaskOptions = DEFAULT_CONTINUED_TASK_OPTIONS,
-  ): RciContinuedQuery {
-    const task = new RciContinuedTask(this.command, data, options);
+    options: RciBackgroundTaskOptions = DEFAULT_BACKGROUND_TASK_OPTIONS,
+  ): RciBackgroundProcess {
+    const task = new RciBackgroundTask(this.command, data, options);
 
     return this.addTask(task);
   }
 
-  protected addTask(task: RciContinuedTask<QueryPath>): RciContinuedQuery<QueryPath> {
-    if (this.stateSub$.value === RCI_CONTINUED_QUEUE_STATE.AWAITING_RESPONSE) {
+  protected addTask(task: RciBackgroundTask<QueryPath>): RciBackgroundProcess<QueryPath> {
+    if (this.stateSub$.value === RCI_BACKGROUND_TASK_QUEUE_STATE.AWAITING_RESPONSE) {
       this.tasks.push(task);
       this.updatePendingQueries();
     } else {
-      this.nextQuery$.next(task);
+      this.nextTask$.next(task);
     }
 
-    return new RciContinuedQuery(task);
+    return new RciBackgroundProcess(task);
   }
 
   protected updatePendingQueries(): void {
@@ -88,10 +96,10 @@ export class RciContinuedQueue<QueryPath extends string = string> {
   }
 
   protected initializePendingTasksQueueSubscription(): Subscription {
-    return this.nextQuery$
+    return this.nextTask$
       .pipe(
         switchMap((task) => {
-          this.stateSub$.next(RCI_CONTINUED_QUEUE_STATE.AWAITING_RESPONSE);
+          this.stateSub$.next(RCI_BACKGROUND_TASK_QUEUE_STATE.AWAITING_RESPONSE);
 
           const {command, data, options} = task;
 
@@ -100,18 +108,18 @@ export class RciContinuedQueue<QueryPath extends string = string> {
             ? timer(options.duration)
             : NEVER;
 
-          const cancel$ = cancelTrigger$.pipe(map(() => RCI_CONTINUED_QUERY_FINISH_REASON.TIMED_OUT));
-          const abort$ = task.abortSub$.pipe(map(() => RCI_CONTINUED_QUERY_FINISH_REASON.ABORTED));
+          const cancel$ = cancelTrigger$.pipe(map(() => RCI_BACKGROUND_PROCESS_FINISH_REASON.TIMED_OUT));
+          const abort$ = task.abortSub$.pipe(map(() => RCI_BACKGROUND_PROCESS_FINISH_REASON.ABORTED));
 
           const query: RciQuery = {path: command, data};
-          const task$ = this.executeContinued(
+          const task$ = this.executeNextTask(
             query,
             {
               onDataUpdate: (data) => task.responseSub$.next(data),
             },
           ) as Observable<GenericObject>;
 
-          const race$: Observable<GenericObject | RCI_CONTINUED_QUERY_FINISH_REASON> = race(task$, cancel$, abort$);
+          const race$: Observable<GenericObject | RCI_BACKGROUND_PROCESS_FINISH_REASON> = race(task$, cancel$, abort$);
 
           return race$
             .pipe(
@@ -125,12 +133,12 @@ export class RciContinuedQueue<QueryPath extends string = string> {
         }),
       )
       .subscribe(({result, task}) => {
-        this.stateSub$.next(RCI_CONTINUED_QUEUE_STATE.READY);
+        this.stateSub$.next(RCI_BACKGROUND_TASK_QUEUE_STATE.READY);
 
-        if (_.isString(result)) {
-          if (Object.values(RCI_CONTINUED_QUERY_FINISH_REASON).includes(result as RCI_CONTINUED_QUERY_FINISH_REASON)) {
+        if (typeof result === 'string') {
+          if (Object.values(RCI_BACKGROUND_PROCESS_FINISH_REASON).includes(result)) {
             task.responseSub$.next(null);
-            task.doneSub$.next(result as RCI_CONTINUED_QUERY_FINISH_REASON);
+            task.doneSub$.next(result as RCI_BACKGROUND_PROCESS_FINISH_REASON);
             task.doneSub$.complete();
           } else {
             // task.responseSub$.next(result);
@@ -148,18 +156,18 @@ export class RciContinuedQueue<QueryPath extends string = string> {
         if (head) {
           this.tasks = this.tasks.slice(1);
 
-          this.nextQuery$.next(head);
+          this.nextTask$.next(head);
           this.updatePendingQueries();
         }
       });
   }
 
-  protected executeContinued(
+  protected executeNextTask(
     query: RciQuery,
-    options: ExecuteContinuedOptions = {},
-  ): GenericResponse$ {
+    options: BackgroundTaskOptions = {},
+  ): GenericResponse {
     const _options = {
-      ...DEFAULT_EXECUTE_CONTINUED_OPTIONS,
+      ...DEFAULT_QUEUE_BACKGROUND_TASK_OPTIONS,
       ...options,
     };
 
@@ -168,7 +176,7 @@ export class RciContinuedQueue<QueryPath extends string = string> {
     const url = `${this.rciPath}${path.replace(/\./g, '/')}`;
     const onDataUpdate = _options.onDataUpdate ?? (() => {});
 
-    const isNotContinued = (response: BaseHttpResponse) => !response?.data?.['continued'];
+    const isFinished = (response: BaseHttpResponse) => !response?.data?.['continued'];
 
     const postQuery = () => this.httpTransport.post(url, data);
     const getQuery = () => this.httpTransport.get(url);
@@ -179,7 +187,7 @@ export class RciContinuedQueue<QueryPath extends string = string> {
 
     return initialQuery.pipe(
       switchMap((response) => {
-        if (isNotContinued(response)) {
+        if (isFinished(response)) {
           return of(response.data as ObjectOrArray);
         }
 
@@ -191,7 +199,7 @@ export class RciContinuedQueue<QueryPath extends string = string> {
 
               return getResponse;
             }),
-            delayWhen((getResponse) => timer(isNotContinued(getResponse) ? 0 : queryTimeout)),
+            delayWhen((getResponse) => timer(isFinished(getResponse) ? 0 : queryTimeout)),
             repeat(),
           );
 
@@ -206,7 +214,7 @@ export class RciContinuedQueue<QueryPath extends string = string> {
 
         return queryPipe$
           .pipe(
-            skipWhile((getResponse) => !isNotContinued(getResponse)),
+            skipWhile((getResponse) => !isFinished(getResponse)),
             map((finalResponse) => finalResponse.data as ObjectOrArray),
             take(1),
           );

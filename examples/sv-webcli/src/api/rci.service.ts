@@ -1,8 +1,8 @@
 import {Observable} from 'rxjs';
 import {
   FetchTransport,
-  RciContinuedQuery,
-  type RciContinuedTaskOptions,
+  RciBackgroundProcess,
+  RciBackgroundTaskOptions,
   RciManager,
   RciQuery,
   SessionManager,
@@ -39,15 +39,15 @@ export class RciService {
     return this.auth.logout();
   }
 
-  public execute(queries: RciQuery | RciQuery[]): Observable<unknown> {
-    return this.driver.execute(queries);
+  public queue(queries: RciQuery | RciQuery[]): Observable<unknown> {
+    return this.driver.queue(queries);
   }
 
-  public executeContinued(
+  public queueBackgroundProcess(
     query: RciQuery,
-    options: RciContinuedTaskOptions = {},
-  ): RciContinuedQuery {
-    return this.driver.executeContinued(query, options);
+    options: RciBackgroundTaskOptions = {},
+  ): RciBackgroundProcess {
+    return this.driver.queueBackgroundProcess(query, options);
   }
 }
 
