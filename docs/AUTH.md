@@ -11,7 +11,9 @@ using username and password you need to do the following:
         - Or the `admin` password is not set  
 
       In either case set the session cookie using the `Set-Cookie` header
-      from the response -> the session is authenticated
+      from the response -> the session is authenticated.
+
+      `curl -i http://192.168.1.1/auth`
 
         ```shell
         > curl -i http://192.168.1.1/auth
@@ -32,6 +34,8 @@ using username and password you need to do the following:
 
     - If the response contains HTTP code 401 (`Unauthorized`),
       set the session cookie using the `Set-Cookie` header and proceed to step 2:
+
+      `curl -i http://192.168.1.1/auth`
 
         ```shell
         > curl -i http://192.168.1.1/auth
