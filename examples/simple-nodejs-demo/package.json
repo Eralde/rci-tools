@@ -8,8 +8,8 @@
   "dependencies": {
     "inquirer": "^12.9.0",
     "lodash": "^4.17.21",
-    "rci-adapter-axios": "workspace:*",
-    "rci-manager": "workspace:*",
+    "@rci-tools/adapter-axios": "workspace:*",
+    "@rci-tools/base": "workspace:*",
     "rxjs": "^7.8.2"
   },
   "devDependencies": {

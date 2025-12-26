@@ -18,7 +18,7 @@
     "@xterm/xterm": "^5.5.0",
     "d3": "^7.9.0",
     "dockview-core": "^4.11.0",
-    "rci-manager": "workspace:*",
+    "@rci-tools/base": "workspace:*",
     "relaxed-json": "^1.0.3",
     "rxjs": "^7.8.2",
     "sv-router": "^0.10.5",

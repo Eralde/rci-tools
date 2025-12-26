@@ -2,7 +2,7 @@
 
 # Simple Browser Demo
 
-This example demonstrates a basic web application that uses the `rci-manager` package
+This example demonstrates a basic web application that uses the `@rci-tools/base` package
 to interact with the RCI API. It is written in "vanilla" TypeScript and demonstrates how to:
 - authenticate using username and password
 - fetch data (`show version`) via the RCI API

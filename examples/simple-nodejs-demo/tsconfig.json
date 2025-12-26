@@ -6,11 +6,11 @@
     "noEmit": true,
     "baseUrl": ".",
     "paths": {
-      "rci-manager": [
-        "../../packages/rci-manager/src/index.ts"
+      "@rci-tools/base": [
+        "../../packages/base/src/index.ts"
       ],
-      "rci-adapter-axios": [
-        "../../packages/rci-adapter-axios/src/index.ts"
+      "@rci-tools/adapter-axios": [
+        "../../packages/adapter-axios/src/index.ts"
       ]
     }
   },
@@ -19,10 +19,10 @@
   ],
   "references": [
     {
-      "path": "../../packages/rci-manager"
+      "path": "../../packages/base"
     },
     {
-      "path": "../../packages/rci-adapter-axios"
+      "path": "../../packages/adapter-axios"
     }
   ]
 }

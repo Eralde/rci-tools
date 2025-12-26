@@ -17,8 +17,8 @@
     "ink-select-input": "^6.0.0",
     "ink-spinner": "^5.0.0",
     "ink-text-input": "^6.0.0",
-    "rci-adapter-axios": "workspace:*",
-    "rci-manager": "workspace:*",
+    "@rci-tools/adapter-axios": "workspace:*",
+    "@rci-tools/base": "workspace:*",
     "react": "^19.1.0",
     "rxjs": "^7.8.2",
     "zustand": "^5.0.8"

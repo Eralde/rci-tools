@@ -4,7 +4,7 @@
 
 Local Monitor — это пример терминального приложения, работающего с устройствами Keenetic/Netcraze.
 Приложение построено с использованием [Ink](https://github.com/vadimdemedes/ink) и React.
-Связь с устройствами осуществляется при помощи пакетов `rci-manager` и `rci-adapter-axios`.
+Связь с устройствами осуществляется при помощи пакетов `@rci-tools/base` и `@rci-tools/adapter-axios`.
 
 <img src="./local-monitor.svg"/>
 

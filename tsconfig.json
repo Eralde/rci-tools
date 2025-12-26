@@ -2,14 +2,11 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "rci-manager": [
-        "packages/rci-manager/src"
+      "@rci-tools/base": [
+        "packages/base/src"
       ],
-      "rci-adapter-axios": [
-        "packages/rci-adapter-axios/src"
-      ],
-      "rci-adapter-fetch": [
-        "packages/rci-adapter-fetch/src"
+      "@rci-tools/adapter-axios": [
+        "packages/adapter-axios/src"
       ]
     }
   },

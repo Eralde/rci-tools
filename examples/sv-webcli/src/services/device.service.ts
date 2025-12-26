@@ -1,6 +1,6 @@
 import {Observable, forkJoin, map, switchMap} from 'rxjs';
-import type {GenericObject} from 'rci-manager';
-import {RciQuery} from 'rci-manager';
+import type {GenericObject} from '@rci-tools/base';
+import {RciQuery} from '@rci-tools/base';
 import {rciService} from '../api/rci.service.ts';
 import {
   DETAIL_LEVEL,

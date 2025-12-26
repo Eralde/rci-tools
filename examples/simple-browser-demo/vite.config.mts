@@ -86,7 +86,7 @@ export default defineConfig(({mode}) => {
     },
     resolve: {
       alias: {
-        'rci-manager': resolve(projectRoot, '../../packages/rci-manager/src/index.ts'),
+        '@rci-tools/base': resolve(projectRoot, '../../packages/base/src/index.ts'),
       },
     },
     optimizeDeps: {

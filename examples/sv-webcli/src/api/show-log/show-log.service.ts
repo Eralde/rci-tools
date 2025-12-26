@@ -1,6 +1,6 @@
 import {RciService} from '../rci.service.ts';
 import {Observable, map} from 'rxjs';
-import {RciQuery} from 'rci-manager';
+import {RciQuery} from '@rci-tools/base';
 import {ShowLogResponse} from './show-log.response.ts';
 import {showLogResponseSchema} from './show-log.schema.ts';
 

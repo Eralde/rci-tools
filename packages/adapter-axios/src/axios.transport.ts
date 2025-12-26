@@ -3,7 +3,7 @@ import {catchError} from 'rxjs/operators';
 import axios, {type AxiosInstance, AxiosResponse, AxiosResponseHeaders} from 'axios';
 import {CookieJar} from 'tough-cookie';
 import {HttpCookieAgent, HttpsCookieAgent} from 'http-cookie-agent/http';
-import type {GenericObject, HttpTransport} from 'rci-manager';
+import type {GenericObject, HttpTransport} from '@rci-tools/base';
 
 const NETWORK_ERRORS = ['ECONNREFUSED', 'EHOSTDOWN', 'ETIMEDOUT', 'ENOTFOUND', 'ECONNRESET', 'ENETUNREACH'];
 

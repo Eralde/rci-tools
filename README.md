@@ -12,8 +12,8 @@ This repository consists of three parts:
 
 
 ## 2. Packages:
-- [rci-manager](./packages/rci-manager)
-- [rci-adapter-axios](./packages/rci-adapter-axios)
+- [@rci-tools/base](./packages/base)
+- [@rci-tools/adapter-axios](./packages/adapter-axios)
 
 ### Prerequisites
 

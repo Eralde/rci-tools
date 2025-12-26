@@ -26,6 +26,12 @@ importers:
       '@pppp606/ink-chart':
         specifier: ^0.1.1
         version: 0.1.1(ink@6.4.0(@types/react@19.2.2)(react@19.2.0))(react@19.2.0)
+      '@rci-tools/adapter-axios':
+        specifier: workspace:*
+        version: link:../../packages/adapter-axios
+      '@rci-tools/base':
+        specifier: workspace:*
+        version: link:../../packages/base
       better-sqlite3:
         specifier: ^11.6.0
         version: 11.10.0
@@ -41,12 +47,6 @@ importers:
       ink-text-input:
         specifier: ^6.0.0
         version: 6.0.0(ink@6.4.0(@types/react@19.2.2)(react@19.2.0))(react@19.2.0)
-      rci-adapter-axios:
-        specifier: workspace:*
-        version: link:../../packages/rci-adapter-axios
-      rci-manager:
-        specifier: workspace:*
-        version: link:../../packages/rci-manager
       react:
         specifier: ^19.1.0
         version: 19.2.0
@@ -81,9 +81,9 @@ importers:
 
   examples/simple-browser-demo:
     dependencies:
-      rci-manager:
+      '@rci-tools/base':
         specifier: workspace:*
-        version: link:../../packages/rci-manager
+        version: link:../../packages/base
       rxjs:
         specifier: ^7.8.2
         version: 7.8.2
@@ -106,18 +106,18 @@ importers:
 
   examples/simple-nodejs-demo:
     dependencies:
+      '@rci-tools/adapter-axios':
+        specifier: workspace:*
+        version: link:../../packages/adapter-axios
+      '@rci-tools/base':
+        specifier: workspace:*
+        version: link:../../packages/base
       inquirer:
         specifier: ^12.9.0
         version: 12.10.0(@types/node@22.18.0)
       lodash:
         specifier: ^4.17.21
         version: 4.17.21
-      rci-adapter-axios:
-        specifier: workspace:*
-        version: link:../../packages/rci-adapter-axios
-      rci-manager:
-        specifier: workspace:*
-        version: link:../../packages/rci-manager
       rxjs:
         specifier: ^7.8.2
         version: 7.8.2
@@ -137,6 +137,9 @@ importers:
       '@codemirror/lang-json':
         specifier: ^6.0.2
         version: 6.0.2
+      '@rci-tools/base':
+        specifier: workspace:*
+        version: link:../../packages/base
       '@xterm/addon-fit':
         specifier: ^0.10.0
         version: 0.10.0(@xterm/xterm@5.5.0)
@@ -149,9 +152,6 @@ importers:
       dockview-core:
         specifier: ^4.11.0
         version: 4.11.0
-      rci-manager:
-        specifier: workspace:*
-        version: link:../../packages/rci-manager
       relaxed-json:
         specifier: ^1.0.3
         version: 1.0.3
@@ -232,17 +232,17 @@ importers:
         specifier: ^18.0.0
         version: 18.0.0
 
-  packages/rci-adapter-axios:
+  packages/adapter-axios:
     dependencies:
+      '@rci-tools/base':
+        specifier: workspace:*
+        version: link:../base
       axios:
         specifier: ^1.6.0
         version: 1.12.2
       http-cookie-agent:
         specifier: ^7.0.2
         version: 7.0.2(tough-cookie@5.1.2)
-      rci-manager:
-        specifier: workspace:*
-        version: link:../rci-manager
       rxjs:
         specifier: ^7.8.2
         version: 7.8.2
@@ -254,7 +254,7 @@ importers:
         specifier: ^8.5.0
         version: 8.5.0(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)
 
-  packages/rci-manager:
+  packages/base:
     dependencies:
       hash-wasm:
         specifier: ^4.12.0

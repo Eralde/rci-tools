@@ -1,4 +1,4 @@
-import {RciQuery} from 'rci-manager';
+import {RciQuery} from '@rci-tools/base';
 import {Observable} from 'rxjs';
 import {RciService} from '../rci.service';
 
