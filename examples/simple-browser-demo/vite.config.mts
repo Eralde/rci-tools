@@ -1,35 +1,47 @@
-import {Connect, defineConfig, HttpProxy, loadEnv, ProxyOptions} from 'vite';
+import {Connect, ProxyOptions, defineConfig, loadEnv} from 'vite';
 import {ClientRequest, ServerResponse} from 'node:http';
 import {resolve} from 'path';
 import {viteSingleFile} from 'vite-plugin-singlefile';
 
-export default defineConfig(({mode}) => {
+type HttpProxyServer = Parameters<NonNullable<ProxyOptions['configure']>>[0];
+
+export default defineConfig(({mode, command}) => {
   const projectRoot = __dirname;
   const env = loadEnv(mode, projectRoot, '');
 
+  // required only for dev server, not for build
   const devAddr = process.env.PROXY_ADDR // set by dev-runner.js
     || env.PROXY_ADDR; // fallback
 
-  if (!devAddr) {
-    console.error('Error: PROXY_ADDR is not defined. Please set it in .env or pass via --proxy-addr CLI argument.');
+  if (command === 'serve' && !devAddr) {
+    // dprint-ignore
+    console.error('Error: PROXY_ADDR is not defined. Please set it in the .env file or pass via --proxy-addr CLI argument.');
     process.exit(1);
   }
 
-  const proxyAddr = devAddr.startsWith('http://')
-    ? devAddr
-    : `http://${devAddr}`;
+  let proxyAddr: string | undefined = undefined
 
-  const proxyUrl = new URL(proxyAddr);
+  if (devAddr) {
+    proxyAddr = devAddr?.startsWith('http://')
+      ? devAddr
+      : `http://${devAddr}`;
+  }
+
+  const proxyUrl = proxyAddr ? new URL(proxyAddr) : undefined;
 
   // Path to the directory containing local packages in this monorepo.
   // This path needs to be accessible from Vite.
   const localPackagesParentDir = resolve(projectRoot, '../');
 
   const createProxy = (path: string): ProxyOptions => {
+    if (!proxyAddr || !proxyUrl) {
+      throw new Error('proxyAddr and proxyUrl must be defined when creating proxy');
+    }
+
     return {
       target: proxyAddr,
       changeOrigin: true,
-      configure: (proxy: HttpProxy.Server, _options: ProxyOptions): void => {
+      configure: (proxy: HttpProxyServer, _options: ProxyOptions): void => {
         proxy.on(
           'proxyReq',
           (
@@ -54,8 +66,8 @@ export default defineConfig(({mode}) => {
           },
         );
       },
-    }
-  }
+    };
+  };
 
   return {
     root: projectRoot,
@@ -69,10 +81,12 @@ export default defineConfig(({mode}) => {
           localPackagesParentDir,
         ],
       },
-      proxy: {
-        '/rci': createProxy('/rci'),
-        '/auth': createProxy('/auth'),
-      },
+      proxy: proxyAddr
+        ? {
+          '/rci': createProxy('/rci'),
+          '/auth': createProxy('/auth'),
+        }
+        : undefined,
     },
     build: {
       outDir: 'dist',

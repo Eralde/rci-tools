@@ -29,6 +29,6 @@
     "https://plugins.dprint.dev/g-plane/markup_fmt-v0.24.0.wasm"
   ],
   "includes": [
-    "**/*.{ts,tsx,js,jsx,svelte}"
+    "**/*.{ts,mts,tsx,js,jsx,svelte}"
   ]
 }
