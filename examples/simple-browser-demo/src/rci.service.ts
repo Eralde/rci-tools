@@ -1,4 +1,4 @@
-import {RciManager, RciQuery, SessionManager, FetchTransport} from '@rci-tools/base';
+import {RciManager, RciQuery, SessionManager, FetchTransport} from '@rci-tools/core';
 import {catchError, Observable, of} from 'rxjs';
 
 class RciService {

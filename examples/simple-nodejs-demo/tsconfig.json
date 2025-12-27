@@ -6,8 +6,8 @@
     "noEmit": true,
     "baseUrl": ".",
     "paths": {
-      "@rci-tools/base": [
-        "../../packages/base/src/index.ts"
+      "@rci-tools/core": [
+        "../../packages/core/src/index.ts"
       ],
       "@rci-tools/adapter-axios": [
         "../../packages/adapter-axios/src/index.ts"
@@ -19,7 +19,7 @@
   ],
   "references": [
     {
-      "path": "../../packages/base"
+      "path": "../../packages/core"
     },
     {
       "path": "../../packages/adapter-axios"

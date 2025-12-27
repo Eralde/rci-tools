@@ -1,4 +1,4 @@
-import {RciQuery} from '@rci-tools/base';
+import {RciQuery} from '@rci-tools/core';
 import {Observable, map} from 'rxjs';
 import {RciService} from '../rci.service';
 import {ShowInterfaceRrdRequest} from './show-interface-rrd.request.ts';

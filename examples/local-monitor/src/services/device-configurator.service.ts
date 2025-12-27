@@ -1,5 +1,5 @@
 import {Observable, of} from 'rxjs';
-import {RciQuery} from '@rci-tools/base';
+import {RciQuery} from '@rci-tools/core';
 import {SYSTEM_CONFIGURATION_SAVE, SYSTEM_DESCRIPTION} from '@queries';
 import {getAllDevices} from './database';
 import {DeviceCredentials, RciService} from './rci.service';

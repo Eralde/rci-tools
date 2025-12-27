@@ -19,7 +19,7 @@ There are three distinct parts in this repository:
 
 
 ## 2. `npm` Packages
-- [@rci-tools/base](./packages/base)
+- [@rci-tools/core](packages/core)
 - [@rci-tools/adapter-axios](./packages/adapter-axios)
 
 ### Prerequisites

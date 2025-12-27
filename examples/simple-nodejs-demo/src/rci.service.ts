@@ -1,6 +1,6 @@
 import {Observable, catchError, exhaustMap, of} from 'rxjs';
 import {AxiosTransport} from '@rci-tools/adapter-axios';
-import {GenericObject, GenericResponse, RciBackgroundProcess, RciManager, RciQuery, SessionManager} from '@rci-tools/base';
+import {GenericObject, GenericResponse, RciBackgroundProcess, RciManager, RciQuery, SessionManager} from '@rci-tools/core';
 
 export interface DeviceCredentials {
   address: string;

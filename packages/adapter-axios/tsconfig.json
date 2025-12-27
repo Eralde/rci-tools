@@ -12,7 +12,7 @@
   ],
   "references": [
     {
-      "path": "../base"
+      "path": "../core"
     }
   ]
 }

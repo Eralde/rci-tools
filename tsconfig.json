@@ -2,8 +2,8 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@rci-tools/base": [
-        "packages/base/src"
+      "@rci-tools/core": [
+        "packages/core/src"
       ],
       "@rci-tools/adapter-axios": [
         "packages/adapter-axios/src"

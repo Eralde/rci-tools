@@ -36,7 +36,7 @@ export default defineConfig(({mode}) => {
     },
     resolve: {
       alias: {
-        '@rci-tools/base': resolve(projectRoot, '../../packages/base/src/index.ts'),
+        '@rci-tools/core': resolve(projectRoot, '../../packages/core/src/index.ts'),
       },
     },
     optimizeDeps: {

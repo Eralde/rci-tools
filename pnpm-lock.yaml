@@ -29,9 +29,9 @@ importers:
       '@rci-tools/adapter-axios':
         specifier: workspace:*
         version: link:../../packages/adapter-axios
-      '@rci-tools/base':
+      '@rci-tools/core':
         specifier: workspace:*
-        version: link:../../packages/base
+        version: link:../../packages/core
       better-sqlite3:
         specifier: ^11.6.0
         version: 11.10.0
@@ -81,9 +81,9 @@ importers:
 
   examples/simple-browser-demo:
     dependencies:
-      '@rci-tools/base':
+      '@rci-tools/core':
         specifier: workspace:*
-        version: link:../../packages/base
+        version: link:../../packages/core
       rxjs:
         specifier: ^7.8.2
         version: 7.8.2
@@ -109,9 +109,9 @@ importers:
       '@rci-tools/adapter-axios':
         specifier: workspace:*
         version: link:../../packages/adapter-axios
-      '@rci-tools/base':
+      '@rci-tools/core':
         specifier: workspace:*
-        version: link:../../packages/base
+        version: link:../../packages/core
       inquirer:
         specifier: ^12.9.0
         version: 12.10.0(@types/node@22.18.0)
@@ -137,9 +137,9 @@ importers:
       '@codemirror/lang-json':
         specifier: ^6.0.2
         version: 6.0.2
-      '@rci-tools/base':
+      '@rci-tools/core':
         specifier: workspace:*
-        version: link:../../packages/base
+        version: link:../../packages/core
       '@xterm/addon-fit':
         specifier: ^0.10.0
         version: 0.10.0(@xterm/xterm@5.5.0)
@@ -234,9 +234,9 @@ importers:
 
   packages/adapter-axios:
     dependencies:
-      '@rci-tools/base':
+      '@rci-tools/core':
         specifier: workspace:*
-        version: link:../base
+        version: link:../core
       axios:
         specifier: ^1.6.0
         version: 1.12.2
@@ -254,7 +254,7 @@ importers:
         specifier: ^8.5.0
         version: 8.5.0(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)
 
-  packages/base:
+  packages/core:
     dependencies:
       hash-wasm:
         specifier: ^4.12.0

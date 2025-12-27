@@ -5,7 +5,7 @@ import {catchError, firstValueFrom, of, timeout} from 'rxjs';
 import {SHOW_IDENTIFICATION, SHOW_VERSION, ShowIdentificationResponse, ShowVersionResponse} from '@queries';
 import {useNavigationStore} from '@store/navigation';
 import {type Device, RciService, addDevice} from '@services';
-import {RciQuery} from '@rci-tools/base';
+import {RciQuery} from '@rci-tools/core';
 
 const ACQUIRE_FORM_DEFAULTS: AcquireFormState = {
   address: (process.env['RCI_DEVICE_HOST'] || '192.168.1.1').replace(/^http:\/\//, ''),
