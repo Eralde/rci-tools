@@ -24,7 +24,7 @@
     "noFallthroughCasesInSwitch": true,
     "esModuleInterop": true,
     "paths": {
-      "rci-manager": ["../../packages/rci-manager/src/index.ts"]
+      "@rci-tools/core": ["../../packages/core/src/index.ts"]
     }
   },
   "include": [

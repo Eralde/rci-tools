@@ -1,4 +1,4 @@
-import {GenericObject} from 'rci-manager';
+import {GenericObject} from '@rci-tools/core';
 
 export enum MWS_CANDIDATE_STATE {
   INITIAL = 'INITIAL',

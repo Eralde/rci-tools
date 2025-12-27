@@ -1,5 +1,5 @@
 import {Subscription, firstValueFrom, interval} from 'rxjs';
-import {RciQuery} from 'rci-manager';
+import {RciQuery} from '@rci-tools/core';
 import {withTimeout} from '@utils';
 import {type DeviceCredentials, RciService} from './rci.service';
 import {Device} from './database';

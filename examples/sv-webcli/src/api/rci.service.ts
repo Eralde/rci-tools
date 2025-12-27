@@ -6,7 +6,7 @@ import {
   RciManager,
   RciQuery,
   SessionManager,
-} from 'rci-manager';
+} from '@rci-tools/core';
 
 export class RciService {
   protected transport: FetchTransport;

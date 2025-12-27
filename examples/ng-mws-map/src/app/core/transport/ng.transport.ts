@@ -1,7 +1,7 @@
 import {Injectable} from '@angular/core';
 import {HttpClient, HttpHeaders, HttpResponse} from '@angular/common/http';
 import {Observable, map} from 'rxjs';
-import type {BaseHttpResponse, GenericObject, HttpTransport} from 'rci-manager';
+import type {BaseHttpResponse, GenericObject, HttpTransport} from '@rci-tools/core';
 
 export interface NgTransportResponse extends BaseHttpResponse {
   headers: HttpHeaders;

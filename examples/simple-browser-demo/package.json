@@ -10,7 +10,7 @@
     "deploy": "node scripts/deploy.js"
   },
   "dependencies": {
-    "rci-manager": "workspace:*",
+    "@rci-tools/core": "workspace:*",
     "rxjs": "^7.8.2"
   },
   "devDependencies": {

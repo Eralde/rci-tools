@@ -1,6 +1,6 @@
 import {catchError, firstValueFrom, forkJoin, of, timeout, TimeoutError} from 'rxjs';
 import inquirer from 'inquirer';
-import {RciQuery} from 'rci-manager';
+import {RciQuery} from '@rci-tools/core';
 import * as _ from 'lodash';
 import {DeviceCredentials, RciService} from './rci.service';
 

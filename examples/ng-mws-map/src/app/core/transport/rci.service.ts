@@ -1,5 +1,5 @@
 import {Injectable} from '@angular/core';
-import {ExecuteOptions, GenericResponse$, RciManager, RciTask} from 'rci-manager';
+import {GenericResponse, QueueOptions, RciManager, RciTask} from '@rci-tools/core';
 import {NgTransport} from './ng.transport';
 
 @Injectable({
@@ -14,7 +14,7 @@ export class RciService {
     this.rciManager = new RciManager(window.origin, this.ngTransport);
   }
 
-  public execute(query: RciTask, options?: ExecuteOptions): GenericResponse$ {
-    return this.rciManager.execute(query, options);
+  public queue(query: RciTask, options?: QueueOptions): GenericResponse {
+    return this.rciManager.queue(query, options);
   }
 }

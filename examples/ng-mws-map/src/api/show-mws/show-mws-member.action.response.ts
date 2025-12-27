@@ -1,4 +1,4 @@
-import {GenericObject} from 'rci-manager';
+import {GenericObject} from '@rci-tools/core';
 
 export enum WIFI_SECURITY {
   'shared' = 'WEP',

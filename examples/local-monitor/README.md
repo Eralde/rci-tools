@@ -4,7 +4,7 @@
 
 Local Monitor is a terminal-based example application for monitoring Keenetic/Netcraze devices.
 It is built with [Ink](https://github.com/vadimdemedes/ink) and React.
-Communication with monitored device is handled via the `rci-manager` and `rci-adapter-axios` packages.
+Communication with monitored device is handled via the `@rci-tools/core` and `@rci-tools/adapter-axios` packages.
 
 <img src="./local-monitor.svg"/>
 

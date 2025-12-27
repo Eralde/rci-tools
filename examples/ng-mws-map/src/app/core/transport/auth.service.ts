@@ -1,5 +1,5 @@
 import {Injectable} from '@angular/core';
-import {SessionManager} from 'rci-manager';
+import {SessionManager} from '@rci-tools/core';
 import {Observable, catchError, of} from 'rxjs';
 import {NgTransport} from './ng.transport';
 

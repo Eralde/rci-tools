@@ -23,7 +23,7 @@ export class MwsService {
       showVersion: this.showVersion.execute(),
       showIdentification: this.showIdentification.execute(),
       showMwsMember: this.showMwsMember.execute(),
-      bridge0Status: this.rciService.execute({path: 'show.interface', data: {name: 'Bridge0'}}),
+      bridge0Status: this.rciService.queue({path: 'show.interface', data: {name: 'Bridge0'}}),
     };
 
     return forkJoin(obs$)

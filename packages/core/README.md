@@ -1,4 +1,4 @@
-# `rci-manager`
+# `@rci-tools/core`
 
 ## Overview
 
@@ -20,7 +20,7 @@ It has a few advantages over just using `fetch/xhr/axios/...`:
   that avoids running same command with different arguments in parallel
 
 Both classes require a [`HTTP transport` instance](./src/transport/http.transport.ts) to
-send HTTP requests to the device. The `rci-manager` module providers
+send HTTP requests to the device. The `@rci-tools/core` module providers
 [a wrapper over `fetch`](./src/transport/fetch/fetch.transport.ts) for that.
 Pass the same instance of `FetchTransport` to both `SessionManager` and `RciManager`
 so that requests from `RciManager` are sent within an authorized HTTP session.
@@ -28,7 +28,7 @@ so that requests from `RciManager` are sent within an authorized HTTP session.
 ## Installation
 
 ```bash
-npm install rci-manager
+npm install @rci-tools/core
 ```
 
 ## Usage
@@ -38,7 +38,7 @@ npm install rci-manager
 ```typescript
 import {Observable, of, firstValueFrom} from 'rxjs';
 import {exhaustMap} from 'rxjs/operators';
-import {RciQuery, RciManager, SessionManager, FetchTransport} from 'rci-manager';
+import {RciQuery, RciManager, SessionManager, FetchTransport} from '@rci-tools/core';
 
 // You need to pass an HTTP transport to the RciManager.
 // The package provides the FetchTransport class -- a wrapper over built-in `fetch`

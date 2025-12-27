@@ -1,4 +1,4 @@
-import {RciQuery} from 'rci-manager';
+import {RciQuery} from '@rci-tools/core';
 import {Observable, map} from 'rxjs';
 import {RciService} from '../rci.service';
 import {ShowSystemResponse} from './show-system.response.ts';

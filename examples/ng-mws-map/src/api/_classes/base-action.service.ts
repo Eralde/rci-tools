@@ -1,6 +1,6 @@
 import {Observable} from 'rxjs';
 import {map} from 'rxjs/operators';
-import {RciQuery} from 'rci-manager';
+import {RciQuery} from '@rci-tools/core';
 import {RciService} from '@core/transport';
 import {EmptyObject} from '@core/utils/types';
 
@@ -21,7 +21,7 @@ export abstract class BaseActionService<Response, Request extends EmptyObject = 
       query.data = {};
     }
 
-    return this.rciService.execute(query)
+    return this.rciService.queue(query)
       .pipe(
         map((response) => this.transformResponse(response)),
       );

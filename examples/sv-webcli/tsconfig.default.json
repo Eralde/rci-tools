@@ -9,8 +9,8 @@
     "verbatimModuleSyntax": true,
     "skipLibCheck": true,
     "paths": {
-      "rci-manager": [
-        "../../packages/rci-manager/src/index.ts"
+      "@rci-tools/core": [
+        "../../packages/core/src/index.ts"
       ]
     }
   },
