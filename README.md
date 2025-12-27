@@ -1,10 +1,9 @@
 # `rci-tools`
 
-Keenetic/Netcraze devices provide a [REST](https://en.wikipedia.org/wiki/REST)-like
-JSON API allowing to configure and monitor the device. This API is called RCI
-(**R**EST **C**ore **I**nterface). This repository contains unofficial
-documentation for the RCI API and `npm` packages that can be used to interact
-with it from JavaScript/TypeScript code.
+Keenetic/Netcraze devices provide a REST-like JSON API allowing to configure
+and monitor the device. This API is called RCI (**R**EST **C**ore **I**nterface).
+This repository contains unofficial documentation for the RCI API
+and `npm` packages that can be used to interact with it from JavaScript/TypeScript code.
 
 There are three distinct parts in this repository:
 1. Documentation for the RCI API ([Documentation](#1-documentation))
