@@ -1,3 +1,5 @@
+**English** | [Русский](README.ru.md)
+
 # `rci-tools`
 
 Keenetic/Netcraze devices provide a REST-like JSON API allowing to configure
@@ -40,7 +42,7 @@ pnpm install # install dependencies (for both packages and example apps)
 
 ### Packages
 
-- [@rci-tools/core](packages/core)
+- [@rci-tools/core](./packages/core)
 - [@rci-tools/adapter-axios](./packages/adapter-axios)
 
 ## 3. Example apps
