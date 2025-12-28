@@ -106,7 +106,7 @@ is converted to:
 }
 ```
 
-Similarly, a query with nested path and data:
+Similarly, a query with both path and data:
 ```typescript
 {
   path: 'interface',
@@ -172,7 +172,7 @@ The `RciManager` provides two methods for sending API queries:
   - Chain multiple queries with precise timing
 
 - **`queue(query, options?)`**: Adds the query to an internal queue that batches multiple queries together.
-  The `RciQueue` handles the subscription internally and manages when HTTP requests are actually sent.
+  The `RciManager` handles the subscription internally and manages when HTTP requests are actually sent.
   The queue automatically:
   - Batches multiple queries into a single HTTP request
   - Removes duplicate queries from the batch
@@ -189,10 +189,7 @@ import {Observable, of, firstValueFrom} from 'rxjs';
 import {exhaustMap} from 'rxjs/operators';
 import {RciQuery, RciManager, SessionManager, FetchTransport} from '@rci-tools/core';
 
-// You need to pass an HTTP transport to the RciManager.
-// The package provides the FetchTransport class -- a wrapper over built-in `fetch`
-// available both in browsers and in Node.js
-const transport = new FetchTransport();
+const transport = new FetchTransport(); // HTTP transport (wrapper over built-in `fetch`)
 
 const host = 'http://192.168.1.1'; // device IP address
 const sessionManager = new SessionManager(host, transport);
@@ -302,15 +299,15 @@ const queries: RciQuery[] = [
 
 const execute$ = rciManager.queue(queries);
 
-// A priority query, delayed by 200 ms
-const executePriority$ = rciManager.queue({path: 'show.system'}, {isPriorityTask: true}).pipe(delay(200));
+// A priority query, delayed by 20 ms (data collection time for a “batch” in the default queue)
+const executePriority$ = rciManager.queue({path: 'show.system'}, {isPriorityTask: true}).pipe(delay(20));
 
 const all$ = forkJoin([
   execute$,
   executePriority$
 ]);
 
-// Priority query will block the batched query until it is finished.
+// Priority query will block the default query until it is finished.
 // So, if you check how many HTTP requests were sent to the device, you'll see three requests:
 //
 // 1. Batch query from the first `execute` call -> cancelled by the priority query
