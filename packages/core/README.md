@@ -12,14 +12,13 @@ The `SessionManager` implements [password-based authentication](../../docs/AUTH.
 
 The `RciManager` is responsible for actual device configuration/monitoring.
 It has a few advantages over just using `fetch/xhr/axios/...`:
-- multiple separate commands/requests can be batched into a single HTTP request
-  (+ duplicates are removed from the batch that is sent to the device)
+- queries from multiple method calls can be batched into a single HTTP request
 - there is a simple priority system:
-  priority commands block sending the non-priority ones until they are done
-- the `RciManager` provides a way to work with the background processes
+  priority queries block the non-priority ones until they are finished
+- a way to work with the background processes
   that avoids running same command with different arguments in parallel
 
-Both classes require a [`HTTP transport` instance](./src/transport/http.transport.ts) to
+Both classes require an [`HTTP transport` instance](./src/transport/http.transport.ts) to
 send HTTP requests to the device. The `@rci-tools/core` module providers
 [a wrapper over `fetch`](./src/transport/fetch/fetch.transport.ts) for that.
 Pass the same instance of `FetchTransport` to both `SessionManager` and `RciManager`
@@ -35,7 +34,8 @@ npm install @rci-tools/core
 
 ### `SessionManager`
 
-The `SessionManager` class has the following interface:
+The `SessionManager` is used to handle auth.
+It has the following interface:
 
 ```typescript
 interface SessionManager<ResponseType extends BaseHttpResponse = BaseHttpResponse> {
@@ -48,14 +48,15 @@ interface SessionManager<ResponseType extends BaseHttpResponse = BaseHttpRespons
 }
 ```
 
-It is pretty straightforward -- use `login`/`logout`/`isAuthenticated` for the auth session management.
+It is pretty straightforward -- use `isAuthenticated`/`login`/`logout` for the auth session management.
 Two remaining methods are:
-- `getRealmHeader`: can be used to get the device name without authenticating (e.g., to show it on the login screen)
+- `getRealmHeader`: can be used to get the device name before authenticating (e.g., to show it on the login screen)
 - `toggleErrorLogging`: enables/disables logging of HTTP errors to the console
 
 ### `RciManager`
 
-The `RciManager` class is the one you use to interact with the RCI API.
+The `RciManager` is used to interact with the RCI API.
+It has the following interface:
 
 ```typescript
 interface RciManager<
@@ -71,8 +72,7 @@ interface RciManager<
 
 
 The `RciManager` relies heavily on the [root API endpoint (`/rci/`)](../../docs/RCI_API.md#31-root-api-resource).
-All requests to the API except for the ones that handle background processes
-are sent to that endpoint. Interactions with both [setting](../../docs/RCI_API.md#21-settings) and
+Interactions with both [setting](../../docs/RCI_API.md#21-settings) and
 [action](../../docs/RCI_API.md#22-actions) resources can be expressed
 as `RciQuery` objects send to the root API endpoint.
 The `RciQuery` interface is defined as follows:
@@ -81,7 +81,7 @@ The `RciQuery` interface is defined as follows:
 export interface RciQuery<PathType extends string = string> { // `PathType` can be narrowed to a subset of valid path strings
   path: PathType;
   data?: Record<string, any> | string | boolean | number; // defaults to {}
-  extractDataByPath?: boolean; // defaults to true
+  extractData?: boolean; // defaults to true
 }
 ```
 
@@ -127,7 +127,7 @@ becomes:
 ```
 
 Sending the nested object to the root API endpoint will result in getting
-the response nested in the same way. If the `extractDataByPath` flag
+the response nested in the same way. If the `extractData` flag
 is set to `true` (or not specified: `true` is the default value),
 the `RciManager` will extract the relevant part of the response
 corresponding to the original query path before returning it to you.
@@ -145,7 +145,7 @@ and
 {path: 'ip', data: {telnet: {session: {timeout: 123456}}}}
 ```
 
-will be converted to the same object:
+will be converted to the same object inside the HTTP request payload:
 ```typescript
 {
   'ip': {
@@ -162,11 +162,10 @@ You can use the representation that is more convenient for you.
 
 #### `execute` vs `queue`
 
-The `RciManager` provides two methods for executing queries:
+The `RciManager` provides two methods for sending API queries:
 
-- **`execute(query)`**: Sends the HTTP request immediately when you subscribe to the returned Observable.
-  You have full control over the subscription lifecycle. This is useful when you need to:
-  - Send a query right away without batching
+- **`execute(query)`**: Sends the HTTP request when you subscribe to the returned Observable.
+  You have full control over the subscription lifecycle. This may be useful when you need to:
   - Manually control when the HTTP request is made
   - Chain multiple queries with precise timing
 
@@ -176,15 +175,10 @@ The `RciManager` provides two methods for executing queries:
   - Batches multiple queries into a single HTTP request
   - Removes duplicate queries from the batch
   - Waits for a configurable timeout before sending (to allow more queries to be added)
-  - Handles priority queries that block the batch queue
+  - Handles priority queries via a separate priority queue, blocking the default one
 
 Both methods return a [rxjs Observable](https://rxjs.dev/guide/observable)
-that you must subscribe to in order to receive the result. The key difference
-is that `execute` gives you manual control over the HTTP request timing,
-while `queue` delegates that control to the internal queue allowing to batch
-multiple queries from different `queue` calls into a single HTTP requests.
-
-Below are a few usage examples.
+that you must subscribe to in order to receive the result. Below are a few usage examples.
 
 #### 1. A basic example
 
@@ -244,11 +238,11 @@ auth$
   });
 ```
 
-#### 2. Multiple Queries
+#### 2. Multiple queries
 
 ```typescript
 import {forkJoin} from 'rxjs';
-import {exhaustMap} from 'rxjs/operators';
+import {delay, exhaustMap} from 'rxjs/operators';
 // other imports
 
 // ... create an instance of `RciManager` in the same way as in the previous example ...
@@ -272,9 +266,9 @@ bastch1$
 
       // Those queries will also be sent in a single HTTP request
       return forkJoin([
-        rciManager.execute({path: 'show.system'}),
-        rciManager.execute({path: 'show.last-change'}),
-        rciManager.execute({path: 'whoami'}),
+        rciManager.queue({path: 'show.system'}),
+        rciManager.queue({path: 'show.last-change'}),
+        rciManager.queue({path: 'whoami'}),
       ]);
     }),
   )
@@ -283,10 +277,13 @@ bastch1$
   });
 ```
 
-#### 3. A Priority Query
+#### 3. Priority queries
 
-Priority queries are batched within the next event loop "tick" and blocking
-the batch queue (event if it is already waiting for a response).
+If you use the batching queue, but need to send a query almost immediately,
+you can send it is a priority one. Priority queries are batched within
+the next event loop "tick" only. The priority queue blocks the regular
+batching queue until it is empty (even if the batching one is already
+waiting for a response).
 
 ```typescript
 import {delay} from 'rxjs/operators';
@@ -357,7 +354,11 @@ Here's a basic example using `executeBackgroundProcess`:
 ```typescript
 const pingQuery: RciQuery = {
   path: 'tools.ping',
-  data: {host: 'google.com', packetsize: 84, count: 5}
+  data: {
+    host: 'google.com',
+    packetsize: 84,
+    count: 5,
+  },
 };
 
 const ping$ = rciManager.executeBackgroundProcess(pingQuery);
@@ -373,12 +374,16 @@ ping$.done$
   });
 ```
 
-You can also abort a background process manually:
+You also can abort a background process manually before it finishes:
 
 ```typescript
 const pingQuery: RciQuery = {
   path: 'tools.ping',
-  data: {host: 'google.com', packetsize: 84, count: 50}
+  data: {
+    host: 'google.com',
+    packetsize: 84,
+    count: 50,
+  },
 };
 
 const ping$ = rciManager.executeBackgroundProcess(pingQuery);

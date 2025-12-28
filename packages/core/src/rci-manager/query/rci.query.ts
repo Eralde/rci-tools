@@ -4,7 +4,7 @@ import {GenericObject} from '../../type.utils';
 export interface RciQuery<PathType extends string = string> {
   path: PathType;
   data?: GenericObject | string | boolean | number; // defaults to {}
-  extractDataByPath?: boolean; // defaults to true
+  extractData?: boolean; // defaults to true
 }
 
 export type RciTask<PathType extends string = string> = RciQuery<PathType> | RciQuery<PathType>[];
