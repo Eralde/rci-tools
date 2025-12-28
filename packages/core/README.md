@@ -131,7 +131,7 @@ and
 {path: 'ip', data: {telnet: {session: {timeout: 123456}}}}
 ```
 
-will be both converted to the same object:
+will be converted to the same object:
 ```typescript
 {
   'ip': {
