@@ -58,19 +58,19 @@ Two remaining methods are:
 The `RciManager` class is the one you use to interact with the RCI API.
 It relies heavily on the [root API endpoint (`/rci/`)](../../docs/RCI_API.md#31-root-api-resource).
 All requests to the API except for the ones that handle background processes
-are sent to that endpoint. It's methods accept "RCI queries" as input:
+are sent to that endpoint. It's methods accept "RCI queries" as input.
+Interactions with [setting](../../docs/RCI_API.md#21-settings) and
+[action](../../docs/RCI_API.md#22-actions) resources can be expressed as `RciQuery` objects.
+The `RciQuery` interface is defined as follows:
 
 ```typescript
-// `PathType` can be narrowed to a subset of valid path strings
-export interface RciQuery<PathType extends string = string> {
+export interface RciQuery<PathType extends string = string> { // `PathType` can be narrowed to a subset of valid path strings
   path: PathType;
   data?: Record<string, any> | string | boolean | number; // defaults to {}
   extractDataByPath?: boolean; // defaults to true
 }
 ```
 
-Interactions with [setting](../../docs/RCI_API.md#21-settings) and
-[action](../../docs/RCI_API.md#22-actions) resources can be expressed as `RciQuery` objects.
 Before being sent to the device, `RciQuery` objects are converted to
 an object where the `path` becomes a property path and `data` becomes the value at that path.
 
