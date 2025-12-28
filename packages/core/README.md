@@ -64,7 +64,7 @@ are sent to that endpoint. It's methods accept "RCI queries" as input:
 // `PathType` can be narrowed to a subset of valid path strings
 export interface RciQuery<PathType extends string = string> {
   path: PathType;
-  data?: GenericObject | string | boolean | number; // defaults to {}
+  data?: Record<string, any> | string | boolean | number; // defaults to {}
   extractDataByPath?: boolean; // defaults to true
 }
 ```
