@@ -1,9 +1,23 @@
 {
   "name": "@rci-tools/core",
   "version": "0.1.0",
+  "description": "Interact with REST Core Interface on Keenetic/Netcraze devices",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
+  "author": "Eralde",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Eralde/rci-tools.git"
+  },
+  "license": "ISC",
+  "homepage": "https://github.com/Eralde/rci-tools#readme",
+  "bugs": {
+    "url": "https://github.com/Eralde/rci-tools/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "files": [
     "dist"
   ],
