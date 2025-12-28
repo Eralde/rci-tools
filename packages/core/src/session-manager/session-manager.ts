@@ -91,7 +91,7 @@ export class SessionManager<ResponseType extends BaseHttpResponse = BaseHttpResp
     this.isLoggingErrors = isEnabled;
   }
 
-  private logError(error: unknown): void {
+  protected logError(error: unknown): void {
     if (this.isLoggingErrors) {
       console.warn(error);
     }
