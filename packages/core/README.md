@@ -56,7 +56,21 @@ Two remaining methods are:
 ### `RciManager`
 
 The `RciManager` class is the one you use to interact with the RCI API.
-It relies heavily on the [root API endpoint (`/rci/`)](../../docs/RCI_API.md#31-root-api-resource).
+
+```typescript
+interface RciManager<
+  QueryPath extends string = string, // valid 'path' values for regular RCI queries
+  BackgroundQueryPath extends string = string // valid 'path' values for background process RCI queries
+> {
+  execute(query: RciTask<QueryPath>): GenericResponse;
+  queue(query: RciTask<QueryPath>, options?: QueueOptions): GenericResponse;
+  executeBackgroundProcess(query: RciQuery<BackgroundQueryPath>, options?: RciBackgroundTaskOptions): RciBackgroundProcess;
+  queueBackgroundProcess(query: RciQuery<BackgroundQueryPath>, options?: RciBackgroundTaskOptions): RciBackgroundProcess;
+}
+```
+
+
+The `RciManager` relies heavily on the [root API endpoint (`/rci/`)](../../docs/RCI_API.md#31-root-api-resource).
 All requests to the API except for the ones that handle background processes
 are sent to that endpoint. It's methods accept "RCI queries" as input.
 Interactions with [setting](../../docs/RCI_API.md#21-settings) and
