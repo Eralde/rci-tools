@@ -42,8 +42,8 @@ pnpm install # установка зависимостей (для пакето�
 
 ### Пакеты
 
-- [@rci-tools/core](./packages/core)
-- [@rci-tools/adapter-axios](./packages/adapter-axios)
+- [@rci-tools/core](./packages/core/README.ru.md)
+- [@rci-tools/adapter-axios](./packages/adapter-axios/README.ru.md)
 
 ## 3. Демо-приложений
 
@@ -73,7 +73,7 @@ pnpm install # установка зависимостей (для пакето�
 
 ### Приложения
 
-- [Пример использования в браузере](./examples/simple-browser-demo)
-- [Пример использования с Node.js](./examples/simple-nodejs-demo)
-- [Local Monitor (Node.js)](./examples/local-monitor)
-- [WebCLI (Svelte)](./examples/sv-webcli)
+- [Пример использования в браузере](./examples/simple-browser-demo/README.ru.md)
+- [Пример использования с Node.js](./examples/simple-nodejs-demo/README.ru.md)
+- [Local Monitor (Node.js)](./examples/local-monitor/README.ru.md)
+- [WebCLI (Svelte)](./examples/sv-webcli/README.ru.md)
