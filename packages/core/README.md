@@ -4,7 +4,7 @@
 
 ## Overview
 
-TypeScript library for interacting with the [RCI API](../../docs/RCI_API.md).
+`@rci-tools/core` &mdash; is an `npm` package for interacting with the [RCI API](../../docs/RCI_API.md).
 Two main classes exported by this package are:
 
 - [SessionManager](./src/session-manager/session-manager.ts): Handles authentication on the device.

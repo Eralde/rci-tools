@@ -4,7 +4,7 @@
 
 ## Обзор
 
-TypeScript-библиотека для взаимодействия с [RCI API](../../docs/RCI_API.md).
+`@rci-tools/core` &mdash; это `npm`-пакет для взаимодействия с [RCI API](../../docs/RCI_API.ru.md).
 Два основных класса, экспортируемых этим пакетом:
 
 - [SessionManager](./src/session-manager/session-manager.ts): Обрабатывает аутентификацию на устройстве.
@@ -72,9 +72,9 @@ interface RciManager<
 }
 ```
 
-`RciManager` активно использует [корневую конечную точку API (`/rci/`)](../../docs/RCI_API.md#31-root-api-resource).
-Взаимодействие как с [настройками](../../docs/RCI_API.md#21-settings), так и с
-[действиями](../../docs/RCI_API.md#22-actions) выражается через объекты `RciQuery`,
+`RciManager` активно использует [корневую конечную точку API (`/rci/`)](../../docs/RCI_API.ru.md#31-корневой-ресурс-api).
+Взаимодействие как с [настройками](../../docs/RCI_API.ru.md#21-настройки), так и с
+[действиями](../../docs/RCI_API.ru.md#22-действия) выражается через объекты `RciQuery`,
 отправляемые на корневую конечную точку API.
 Интерфейс `RciQuery` определён так:
 
@@ -322,7 +322,7 @@ all$
 
 #### 4. Фоновые процессы
 
-Для [фоновых процессов](../../docs/RCI_API.md#23-background-processes)
+Для [фоновых процессов](../../docs/RCI_API.ru.md#23-фоновые-процессы)
 `RciManager` предоставляет два метода, принимающих объекты `RciQuery`:
 
 - **`executeBackgroundProcess(query, options?)`**: возвращает объект `RciBackgroundProcess`,
