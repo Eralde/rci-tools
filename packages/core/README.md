@@ -181,7 +181,8 @@ The `RciManager` provides two methods for executing queries:
 Both methods return a [rxjs Observable](https://rxjs.dev/guide/observable)
 that you must subscribe to in order to receive the result. The key difference
 is that `execute` gives you manual control over the HTTP request timing,
-while `queue` delegates that control to the internal queue system for automatic batching.
+while `queue` delegates that control to the internal queue allowing to batch
+multiple queries from different `queue` calls into a single HTTP requests.
 
 Below are a few usage examples.
 
