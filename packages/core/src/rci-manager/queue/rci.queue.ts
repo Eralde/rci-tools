@@ -202,7 +202,7 @@ export class RciQueue<ResponseType extends BaseHttpResponse> {
     const queries = queriesList.map((query) => {
       return {
         ...query,
-        extractDataByPath: query?.extractDataByPath ?? true,
+        extractData: query?.extractData ?? true,
       };
     });
 

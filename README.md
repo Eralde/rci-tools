@@ -4,6 +4,7 @@ Keenetic/Netcraze devices provide a REST-like JSON API allowing to configure
 and monitor the device. This API is called RCI (**R**EST **C**ore **I**nterface).
 This repository contains unofficial documentation for the RCI API
 and `npm` packages that can be used to interact with it from JavaScript/TypeScript code.
+It is a work in progress.
 
 There are three distinct parts in this repository:
 1. Documentation for the RCI API ([Documentation](#1-documentation))
@@ -53,8 +54,8 @@ you want to run.
 
 > [!NOTE]
 > Example apps that are designed to run in a browser require certain "backend"
-> configured on the target Keenetic/Netcraze device to proxy RCI API requests
-> to the device firmware. To configure the backend you will need to
+> configured on the target Keenetic/Netcraze device to proxy API requests to
+> the device firmware. To configure the backend you will need to
 > [install the Entware repository](https://help.keenetic.com/hc/en-us/articles/360021214160-Installing-the-Entware-repository-package-system-on-a-USB-drive)
 > on the target device and be able to connect to that device using SSH.
 > Browser example apps will contain scripts that to configure the backend
