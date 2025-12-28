@@ -9,13 +9,7 @@ to view the device log in a separate panel while interacting with the device.
 
 This project is built with [Svelte 5](https://svelte.dev/) and [dockview](https://dockview.dev/).
 
-## Features
-
-
-
 https://github.com/user-attachments/assets/dfe21a22-4079-4782-b104-39dd297f257d
-
-
 
 - **Web-based Terminal**: Full-featured terminal emulator powered by [ttyd](https://github.com/tsl0922/ttyd)
   and [xterm.js](https://xtermjs.org/).
