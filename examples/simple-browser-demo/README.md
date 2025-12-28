@@ -2,8 +2,8 @@
 
 # Simple Browser Demo
 
-This example demonstrates a basic web application that uses the `@rci-tools/core` package
-to interact with the RCI API. It is written in "vanilla" TypeScript and demonstrates how to:
+This folder contains a very basic demo web app that uses the `@rci-tools/core` package
+to interact with the RCI API. It is implemented in "vanilla" TypeScript and demonstrates how to:
 - authenticate using username and password
 - fetch data (`show version`) via the RCI API
 
@@ -55,7 +55,7 @@ pnpm run dev
 ```
 
 Open your browser to the address displayed in the console (e.g., `http://localhost:5174`).
-Use your device's username/password to authorise this web app to access RCI API on your device.
+Use your device's username/password to authorize this web app to access RCI API on your device.
 
 
 ### Building for Production
