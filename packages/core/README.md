@@ -72,9 +72,9 @@ interface RciManager<
 
 The `RciManager` relies heavily on the [root API endpoint (`/rci/`)](../../docs/RCI_API.md#31-root-api-resource).
 All requests to the API except for the ones that handle background processes
-are sent to that endpoint. It's methods accept "RCI queries" as input.
-Interactions with [setting](../../docs/RCI_API.md#21-settings) and
-[action](../../docs/RCI_API.md#22-actions) resources can be expressed as `RciQuery` objects.
+are sent to that endpoint. Interactions with both [setting](../../docs/RCI_API.md#21-settings) and
+[action](../../docs/RCI_API.md#22-actions) resources can be expressed
+as `RciQuery` objects send to the root API endpoint.
 The `RciQuery` interface is defined as follows:
 
 ```typescript
@@ -157,6 +157,8 @@ will be converted to the same object:
   }
 }
 ```
+
+You can use the representation that is more convenient for you.
 
 #### `execute` vs `queue`
 
