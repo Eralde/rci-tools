@@ -63,7 +63,7 @@ export const scpCopy = (
 
 export const isSshpassInstalled = (): boolean => {
   try {
-    return Boolean(which.sync('sshpass1'));
+    return Boolean(which.sync('sshpass'));
   } catch (err) {
     return false;
   }
