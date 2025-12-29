@@ -8,17 +8,17 @@ Keenetic/Netcraze devices provide a [REST](https://en.wikipedia.org/wiki/REST)-l
 JSON API called **RCI** (**R**EST **C**ore **I**nterface). Data exchange is
 carried out via the HTTP protocol, and the data is transmitted
 in [JSON](https://en.wikipedia.org/wiki/JSON) format. This document provides
-a more or less detailed description of RCI. We assume that you have basic knowledge
-of Keenetic/Netcraze command system (the Command Reference Guide for your device
-is a great place to learn about it).
+a description of the RCI API. It is assumed that the reader has basic knowledge
+of configuring Keenetic/Netcraze devices using the command line (**C**ommand **L**ine **I**nterface, CLI).
+You can learn more about the CLI for your device in the Command Reference Guide PDF
+available on the manufacturer's website.
 
-RCI is designed as an implementation of REST principles based on a
-command system for the command line interface (CLI). The base URL for all
-operations is `/rci`. A CLI command `a b c` corresponds to a REST **resource**
-`rci/a/b/c`. The command arguments are passed as parameters in the URL
-for GET requests (e.g. `GET rci/show/interface?name=Home`) or in the body
-of the request for POST requests. The table below shows some examples
-of CLI commands and their corresponding RCI resources.
+RCI is an implementation of REST principles on top of the CLI command system.
+The base URL for all operations is `/rci`. A CLI command `a b c` corresponds
+to a REST **resource** `rci/a/b/c`. Command arguments are passed as parameters
+in the URL for GET requests (e.g. `GET rci/show/interface?name=Home`) or in the
+body for POST requests. The table below shows examples of CLI commands and their
+corresponding RCI resources.
 
 | CLI Command                                  | RCI API resource                                               |
 |----------------------------------------------|----------------------------------------------------------------|
@@ -28,18 +28,17 @@ of CLI commands and their corresponding RCI resources.
 | `show interface WifiMaster0 channels`        | `/rci/show/interface/channels?name=WifiMaster0`                |
 
 > [!NOTE]
-> Note that the command arguments have different positions in an RCI resource URL
-> compared to the corresponding command in the CLI.
+> Note that command arguments occupy different positions in the RCI resource URL
+> compared to the CLI syntax.
 
-Unlike the command line interface, RCI is quite convenient to use
-for automating Keenetic/Netcraze devices. Also, since JSON format
-is well-supported by JavaScript, RCI allows you to interact with
-the device directly from your browser (if the web server is located
-on the device itself or if you configure CORS headers).
+Since HTTP clients (`curl`, `wget`, ...) are widely available and JSON is supported
+by almost all programming languages, RCI is convenient for automating Keenetic/Netcraze
+devices. Also, since JSON is natively supported in JavaScript, RCI allows you to interact
+with your device directly from a web browser (if the web server is on the device, or if you
+configure CORS headers).
 
-RCI supports query semantics typical for REST API, but also has some additional
-capabilities, that allow you to interact with it in a non-REST, but convenient
-way.
+RCI API supports typical REST query semantics, but also has a number of extra
+features making it more flexible.
 
 <br/>
 
@@ -77,11 +76,11 @@ $ curl http://192.168.1.1/rci/show/version
 </details>
 
 
-## 2. Different types or resources
+## 2. Types of resources
 
-In a REST API, request methods ([GET, POST, DELETE, ...](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Methods))
-usually identify the purpose of the request. RCI follows this principle, but
-not every resource accepts every method. Quoting the Appendix B in
+In REST APIs, request methods ([GET, POST, DELETE, ...](https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods))
+usually denote the purpose of the request. RCI follows this principle,
+but not every resource supports every method. Quoting Appendix B from
 the Command Reference Guide:
 
 > Method semantics depend on the type of resource. There are three types of resources in RCI:
@@ -93,34 +92,31 @@ the Command Reference Guide:
 ### 2.1 Settings
 
 Settings are parts of the device configuration. For example, a network interface
-IP address, traffic limit for unregistered devices or `ip http security-level`
-&mdash; all are examples or settings. You can read, modify, or delete settings
-using standard HTTP methods:
+IP address, a traffic limit for unregistered devices, or `ip http security-level`
+are all examples of settings. You can read, modify, or delete settings using standard HTTP methods:
 
 - `GET` &rarr; Read settings.
 - `POST` &rarr; Create or modify settings.
 - `DELETE` &rarr; Delete (or reset to default) settings.
 
-> [!NOTE]
-> In general, the JSON form that will be returned when reading settings
-> and the JSON form for changing these settings should be identical.
-> Strings, integers and booleans are treated as parameters
-> of the addressed API resource. JSON objects and arrays represent **nested resources**.
-> An empty object (`{}`) denotes an empty list or parameters.
+In general, the JSON structure returned when **reading** settings and the JSON structure
+for **creating/modifying** those same settings are identical. Strings, integers, and booleans
+are considered parameters of the addressed API resource. JSON objects and arrays represent
+**nested resources**. An empty object (`{}`) denotes an empty set of parameters.
 
 > [!IMPORTANT]
-> Passing an empty object as request data is **required** for any POST request
-> even if the command has no parameters at all.
+> Passing an empty object as request data is **required** for any POST request,
+> even if the command has no parameters.
 
-The ability to nest JSON objects is what makes RCI quite convenient for developers.
-When using the CLI you usually enter commands one by one (**). With RCI an entity
-(e.g. a network interface) can be represented by a JSON object as a whole.
+The ability to send JSON objects with any reasonable level of nesting makes RCI
+convenient for developers. In the CLI you usually enter commands one by one (**).
+With RCI, an entity (e.g. a network interface) can be represented as a whole with
+a JSON object.
 
 > ** You can paste multiple commands from the clipboard into the CLI,
-> but entering commands one at a time is the standard behavior for any
-> command line interface. RCI, being a REST-like API, allows you to work
-> with resources that are entire objects (each object is the result of
-> executing a set of commands).
+> but the default way to use the command line interface is to enter commands
+> one at a time. RCI, as a REST-like API, allows you to operate with objects
+> each of which can represent a result of executing multiple commands.
 
 <details>
     <summary>Editing an interface configuration via CLI and via RCI</summary>
@@ -134,12 +130,12 @@ When using the CLI you usually enter commands one by one (**). With RCI an entit
 <td>
 
 <img src="./svg/example-cli.svg"/><br/>
-Creating/editing an object via CLI <br/>is a step-by-step procedure
+Creating/editing an object via CLI is a step-by-step procedure
 </td>
 
 <td>
 <img src="./svg/example-rci.svg"/><br/>
-Creating/editing an object via RCI <br/>can be done as a single action (HTTP request)
+Creating/editing an object via RCI can be done as a single action (HTTP request)
 </td>
     </tr>
 </tbody>
@@ -149,39 +145,38 @@ Creating/editing an object via RCI <br/>can be done as a single action (HTTP req
 
 
 ### 2.2 Actions
-Actions are commands that do not modify the device configuration.
-For example, getting current device CPU load, "ejecting" a storage
-device and clearing the system log &mdash; all are examples of an action.
-Actions run instantly, as opposed to [background processes](#2-3-background-processes).
 
-- `GET` &rarr; Same as `POST` for "read-only" actions (see below). Not applicable to other actions.
-- `POST` &rarr; Execute a command and return its output.
+Actions are commands that do not modify the device configuration.
+For example, reading the current CPU load, ejecting a USB storage device,
+or clearing the system log are all examples of actions. Actions are executed instantly,
+unlike [background processes](#2-3-background-processes).
+
+- `GET` &rarr; Same as `POST` for `readonly` actions (see below); not applicable to other actions.
+- `POST` &rarr; Execute the action and return its result.
 - `DELETE` &rarr; Not applicable.
 
-A subset of CLI commands is "read-only" (e.g., if they return current status
-of a certain subsystem/service). Those commands map to RCI actions for which
-`GET` and `POST` requests return the same result. "Read-only" commands usually
-begin with the `show` keyword, but this is not always the case. For example,
-`rci/whoami` or `rci/ip/http/ssl/acme/list` resources are also "read-only".
-`rci/eula/accept` and `rci/system/log/clear`, on the other hand, are not:
-`GET` requests are not applicable to those.
+A certain subset of CLI commands are `readonly` commands. RCI resources corresponding
+to such commands return the same result for both `GET` and `POST` requests. Usually,
+`readonly` commands start with the `show` keyword, but not always. For example,
+`rci/whoami` and `rci/ip/http/ssl/acme/list` are also `readonly` resources, even though
+they do not start with `show`. In general, resources corresponding to actions do not
+support `GET` requests. For example, `GET rci/eula/accept` will return an error.
 
-For convenience RCI also provides special prefixes (`rci/show/rc` and `rci/show/sc`)
-that allow to **read** settings via a `POST` request. See the
+For convenience, RCI also provides special prefixes (`rci/show/rc` and `rci/show/sc`)
+that allow you to **read** settings via a `POST` request. See the
 [Reading configuration via POST requests](#3-reading-configuration-via-post-requests)
-section for more details. Such prefixed resources also should be considered actions.
-
+section for more details. Resources with the `show/rc` and `show/sc` prefixes are also considered actions.
 
 ### 2.3 Background processes
-Background processes are long-running processes that can be started,
-stopped and whose current status can be checked via RCI. Such processes
-are bound to a particular HTTP session, and cannot be accessed from anywhere
-else. Working with background processes is described in more detail in
-section [Background Processes](#4-background-processes).
 
-- `GET` &rarr; Retrieve updates from an existing process. Returns 404 if there is no such process.
-- `POST` &rarr; Create a background process.
-- `DELETE` &rarr; Terminate a background process.
+Background processes are long-running operations that can be started, stopped,
+and polled via RCI. Such processes are bound to a specific HTTP session and cannot
+be accessed from elsewhere. Working with background processes is described in more
+detail in section [Background Processes](#4-background-processes).
+
+- `GET` &rarr; Retrieve updates from an existing process; returns 404 if the process is not running.
+- `POST` &rarr; Start a background process.
+- `DELETE` &rarr; Stop a background process.
 
 <br/>
 
@@ -593,24 +588,23 @@ $ curl -X POST http://192.168.1.1/rci/system/reboot \
 <br/>
 
 
-## 3. Non-REST features of RCI
+## 3. Additional features of RCI API
 
 ### 3.1 Root API resource
 
-[Example 2.4.3](#2-4-3-ip-telnet-nested-setting) shows certain flexibility
-in querying a nested resource via RCI. That example also mentions the **root**
-API resource (`/rci/` = `/rci` + `/`). The root resource is a [setting](#2-1-settings).
-If you query the root resource via GET &mdash; you will receive a JSON containing
-almost whole device configuration. Likewise, if you send a POST request
-to the root resource, you can change almost any setting available on your device.
-Having a root resource is not very common for a REST API.
+[Example 2.4.3](#2-4-3-ip-telnet-nested-setting) demonstrates the flexibility of RCI API
+when querying a nested resource. That example also mentions the **root** API resource
+(`/rci/` = `/rci` + `/`). The root resource is a [setting](#2-1-settings). If you query
+the root resource via GET, you will receive a JSON object containing almost the entire
+device configuration. Similarly, if you send a POST request to the root resource, you
+can change almost any setting on your device. Having a root resource is an additional
+feature of RCI compared to typical REST APIs.
 
-The JSON payload for any RCI request is limited in size only (768 KB). It is also
-perfectly valid to send an array of settings as an RCI request payload.
-In combination with the root resource that gives you an option to perform
-almost all interactions with RCI just by sending **POST** requests to the root
-resource. Merging multiple commands in array with result in them being executed
-in the order they are present in the array.
+The body of any POST request to the RCI API is limited in size to about a megabyte.
+If you need to send multiple objects, it is convenient to combine them into an array.
+The ability to send an array of objects, together with the root resource, allows you
+to perform almost any operation with the device by sending POST requests to the root
+resource (`/rci/`). Commands sent as an array will be executed in the order they appear.
 
 #### Examples of multiple commands in a single HTTP query:
 
@@ -924,22 +918,20 @@ EOF
 
 ### 3.2 Reading configuration via POST requests
 
-RCI also allows **reading** setting configuration via a POST request
-by adding a special prefix to the resource name. There are two prefixes
-for this: `show rc` and `show sc`.
+RCI also allows you to **read** settings via a POST request by adding a special
+prefix to the resource name. There are two such prefixes: `show rc` and `show sc`.
 
 #### 3.2.1 The `show rc` prefix
 
-`show rc` is an abbreviation for `show running-config`.
-Wrapping a **write** command in `{"show": {"rc": ...}}` and sending it
-via a POST request will return the relevant part of the configuration **read**
-from the device's **running-config**. The device configuration will not be changed.
+`show rc` stands for `show running-config`. Wrapping a **setting** in
+`{"show": {"rc": ...}}` in the POST request body will return the relevant part
+of the configuration, read from the device's **running-config**. The device
+configuration will not be changed.
 
 > [!NOTE]
-> An important detail that we need to mention is that executing a command with
-> the `show rc` prefix results in building an internal representation of
-> the requested configuration **every time** that part of the configuration
-> is requested, which can be a CPU intensive task.
+> It is important to note that adding the `show rc` prefix causes the JSON for
+> the requested part of the configuration to be generated on every request.
+> In some cases (e.g., `show rc interface`) this can be a resource-intensive operation.
 
 <details>
 <summary>Example request (POST)</summary>
@@ -987,19 +979,15 @@ EOF
 
 #### 3.2.2 The `show sc` prefix
 
-`show sc` is an abbreviation for `show startup-config`. This prefix is a "cached
-version" of the `show rc` prefix, which means it works faster on average.
-Data returned by requests wrapped into the `show sc` "wrapper" relies on
-the **startup-config** file, so the internal representation of the
-relevant part of the device configuration is only created once
-every time that file changes.
+`show sc` stands for `show startup-config`. This prefix is a cached version of
+the `show rc` prefix, so requests to `show sc` are generally faster. Data returned
+by requests wrapped in `show sc` is based on the **startup-config** file. The internal
+representation (cache) of the requested part of the configuration is recreated only
+when that file changes.
 
 > [!TIP]
-> The fact that the `show sc` data is cached can lead to some issues,
-> so it is recommended to always call the `system configuration save`
-> command after the device configuration was changed.
-> This will flush the `show sc` cache and ensure that the next request
-> will return the up-to-date data.
+> Since `show sc` data is cached when the device configuration is saved,
+> it is recommended to run the `system configuration save` command after any configuration change.
 
 <details>
 <summary>Example request (POST)</summary>
@@ -1053,7 +1041,7 @@ Example 2 (differences between `show rc` and `show sc`)
 
 <br/>
 
-> Extra spaces/newlines removed to make the request and response data more compact
+> Extra spaces/newlines removed for compactness
 
 ```shell
 curl -X POST http://192.168.1.1/rci/ \
@@ -1074,7 +1062,7 @@ curl -X POST http://192.168.1.1/rci/ \
   {"show": {"sc": {"interface": {"Bridge1": {"description": {}}}}}}
 ]
 EOF
-) | jq -c '.[]' # // to show the response in a more compact way
+) | jq -c '.[]'
 ```
 
 ```shell
@@ -1114,15 +1102,14 @@ EOF
 
 ### 3.3 Deleting/resetting configuration via API requests
 
-Settings can be deleted or reset to their default values. The "REST way"
-to delete or reset a setting is to send a `DELETE` request. RCI also allows
-to delete/reset settings using the `no` keyword (`"no": true`) inside
-the POST request body similar to how you would use the `no` keyword in the CLI.
+Settings can be deleted or reset to their default values. REST APIs assume that
+this is done using `DELETE` requests. RCI supports this, but also allows you to
+delete/reset settings using the `no` keyword (`"no": true`) in the POST request body,
+similar to how you would use the `no` keyword in the CLI.
 
-For example, to reset a specific property, like the `description` of an interface,
-you can send a `POST` request to the relevant resource path with `{"no": true}`
-as the value for that specific property (see
-[example](#resetting-a-specific-property-within-an-object)).
+For example, to reset a specific property of a network interface, you can send a
+POST request to the relevant resource path with `{"no": true}` as the value for that
+property (see [example](#resetting-a-specific-property-within-an-object)).
 
 <br/>
 
@@ -1130,8 +1117,8 @@ as the value for that specific property (see
 
 ##### Deleting an entity (e.g., an item inside an array)
 
-To delete a specific policy for a host identified by its MAC address, you
-can use a `DELETE` request with the MAC as a query parameter.
+To delete a specific policy for a host by MAC address, you can use a DELETE request
+with the MAC as a parameter, or a POST request with `no: true` in the body.
 
 <details>
 <summary>
@@ -1239,12 +1226,12 @@ $ curl -X POST http://192.168.1.1/rci/interface \
 
 <br/>
 
-##### Deleting an entire setting (`ip nat`)
+##### Deleting all settings of a certain type (e.g., `ip nat`)
 
 <details>
 <summary>
 
-Delete the setting (POST + `no`)
+Delete the settings (POST + `no: true`)
 </summary>
 
 ```shell
@@ -1276,23 +1263,21 @@ $ curl -X POST http://192.168.1.1/rci/ip/nat \
 
 ## 4. Background processes
 
-Background processes are operations that might take time to complete.
-You start a background process by sending a POST request to the relevant
-resource (this is one of a few situations when using a command-specific
-resource is more convenient than the root `/rci/` resource).
+Background processes are operations that may take a long time to complete.
+To start a background process, send a POST request to the relevant API resource.
+For background processes, it is more convenient to send requests to a command-specific
+resource rather than to `/rci/`.
 
-If the response to that request contains the `"continued": true` property,
-that means that the background process is still running. To retrieve the
-updated status of that process you need to send a GET request to the same
-until a response without `"continued": true` is received. It's advisable
-to introduce a short delay between `GET` requests (e.g., 1 second).
+If the response to the initial POST request contains the `"continued": true` property,
+it means the background process is still running. To get the updated status, you need
+to send GET requests to the same resource until a response without `"continued": true`
+is received. It is recommended to wait a short time (e.g., 1 second) between GET requests.
 
 ### 4.1 Examples of background processes
 
 #### 4.1.1 Checking for firmware updates (`components list`)
 
-To check for available firmware updates, send a `POST` request to
-`/rci/components/list`.
+To check for firmware updates, send a POST request to `/rci/components/list`.
 
 Request that starts the background process (`POST`):
 
@@ -1314,7 +1299,8 @@ $ curl -X POST http://192.168.1.1/rci/components/list \
 
 <br/>
 
-Poll request (`GET`; the background process is not finished):
+Poll request (`GET`; process not finished):
+
 ```shell
 curl http://192.168.1.1/rci/components/list
 ```
@@ -1340,7 +1326,8 @@ $ curl http://192.168.1.1/rci/components/list
 
 <br/>
 
-Final Response (example shows no update):
+Final response (example: no update):
+
 ```shell
 curl http://192.168.1.1/rci/components/list
 ```
@@ -1364,15 +1351,14 @@ $ curl http://192.168.1.1/rci/components/list
 
 #### 4.1.2 Sending USSD requests (`ussd send`)
 
-To send a USSD request (e.g., for mobile data usage), use the
-`/rci/ussd/send` resource.
+To send a USSD request (e.g., to check balance), use the `/rci/ussd/send` resource.
 
-Starting the background process (`POST`):
+Start the background process (`POST`):
 
 ```shell
 curl -X POST http://192.168.1.1/rci/ussd/send \
   -H "Content-Type: application/json" \
-  -d '{"interface": "UsbLte0", "request": "*100#"}' # both `interface` and `request` are mandatory
+  -d '{"interface": "UsbLte0", "request": "*100#"}' # both parameters are required
 ```
 
 ```shell
@@ -1385,7 +1371,8 @@ $ curl -X POST http://192.168.1.1/rci/ussd/send \
 }
 ```
 
-Poll request (GET; process is **not** finished yet)
+Poll request (GET; process not finished):
+
 ```shell
 curl http://192.168.1.1/rci/ussd/send
 ```
@@ -1408,7 +1395,8 @@ $ curl http://192.168.1.1/rci/ussd/send
 }
 ```
 
-Final Response (`GET`):
+Final response (`GET`):
+
 ```shell
 curl http://192.168.1.1/rci/ussd/send
 ```
@@ -1424,7 +1412,7 @@ $ curl http://192.168.1.1/rci/ussd/send
 
 #### 4.1.3 Ping (`tools ping`)
 
-Starting the background process (`POST`):
+Start the background process (`POST`):
 
 ```shell
 curl -X POST http://192.168.1.1/rci/tools/ping \
@@ -1438,7 +1426,7 @@ $ curl -X POST http://192.168.1.1/rci/tools/ping \
   -d '{"host": "google.com", "packetsize": 84, "count": 5}'
 
 
-# Event the initial response to the POST request may contain some data already
+# Even the initial response to the POST request may contain some data
 {
   "message": [
     "sending ICMP ECHO request to google.com...",
@@ -1451,7 +1439,7 @@ $ curl -X POST http://192.168.1.1/rci/tools/ping \
 
 <br/>
 
-Poll request (`GET`; process is not finished yet):
+Poll request (`GET`; process not finished):
 
 ```shell
 curl http://192.168.1.1/rci/tools/ping
@@ -1484,7 +1472,8 @@ $ curl http://192.168.1.1/rci/tools/ping
 }
 ```
 
-Final Response (`GET`; process is finished):
+Final response (`GET`):
+
 ```shell
 curl http://192.168.1.1/rci/tools/ping
 ```
@@ -1498,38 +1487,34 @@ $ curl http://192.168.1.1/rci/tools/ping
 
 ### 4.2 Usage notes
 
-RCI does not prevent you from running multiple background processes associated
-with the same resource in parallel. If you interact with the target device
-within the same HTTP session (as, for example, the device's web interface
-does), then when polling the status of one of these background processes,
-it will be impossible to determine which process you are polling (the poll URL
-will be the same for **every** instance). If you need to execute multiple
-background processes of the same type (e.g. with different arguments),
-then you can either start each of them in a separate HTTP session or
-execute them in sequence within the same session.
+RCI allows you to run multiple background processes associated with the same resource
+in parallel. However, if you interact with the device within a single HTTP session
+(as, for example, the device's web interface does), then polling request for any particular
+type of background process will be the same. If you run multiple instances of the same
+process with different arguments it will be impossible to determine which process you
+are polling. If you need to run multiple background processes of the same type
+you can either start each in a separate HTTP session or run them sequentially in one session.
 
 A special case of a background process is the `system log` (or `mws log`) command.
-Once you started polling the system log, it will never return a response
-that does not contain `"continued": true`. Some of the polling GET requests
-will also contain new log records in the response. The started background
-process can be terminated by either sending a `DELETE` request or once the
-HTTP session it is bound ends.
+After you start polling the system log, it will never return a response without
+`"continued": true`. Some GET requests will also contain new log records in the response.
+The started background process can be terminated by sending a DELETE request or by
+ending the HTTP session it is bound to.
 
 <br/>
 
 ## 5. Generic status/error messages
 
-When you change settings or execute actions that do not return any data via RCI,
-responses often include a standardized status object that provides information
-about the result of the operation. This status object has the same structure
-for different API endpoints:
+When you change settings or perform actions that do not return data via RCI,
+responses often include a standard status object that informs you about the result.
+The structure of this object is the same for different RCI resources:
 
 ```typescript
 interface StatusItem {
-  "status": "mesage" | "warning" | "error"  //
-  "code": string;                           // number as string
-  "ident": string;                          // "<Subsystem>::<Component>",
-  "message": string;                        // "Human-readable message describing the operation result."
+  "status": "message" | "warning" | "error";
+  "code": string;         // number as string
+  "ident": string;        // "<Subsystem>::<Component>"
+  "message": string;      // Human-readable description of the result
 }
 
 interface Status {
