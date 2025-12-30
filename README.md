@@ -21,29 +21,26 @@ There are three distinct parts in this repository:
 
 ## 2. `npm` Packages
 
-### Prerequisites
-
-To be able to run code included into this repository you need to install
-certain software on your machine.
-
-- Node.js (v22 or a newer LTS version)
-- `pnpm` package manager
-
-`pnpm` can be installed via [corepack](https://github.com/nodejs/corepack) distributed with Node.js.
-For more details refer to the [pnpm documentation](https://pnpm.io/installation).
-
-```shell
-corepack enable pnpm # install pnpm via corepack
-```
-
-```shell
-pnpm install # install dependencies (for both packages and example apps)
-```
-
-### Packages
-
+The repository contains the source code of the following `npm` packages:
 - [@rci-tools/core](./packages/core)
 - [@rci-tools/adapter-axios](./packages/adapter-axios)
+
+> We assume that you have the necessary software to work with JS/TS code
+> installed on your machine:
+>
+> - Node.js (v22 or a newer LTS version)
+> - `pnpm` package manager
+>
+> `pnpm` can be installed via [corepack](https://github.com/nodejs/corepack) distributed with Node.js.
+> For more details refer to the [pnpm documentation](https://pnpm.io/installation).
+>
+> ```shell
+> corepack enable pnpm # install pnpm via corepack
+> ```
+>
+> ```shell
+> pnpm install # install dependencies (for both packages and example apps)
+> ```
 
 ## 3. Example apps
 
