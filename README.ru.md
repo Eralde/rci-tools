@@ -21,7 +21,7 @@
 
 ## 2. `npm`-пакеты
 
-Репозиторий содержит следующие `npm`-пакеты:
+Репозиторий содержит исходный код следующих `npm`-пакетов:
 - [@rci-tools/core](./packages/core/README.ru.md)
 - [@rci-tools/adapter-axios](./packages/adapter-axios/README.ru.md)
 
