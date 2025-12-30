@@ -71,7 +71,7 @@ const configureBackend = async (): Promise<void> => {
 
     console.log('\nStep 1: ensuring required packages are installed');
     try {
-      await executeRemoteCommand(ssh, sshHost, 'PATH=/opt/sbin:/opt/bin:$PATH opkg update -V 3', 'Updating opkg package lists');
+      await executeRemoteCommand(ssh, sshHost, 'PATH=/opt/sbin:/opt/bin:$PATH opkg update', 'Updating opkg package lists');
 
       const pkgList = PACKAGES_LIST.join(' ');
 
