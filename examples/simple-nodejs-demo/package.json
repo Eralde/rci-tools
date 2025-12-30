@@ -1,7 +1,10 @@
 {
   "name": "simple-nodejs-demo",
   "version": "1.0.0",
+  "description": "Simple demo of using @rci-tools with Node.js",
   "private": true,
+  "author": "Eralde",
+  "license": "ISC",
   "scripts": {
     "dev": "tsx src/index.ts"
   },

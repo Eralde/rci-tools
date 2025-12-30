@@ -1,7 +1,11 @@
 {
   "name": "sv-webcli",
+  "version": "1.0.0",
+  "description": "Svelte-based browser app that uses @rci-tools to provide web-based CLI for Keenetic/Netcraze devices",
   "private": true,
   "type": "module",
+  "author": "Eralde",
+  "license": "ISC",
   "scripts": {
     "dev": "tsx scripts/dev.ts",
     "build": "vite build",

@@ -1,8 +1,11 @@
 {
   "name": "local-monitor",
   "version": "1.0.0",
+  "description": "Example TUI app to monitor local Keenetic/Netcraze devices status using @rci-tools",
   "private": true,
   "type": "module",
+  "author": "Eralde",
+  "license": "ISC",
   "scripts": {
     "clean": "rimraf dist",
     "dev": "tsx -r tsconfig-paths/register src/index.tsx",

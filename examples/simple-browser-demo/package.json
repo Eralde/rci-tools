@@ -1,7 +1,10 @@
 {
   "name": "simple-browser-demo",
-  "private": true,
   "version": "1.0.0",
+  "description": "Simple demo of using @rci-tools in a browser",
+  "private": true,
+  "author": "Eralde",
+  "license": "ISC",
   "scripts": {
     "clean": "rimraf dist",
     "dev": "node scripts/dev-runner.js",
