@@ -21,7 +21,7 @@ There are three distinct parts in this repository:
 
 ## 2. `npm` Packages
 
-The repository contains source code of the following `npm` packages:
+The repository contains the source code of the following `npm` packages:
 - [@rci-tools/core](./packages/core)
 - [@rci-tools/adapter-axios](./packages/adapter-axios)
 
