@@ -1,5 +1,6 @@
 export * from './_shared';
 
+export * from './probe/';
 export * from './show-interface/';
 export * from './show-interface-rrd/';
 export * from './show-interface-stat/';

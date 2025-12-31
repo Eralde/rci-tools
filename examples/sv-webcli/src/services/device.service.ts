@@ -1,10 +1,11 @@
-import {Observable, forkJoin, map, switchMap} from 'rxjs';
+import {Observable, forkJoin, map, of, switchMap} from 'rxjs';
 import type {GenericObject} from '@rci-tools/core';
 import {RciQuery} from '@rci-tools/core';
 import {rciService} from '../api/rci.service.ts';
 import {
   DETAIL_LEVEL,
   LogItem,
+  ProbeService,
   RRD_ATTRIBUTE,
   RrdTick,
   ShowInterfaceRrdService,
@@ -19,6 +20,7 @@ import {
 } from '../api';
 
 export interface SystemLoadMonitorData {
+  hasRrd: boolean;
   currentCpuLoad: number;
   cpuLoadHistory: number[];
   currentMemoryLoad: number;
@@ -42,6 +44,7 @@ class DeviceService {
   private showSystemRrdCpuApi: ShowSystemRrdCpuService;
   private showSystemRrdMemoryApi: ShowSystemRrdMemoryService;
   private showVersionApi: ShowVersionService;
+  private probeApi: ProbeService;
 
   constructor() {
     this.showInterfaceApi = new ShowInterfaceService(rciService);
@@ -52,6 +55,7 @@ class DeviceService {
     this.showSystemRrdCpuApi = new ShowSystemRrdCpuService(rciService);
     this.showSystemRrdMemoryApi = new ShowSystemRrdMemoryService(rciService);
     this.showVersionApi = new ShowVersionService(rciService);
+    this.probeApi = new ProbeService(rciService);
   }
 
   public getDeviceProfile(): Observable<ShowVersionResponse> {
@@ -59,41 +63,57 @@ class DeviceService {
   }
 
   public getSystemLoadData(maxHistoryPoints: number): Observable<SystemLoadMonitorData> {
-    const obs$ = {
-      cpuRrd: this.showSystemRrdCpuApi.read({
-        detail: DETAIL_LEVEL.THREE_MINUTES,
-        count: maxHistoryPoints,
-        attribute: 'avg',
-      }),
-      memoryRrd: this.showSystemRrdMemoryApi.read({
-        detail: DETAIL_LEVEL.THREE_MINUTES,
-        count: maxHistoryPoints,
-        attribute: 'used',
-      }),
-      showSystem: this.showSystemApi.read(),
-    };
-
-    return forkJoin(obs$)
+    return this.probeApi.read('show system rrd cpu')
       .pipe(
-        map(({cpuRrd, memoryRrd, showSystem}) => {
-          const currentCpuLoad = showSystem.cpuload;
-          const cpuLoadHistory = cpuRrd.data
-            .sort((a, b) => parseFloat(a.t) - parseFloat(b.t))
-            .map((tick) => tick.v);
+        switchMap((probeResponse) => {
+          const hasRrd = probeResponse.found;
 
-          const memoryTotal = showSystem.memtotal;
-          const memoryUsed = Number(showSystem.memory.split('/')[0]);
-          const currentMemoryLoad = Math.round(100 * (memoryUsed / memoryTotal));
-          const memoryLoadHistory = memoryRrd.data
-            .sort((a, b) => parseFloat(a.t) - parseFloat(b.t))
-            .map((tick) => Math.round(100 * (tick.v / memoryTotal)));
+          const cpuRrdData$ = hasRrd
+            ? this.showSystemRrdCpuApi.read({
+              detail: DETAIL_LEVEL.THREE_MINUTES,
+              count: maxHistoryPoints,
+              attribute: 'avg',
+            })
+            : of({data: []});
 
-          return {
-            currentCpuLoad,
-            cpuLoadHistory,
-            currentMemoryLoad,
-            memoryLoadHistory,
+          const memoryRrdData$ = hasRrd
+            ? this.showSystemRrdMemoryApi.read({
+              detail: DETAIL_LEVEL.THREE_MINUTES,
+              count: maxHistoryPoints,
+              attribute: 'used',
+            })
+            : of({data: []});
+
+          const obs$ = {
+            cpuRrd: cpuRrdData$,
+            memoryRrd: memoryRrdData$,
+            showSystem: this.showSystemApi.read(),
           };
+
+          return forkJoin(obs$)
+            .pipe(
+              map(({cpuRrd, memoryRrd, showSystem}) => {
+                const currentCpuLoad = showSystem.cpuload;
+                const cpuLoadHistory = cpuRrd.data
+                  .sort((a, b) => parseFloat(a.t) - parseFloat(b.t))
+                  .map((tick) => tick.v);
+
+                const memoryTotal = showSystem.memtotal;
+                const memoryUsed = Number(showSystem.memory.split('/')[0]);
+                const currentMemoryLoad = Math.round(100 * (memoryUsed / memoryTotal));
+                const memoryLoadHistory = memoryRrd.data
+                  .sort((a, b) => parseFloat(a.t) - parseFloat(b.t))
+                  .map((tick) => Math.round(100 * (tick.v / memoryTotal)));
+
+                return {
+                  hasRrd,
+                  currentCpuLoad,
+                  cpuLoadHistory,
+                  currentMemoryLoad,
+                  memoryLoadHistory,
+                };
+              }),
+            );
         }),
       );
   }
