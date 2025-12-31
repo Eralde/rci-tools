@@ -1,5 +1,5 @@
 import {Observable, forkJoin, map, of, switchMap} from 'rxjs';
-import type {GenericObject} from '@rci-tools/core';
+import type {GenericObject, RciBackgroundProcess} from '@rci-tools/core';
 import {RciQuery} from '@rci-tools/core';
 import {rciService} from '../api/rci.service.ts';
 import {
@@ -17,6 +17,7 @@ import {
   ShowSystemService,
   ShowVersionResponse,
   ShowVersionService,
+  showLogResponseSchema,
 } from '../api';
 
 export interface SystemLoadMonitorData {
@@ -118,11 +119,19 @@ class DeviceService {
       );
   }
 
-  public getLog(): Observable<LogItem[]> {
-    return this.showLogApi.read(300)
+  public startLogPoller(): {data$: Observable<LogItem[]>; process: RciBackgroundProcess} {
+    const process = this.showLogApi.startBackgroundProcess(300);
+
+    const data$ = process.data$
       .pipe(
-        map((response) => (Object.values(response?.log ?? {}) ?? [])),
+        map((response) => {
+          const parsed = showLogResponseSchema.parse(response);
+
+          return Object.values(parsed?.log ?? {}) ?? [];
+        }),
       );
+
+    return {data$, process};
   }
 
   public getWanInterfaceData(maxHistoryPoints: number): Observable<WanInterfaceMonitorData> {
