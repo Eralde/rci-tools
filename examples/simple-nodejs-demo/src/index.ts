@@ -64,9 +64,13 @@ const executeContinuedQueries = async (rciService: RciService): Promise<void> =>
     {path: 'components.list', data: {sandbox: 'draft'}},
   ];
 
-  const continuedTasks = continuedQueries.map((query) => {
+  const continuedTasksObservables = continuedQueries.map((query) => {
     return rciService.queueBackgroundProcess(query.path, query.data || {});
   });
+
+  const continuedTasks = await firstValueFrom(
+    forkJoin(continuedTasksObservables),
+  );
 
   setTimeout(
     () => {

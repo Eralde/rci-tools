@@ -46,7 +46,7 @@ export class RciService {
   public queueBackgroundProcess(
     query: RciQuery,
     options: RciBackgroundTaskOptions = {},
-  ): RciBackgroundProcess {
+  ): Observable<RciBackgroundProcess> {
     return this.driver.queueBackgroundProcess(query, options);
   }
 }

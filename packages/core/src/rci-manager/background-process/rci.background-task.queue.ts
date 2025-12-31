@@ -72,6 +72,15 @@ export class RciBackgroundTaskQueue<QueryPath extends string = string> {
     return this.addTask(task);
   }
 
+  public pushLazy(
+    data: GenericObject,
+    options: RciBackgroundTaskOptions = DEFAULT_BACKGROUND_TASK_OPTIONS,
+  ): Observable<RciBackgroundProcess> {
+    const task = new RciBackgroundTask(this.command, data, options);
+
+    return this.addTaskLazy(task);
+  }
+
   protected addTask(task: RciBackgroundTask<QueryPath>): RciBackgroundProcess<QueryPath> {
     if (this.stateSub$.value === RCI_BACKGROUND_TASK_QUEUE_STATE.AWAITING_RESPONSE) {
       this.tasks.push(task);
@@ -81,6 +90,13 @@ export class RciBackgroundTaskQueue<QueryPath extends string = string> {
     }
 
     return new RciBackgroundProcess(task);
+  }
+
+  protected addTaskLazy(task: RciBackgroundTask<QueryPath>): Observable<RciBackgroundProcess<QueryPath>> {
+    return of(true)
+      .pipe(
+        map(() => this.addTask(task)),
+      );
   }
 
   protected updatePendingQueries(): void {

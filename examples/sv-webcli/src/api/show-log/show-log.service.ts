@@ -1,5 +1,5 @@
 import {RciService} from '../rci.service.ts';
-import {Observable, map} from 'rxjs';
+import {Observable, map, switchMap} from 'rxjs';
 import {RciQuery} from '@rci-tools/core';
 import {ShowLogResponse} from './show-log.response.ts';
 import {showLogResponseSchema} from './show-log.schema.ts';
@@ -33,10 +33,9 @@ export class ShowLogService {
       data,
     };
 
-    const task = this.rciService.queueBackgroundProcess(query);
-
-    return task.data$
+    return this.rciService.queueBackgroundProcess(query)
       .pipe(
+        switchMap((task) => task.data$),
         map((response) => showLogResponseSchema.parse(response)),
       );
   }

@@ -1,3 +1,4 @@
+import {Observable} from 'rxjs';
 import {map, timeout} from 'rxjs/operators';
 import {BaseHttpResponse, HttpTransport} from '../transport';
 import type {GenericObject} from '../type.utils';
@@ -84,16 +85,16 @@ export class RciManager<
   public executeBackgroundProcess(
     query: RciQuery<BackgroundQueryPath>,
     options: RciBackgroundTaskOptions = {},
-  ): RciBackgroundProcess {
+  ): Observable<RciBackgroundProcess> {
     const queue = new RciBackgroundTaskQueue<BackgroundQueryPath>(this.rciPath, query.path, this.httpTransport);
 
-    return queue.push(query.data as GenericObject, options);
+    return queue.pushLazy(query.data as GenericObject, options);
   }
 
   public queueBackgroundProcess(
     query: RciQuery<BackgroundQueryPath>,
     options: RciBackgroundTaskOptions = {},
-  ): RciBackgroundProcess {
+  ): Observable<RciBackgroundProcess> {
     const {path} = query;
     const key = String(path);
     const data = query.data || {};
@@ -106,6 +107,6 @@ export class RciManager<
       );
     }
 
-    return this.backgroundQueues[key].push(data as GenericObject, options);
+    return this.backgroundQueues[key].pushLazy(data as GenericObject, options);
   }
 }
