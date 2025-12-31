@@ -13,6 +13,6 @@ export const showSystemResponseSchema = z.object({
   swaptotal: z.number(),
   swapfree: z.number(),
   uptime: z.string(),
-  conntotal: z.number(),
-  connfree: z.number(),
+  conntotal: z.number().optional(),
+  connfree: z.number().optional(),
 });

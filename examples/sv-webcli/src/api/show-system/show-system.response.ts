@@ -13,6 +13,6 @@ export interface ShowSystemResponse {
   swaptotal: number;
   swapfree: number;
   uptime: string; // in seconds
-  conntotal: number;
-  connfree: number;
+  conntotal?: number;
+  connfree?: number;
 }
