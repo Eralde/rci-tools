@@ -6,5 +6,5 @@ export const probeResponseSchema = z.object({
   nameable: z.boolean().optional(),
   read_only: z.boolean().optional(),
   has_prompt: z.boolean().optional(),
-  found: z.boolean()
+  found: z.boolean(),
 });

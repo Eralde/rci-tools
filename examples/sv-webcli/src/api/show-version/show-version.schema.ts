@@ -7,7 +7,7 @@ const fwSchema = z.object({
 
 const ndwSchema = z.object({
   version: z.string(),
-})
+});
 
 export const showVersionResponseSchema = z.object({
   release: z.string(),

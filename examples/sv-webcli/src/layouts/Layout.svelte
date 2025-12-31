@@ -20,6 +20,7 @@ const LOAD_CHART_HEIGHT = 16;
 
 const destroy$ = useDestroy();
 
+let hasRrd: boolean = $state(false);
 let currentCpuLoad: number = $state(0);
 let currentMemoryLoad: number = $state(0);
 let cpuLoadHistory: number[] = $state([]);
@@ -42,6 +43,7 @@ async function fetchSystemStatus() {
     deviceService.getSystemLoadData(MAX_HISTORY_POINTS),
   );
 
+  hasRrd = monitorData.hasRrd;
   currentCpuLoad = monitorData.currentCpuLoad;
   cpuLoadHistory = monitorData.cpuLoadHistory;
   currentMemoryLoad = monitorData.currentMemoryLoad;
@@ -243,35 +245,37 @@ function handleInternetPopoverMouseLeave() {
       </div>
     {/if}
 
-    <div class="monitor-item monitor-item--rrd">
-      <div class="monitor-item__chart">
-        <div class="monitor-item__label">
-          CPU: {currentCpuLoad.toFixed(0)}%
+    {#if hasRrd}
+      <div class="monitor-item monitor-item--rrd">
+        <div class="monitor-item__chart">
+          <div class="monitor-item__label">
+            CPU: {currentCpuLoad.toFixed(0)}%
+          </div>
+
+          <RrdBarChart
+            data={cpuLoadHistory}
+            color="steelblue"
+            width={LOAD_CHART_WIDTH}
+            height={LOAD_CHART_HEIGHT}
+            barCount={MAX_HISTORY_POINTS}
+          />
         </div>
 
-        <RrdBarChart
-          data={cpuLoadHistory}
-          color="steelblue"
-          width={LOAD_CHART_WIDTH}
-          height={LOAD_CHART_HEIGHT}
-          barCount={MAX_HISTORY_POINTS}
-        />
-      </div>
+        <div class="monitor-item__chart">
+          <div class="monitor-item__label">
+            RAM: {currentMemoryLoad.toFixed(0)}%
+          </div>
 
-      <div class="monitor-item__chart">
-        <div class="monitor-item__label">
-          RAM: {currentMemoryLoad.toFixed(0)}%
+          <RrdBarChart
+            data={memoryLoadHistory}
+            color="seagreen"
+            width={LOAD_CHART_WIDTH}
+            height={LOAD_CHART_HEIGHT}
+            barCount={MAX_HISTORY_POINTS}
+          />
         </div>
-
-        <RrdBarChart
-          data={memoryLoadHistory}
-          color="seagreen"
-          width={LOAD_CHART_WIDTH}
-          height={LOAD_CHART_HEIGHT}
-          barCount={MAX_HISTORY_POINTS}
-        />
       </div>
-    </div>
+    {/if}
   </div>
 
   <div class="top-panel__right">
