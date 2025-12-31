@@ -14,6 +14,7 @@ import {
   skipWhile,
   switchMap,
   take,
+  takeUntil,
   timer,
 } from 'rxjs';
 import type {GenericObject, ObjectOrArray, Values} from '../../type.utils';
@@ -22,7 +23,7 @@ import {BaseHttpResponse, HttpTransport} from '../../transport';
 import {BackgroundTaskOptions, GenericResponse} from '../rci.manager.types';
 import type {RciBackgroundTaskOptions} from './rci.background-task';
 import {DEFAULT_BACKGROUND_TASK_OPTIONS, RciBackgroundTask} from './rci.background-task';
-import {RCI_BACKGROUND_PROCESS_FINISH_REASON, RciBackgroundProcess, RciBackgroundProcessStartExecutor} from './rci.background-process';
+import {RCI_BACKGROUND_PROCESS_FINISH_REASON, RciBackgroundProcess} from './rci.background-process';
 
 export const RCI_BACKGROUND_TASK_QUEUE_STATE = {
   // the queue is ready to process tasks
@@ -76,12 +77,16 @@ export class RciBackgroundTaskQueue<QueryPath extends string = string> {
     const task = new RciBackgroundTask(this.command, data, options);
     const trigger = new Subject<void>();
 
-    const startExecutor: RciBackgroundProcessStartExecutor = (process) => {
-      this.executeProcess(process);
-    };
+    const process = new RciBackgroundProcess(task);
 
-    const process = new RciBackgroundProcess(task, startExecutor);
     process.setQueued(trigger);
+
+    // subscribe to start$ to execute the process when it starts
+    process.start$
+      .pipe(takeUntil(process.done$))
+      .subscribe((processInstance) => {
+        this.executeProcess(processInstance);
+      });
 
     const queuedProcess: QueuedProcess<QueryPath> = {
       process,
