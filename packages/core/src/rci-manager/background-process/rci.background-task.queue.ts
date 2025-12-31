@@ -22,7 +22,7 @@ import {BaseHttpResponse, HttpTransport} from '../../transport';
 import {BackgroundTaskOptions, GenericResponse} from '../rci.manager.types';
 import type {RciBackgroundTaskOptions} from './rci.background-task';
 import {DEFAULT_BACKGROUND_TASK_OPTIONS, RciBackgroundTask} from './rci.background-task';
-import {RCI_BACKGROUND_PROCESS_FINISH_REASON, RciBackgroundProcess} from './rci.background-process';
+import {RCI_BACKGROUND_PROCESS_FINISH_REASON, RciBackgroundProcess, RciBackgroundProcessStartExecutor} from './rci.background-process';
 
 export const RCI_BACKGROUND_TASK_QUEUE_STATE = {
   // the queue is ready to process tasks
@@ -41,12 +41,18 @@ export const DEFAULT_QUEUE_BACKGROUND_TASK_OPTIONS: BackgroundTaskOptions = {
   onDataUpdate: () => {},
 };
 
+interface QueuedProcess<QueryPath extends string = string> {
+  process: RciBackgroundProcess<QueryPath>;
+  trigger: Subject<void>;
+  task: RciBackgroundTask<QueryPath>;
+}
+
 export class RciBackgroundTaskQueue<QueryPath extends string = string> {
-  protected tasks: RciBackgroundTask<QueryPath>[] = [];
+  protected queuedProcesses: QueuedProcess<QueryPath>[] = [];
   protected readonly pendingQueries$: ReplaySubject<RciQuery<QueryPath>[]> = new ReplaySubject<RciQuery<QueryPath>[]>(
     1,
   );
-  protected readonly nextTask$: Subject<RciBackgroundTask> = new Subject<RciBackgroundTask>();
+  protected readonly nextProcess$: Subject<QueuedProcess<QueryPath>> = new Subject<QueuedProcess<QueryPath>>();
   protected readonly stateSub$: BehaviorSubject<RciBackgroundTaskQueueState> = new BehaviorSubject<
     RciBackgroundTaskQueueState
   >(
@@ -66,45 +72,39 @@ export class RciBackgroundTaskQueue<QueryPath extends string = string> {
   public push(
     data: GenericObject,
     options: RciBackgroundTaskOptions = DEFAULT_BACKGROUND_TASK_OPTIONS,
-  ): RciBackgroundProcess {
+  ): RciBackgroundProcess<QueryPath> {
     const task = new RciBackgroundTask(this.command, data, options);
+    const trigger = new Subject<void>();
 
-    return this.addTask(task);
-  }
+    const startExecutor: RciBackgroundProcessStartExecutor = (process) => {
+      this.executeProcess(process);
+    };
 
-  public pushLazy(
-    data: GenericObject,
-    options: RciBackgroundTaskOptions = DEFAULT_BACKGROUND_TASK_OPTIONS,
-  ): Observable<RciBackgroundProcess> {
-    const task = new RciBackgroundTask(this.command, data, options);
+    const process = new RciBackgroundProcess(task, startExecutor);
+    process.setQueued(trigger);
 
-    return this.addTaskLazy(task);
-  }
+    const queuedProcess: QueuedProcess<QueryPath> = {
+      process,
+      trigger,
+      task,
+    };
 
-  protected addTask(task: RciBackgroundTask<QueryPath>): RciBackgroundProcess<QueryPath> {
     if (this.stateSub$.value === RCI_BACKGROUND_TASK_QUEUE_STATE.AWAITING_RESPONSE) {
-      this.tasks.push(task);
+      this.queuedProcesses.push(queuedProcess);
       this.updatePendingQueries();
     } else {
-      this.nextTask$.next(task);
+      this.nextProcess$.next(queuedProcess);
     }
 
-    return new RciBackgroundProcess(task);
-  }
-
-  protected addTaskLazy(task: RciBackgroundTask<QueryPath>): Observable<RciBackgroundProcess<QueryPath>> {
-    return of(true)
-      .pipe(
-        map(() => this.addTask(task)),
-      );
+    return process;
   }
 
   protected updatePendingQueries(): void {
-    const pendingQueries = this.tasks
+    const pendingQueries = this.queuedProcesses
       .map((item) => {
         return {
-          path: item.command,
-          data: item.data,
+          path: item.task.command,
+          data: item.task.data,
         };
       });
 
@@ -112,70 +112,69 @@ export class RciBackgroundTaskQueue<QueryPath extends string = string> {
   }
 
   protected initializePendingTasksQueueSubscription(): Subscription {
-    return this.nextTask$
-      .pipe(
-        switchMap((task) => {
-          this.stateSub$.next(RCI_BACKGROUND_TASK_QUEUE_STATE.AWAITING_RESPONSE);
+    return this.nextProcess$
+      .subscribe((queuedProcess) => {
+        this.stateSub$.next(RCI_BACKGROUND_TASK_QUEUE_STATE.AWAITING_RESPONSE);
 
-          const {command, data, options} = task;
+        // Fire the trigger to start the process.
+        // The process will call executeProcess via its startExecutor
+        queuedProcess.trigger.next();
+        queuedProcess.trigger.complete();
 
-          // Condition for optional abort of an ongoing task
-          const cancelTrigger$ = options.duration
-            ? timer(options.duration)
-            : NEVER;
+        // Wait for the process to complete, then start the next one
+        queuedProcess.process.done$.subscribe(() => {
+          this.stateSub$.next(RCI_BACKGROUND_TASK_QUEUE_STATE.READY);
 
-          const cancel$ = cancelTrigger$.pipe(map(() => RCI_BACKGROUND_PROCESS_FINISH_REASON.TIMED_OUT));
-          const abort$ = task.abortSub$.pipe(map(() => RCI_BACKGROUND_PROCESS_FINISH_REASON.ABORTED));
+          const head = this.queuedProcesses?.[0];
 
-          const query: RciQuery = {path: command, data};
-          const task$ = this.executeNextTask(
-            query,
-            {
-              onDataUpdate: (data) => task.responseSub$.next(data),
-            },
-          ) as Observable<GenericObject>;
+          if (head) {
+            this.queuedProcesses = this.queuedProcesses.slice(1);
 
-          const race$: Observable<GenericObject | RCI_BACKGROUND_PROCESS_FINISH_REASON> = race(task$, cancel$, abort$);
-
-          return race$
-            .pipe(
-              map((result) => {
-                return {
-                  result,
-                  task,
-                };
-              }),
-            );
-        }),
-      )
-      .subscribe(({result, task}) => {
-        this.stateSub$.next(RCI_BACKGROUND_TASK_QUEUE_STATE.READY);
-
-        if (typeof result === 'string') {
-          if (Object.values(RCI_BACKGROUND_PROCESS_FINISH_REASON).includes(result)) {
-            task.responseSub$.next(null);
-            task.doneSub$.next(result as RCI_BACKGROUND_PROCESS_FINISH_REASON);
-            task.doneSub$.complete();
-          } else {
-            // task.responseSub$.next(result);
-            task.markDone();
+            this.nextProcess$.next(head);
+            this.updatePendingQueries();
           }
+        });
+      });
+  }
+
+  public executeProcess(process: RciBackgroundProcess<QueryPath>): void {
+    const task = process.getTask();
+    const {command, data, options} = task;
+
+    // Condition for optional abort of an ongoing task
+    const cancelTrigger$ = options.duration
+      ? timer(options.duration)
+      : NEVER;
+
+    const cancel$ = cancelTrigger$.pipe(map(() => RCI_BACKGROUND_PROCESS_FINISH_REASON.TIMED_OUT));
+    const abort$ = task.abortSub$.pipe(map(() => RCI_BACKGROUND_PROCESS_FINISH_REASON.ABORTED));
+
+    const query: RciQuery = {path: command, data};
+    const task$ = this.executeNextTask(
+      query,
+      {
+        onDataUpdate: (data) => task.responseSub$.next(data),
+      },
+    ) as Observable<GenericObject>;
+
+    const race$: Observable<GenericObject | RCI_BACKGROUND_PROCESS_FINISH_REASON> = race(task$, cancel$, abort$);
+
+    race$.subscribe((result) => {
+      if (typeof result === 'string') {
+        if (Object.values(RCI_BACKGROUND_PROCESS_FINISH_REASON).includes(result)) {
+          task.responseSub$.next(null);
+          task.doneSub$.next(result as RCI_BACKGROUND_PROCESS_FINISH_REASON);
+          task.doneSub$.complete();
         } else {
-          task.responseSub$.next(result as GenericObject);
           task.markDone();
         }
+      } else {
+        task.responseSub$.next(result as GenericObject);
+        task.markDone();
+      }
 
-        task.responseSub$.complete();
-
-        const head = this.tasks?.[0];
-
-        if (head) {
-          this.tasks = this.tasks.slice(1);
-
-          this.nextTask$.next(head);
-          this.updatePendingQueries();
-        }
-      });
+      task.responseSub$.complete();
+    });
   }
 
   protected executeNextTask(

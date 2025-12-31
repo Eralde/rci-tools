@@ -1,10 +1,15 @@
-import {Observable} from 'rxjs';
 import {map, timeout} from 'rxjs/operators';
 import {BaseHttpResponse, HttpTransport} from '../transport';
 import type {GenericObject} from '../type.utils';
 import {RciQuery, RciTask} from './query';
 import {RCI_QUEUE_DEFAULT_BATCH_TIMEOUT, RciQueue} from './queue';
-import {RciBackgroundProcess, RciBackgroundTaskOptions, RciBackgroundTaskQueue} from './background-process';
+import {
+  RciBackgroundProcess,
+  RciBackgroundProcessStartExecutor,
+  RciBackgroundTaskOptions,
+  RciBackgroundTaskQueue,
+} from './background-process';
+import {RciBackgroundTask} from './background-process/rci.background-task';
 import {RciPayloadHelper} from './payload';
 import type {GenericResponse, QueueOptions} from './rci.manager.types';
 import {DEFAULT_QUEUE_OPTIONS, RCI_QUERY_TIMEOUT} from './rci.manager.constants';
@@ -82,19 +87,29 @@ export class RciManager<
     }
   }
 
-  public executeBackgroundProcess(
+  public initBackgroundProcess(
     query: RciQuery<BackgroundQueryPath>,
     options: RciBackgroundTaskOptions = {},
-  ): Observable<RciBackgroundProcess> {
-    const queue = new RciBackgroundTaskQueue<BackgroundQueryPath>(this.rciPath, query.path, this.httpTransport);
+  ): RciBackgroundProcess<BackgroundQueryPath> {
+    const task = new RciBackgroundTask<BackgroundQueryPath>(query.path, query.data as GenericObject || {}, options);
 
-    return queue.pushLazy(query.data as GenericObject, options);
+    // Create a temporary queue for execution when process starts
+    const startExecutor: RciBackgroundProcessStartExecutor = (process) => {
+      const queue = new RciBackgroundTaskQueue<BackgroundQueryPath>(
+        this.rciPath,
+        query.path,
+        this.httpTransport,
+      );
+      queue.executeProcess(process);
+    };
+
+    return new RciBackgroundProcess<BackgroundQueryPath>(task, startExecutor);
   }
 
   public queueBackgroundProcess(
     query: RciQuery<BackgroundQueryPath>,
     options: RciBackgroundTaskOptions = {},
-  ): Observable<RciBackgroundProcess> {
+  ): RciBackgroundProcess<BackgroundQueryPath> {
     const {path} = query;
     const key = String(path);
     const data = query.data || {};
@@ -107,6 +122,6 @@ export class RciManager<
       );
     }
 
-    return this.backgroundQueues[key].pushLazy(data as GenericObject, options);
+    return this.backgroundQueues[key].push(data as GenericObject, options);
   }
 }

@@ -1,4 +1,4 @@
-import {Observable, catchError, exhaustMap, of, tap} from 'rxjs';
+import {Observable, catchError, exhaustMap, of} from 'rxjs';
 import {AxiosTransport} from '@rci-tools/adapter-axios';
 import {GenericObject, GenericResponse, RciBackgroundProcess, RciManager, RciQuery, SessionManager} from '@rci-tools/core';
 
@@ -35,18 +35,17 @@ export class RciService {
       );
   }
 
-  public queueBackgroundProcess(path: string, data: GenericObject): Observable<RciBackgroundProcess> {
+  public queueBackgroundProcess(path: string, data: GenericObject): RciBackgroundProcess {
     console.log('Adding a "continued" task to the queue', path, data);
 
-    return this.manager.queueBackgroundProcess({path, data})
-      .pipe(
-        tap((process) => {
-          process.done$
-            .subscribe((done) => {
-              console.warn('"continued" task done', {path, data, done});
-            });
-        }),
-      );
+    const process = this.manager.queueBackgroundProcess({path, data});
+
+    process.done$
+      .subscribe((done) => {
+        console.warn('"continued" task done', {path, data, done});
+      });
+
+    return process;
   }
 
   public ensureAuth(): Observable<boolean> {
