@@ -1,6 +1,6 @@
 import {RciService} from '../rci.service.ts';
-import {Observable, map, switchMap} from 'rxjs';
-import {RciQuery} from '@rci-tools/core';
+import {Observable, map} from 'rxjs';
+import {RciBackgroundProcess, RciQuery} from '@rci-tools/core';
 import {ShowLogResponse} from './show-log.response.ts';
 import {showLogResponseSchema} from './show-log.schema.ts';
 
@@ -25,7 +25,7 @@ export class ShowLogService {
       );
   }
 
-  public read(maxLines?: number): Observable<ShowLogResponse> {
+  public queueBackgroundProcess(maxLines?: number): RciBackgroundProcess {
     const data = maxLines ? {'max-lines': maxLines} : {};
 
     const query: RciQuery = {
@@ -33,10 +33,6 @@ export class ShowLogService {
       data,
     };
 
-    return this.rciService.queueBackgroundProcess(query)
-      .pipe(
-        switchMap((task) => task.data$),
-        map((response) => showLogResponseSchema.parse(response)),
-      );
+    return this.rciService.queueBackgroundProcess(query);
   }
 }

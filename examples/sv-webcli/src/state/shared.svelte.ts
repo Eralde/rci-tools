@@ -1,4 +1,6 @@
 import type {DockviewApi} from 'dockview-core';
+import type {RciBackgroundProcess} from '@rci-tools/core';
+import type {Subscription} from 'rxjs';
 import {LogItem} from '../api';
 
 interface SharedState {
@@ -7,6 +9,8 @@ interface SharedState {
   isLogVisible: boolean;
   vendor: string | null;
   device: string | null;
+  logPollerSubscription: Subscription | null;
+  logPollerProcess: RciBackgroundProcess | null;
 }
 
 export const LOG_PANEL_ID = 'log-panel';
@@ -21,6 +25,8 @@ export const shared = $state<SharedState>({
   isLogVisible: false,
   vendor: null,
   device: null,
+  logPollerSubscription: null,
+  logPollerProcess: null,
 });
 
 export const saveLayout = (): void => {
@@ -73,4 +79,18 @@ export const loadLayout = (): boolean => {
 
 export const clearDockviewLayout = (): void => {
   localStorage.removeItem(LAYOUT_STORAGE_KEY);
+};
+
+export const stopLogPoller = (): void => {
+  if (shared.logPollerSubscription) {
+    shared.logPollerSubscription.unsubscribe();
+
+    shared.logPollerSubscription = null;
+  }
+
+  if (shared.logPollerProcess) {
+    shared.logPollerProcess.abort();
+
+    shared.logPollerProcess = null;
+  }
 };

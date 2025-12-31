@@ -5,7 +5,7 @@ import {firstValueFrom, interval, takeUntil} from 'rxjs';
 import {LOGIN_URL, navigate} from '../router.ts';
 import {deviceService} from '../services';
 import {Button, ChartPopover, RrdBarChart} from '../components';
-import {shared} from '../state/shared.svelte.ts';
+import {shared, stopLogPoller} from '../state/shared.svelte.ts';
 import {useDestroy} from '../utils';
 import {rciService} from '../api';
 import type {RrdTick} from '../api';
@@ -92,9 +92,27 @@ onMount(() => {
       void fetchSystemStatus();
       void fetchInterfaceStatus();
     });
+
+  // start polling log on component mount (only mounts after user logs in)
+  const {data$, process} = deviceService.startLogPoller();
+
+  shared.log = [];
+
+  shared.logPollerProcess = process;
+  shared.logPollerSubscription = data$.subscribe((v) => {
+    shared.log = [...shared.log, ...v];
+  });
+
+  return () => {
+    // cleanup log poller on unmount
+    stopLogPoller();
+  };
 });
 
 const logout = () => {
+  // cleanup log poller on logout
+  stopLogPoller();
+
   rciService.logout()
     .subscribe(() => {
       shared.log = [];

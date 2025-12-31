@@ -1,6 +1,5 @@
 <script lang="ts">
-import {onDestroy, onMount} from 'svelte';
-import {Subscription} from 'rxjs';
+import {onMount} from 'svelte';
 import {
   type DockviewApi,
   type DockviewIDisposable,
@@ -18,7 +17,6 @@ import {
   RestApiRenderer,
   TerminalWrapperRenderer,
 } from '../components/renderers';
-import {deviceService} from '../services/';
 import {
   CLI_PANEL_ID,
   HTTP_API_PANEL_ID,
@@ -157,15 +155,6 @@ onMount(() => {
 const onLogToggleClick = () => {
   toggleLogPanel();
 };
-
-$effect(() => {
-  const sub: Subscription = deviceService.getLog()
-    .subscribe((v) => {
-      shared.log = [...shared.log, ...v];
-    });
-
-  onDestroy(() => sub.unsubscribe());
-});
 </script>
 
 <div class="dockview-wrapper">
