@@ -120,7 +120,7 @@ class DeviceService {
   }
 
   public startLogPoller(): {data$: Observable<LogItem[]>; process: RciBackgroundProcess} {
-    const process = this.showLogApi.startBackgroundProcess(300);
+    const process = this.showLogApi.queueBackgroundProcess(300);
 
     const data$ = process.data$
       .pipe(

@@ -25,7 +25,7 @@ export class ShowLogService {
       );
   }
 
-  public startBackgroundProcess(maxLines?: number): RciBackgroundProcess {
+  public queueBackgroundProcess(maxLines?: number): RciBackgroundProcess {
     const data = maxLines ? {'max-lines': maxLines} : {};
 
     const query: RciQuery = {
