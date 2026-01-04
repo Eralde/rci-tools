@@ -29,7 +29,6 @@ export const DEFAULT_BACKGROUND_TASK_OPTIONS: RciBackgroundTaskOptions = {durati
 
 export const DEFAULT_BACKGROUND_TASK_EXECUTION_OPTIONS: BackgroundTaskOptions = {
   timeout: 1000,
-  skipPostQuery: false,
   isInfinite: false,
   onDataUpdate: () => {},
 };
@@ -184,7 +183,6 @@ export class RciBackgroundProcess<CommandType extends string = string> {
       this.data,
       {
         timeout: 1000, // default timeout
-        skipPostQuery: false,
         isInfinite: false,
         onDataUpdate: (data) => this.responseSub$.next(data),
       },
@@ -229,44 +227,41 @@ export class RciBackgroundProcess<CommandType extends string = string> {
     const postQuery = () => this.httpTransport.post(url, data);
     const getQuery = () => this.httpTransport.get(url);
 
-    const initialQuery = _options.skipPostQuery
-      ? getQuery()
-      : postQuery();
+    return postQuery()
+      .pipe(
+        switchMap((response) => {
+          if (isFinished(response)) {
+            return of(response.data as ObjectOrArray);
+          }
 
-    return initialQuery.pipe(
-      switchMap((response) => {
-        if (isFinished(response)) {
-          return of(response.data as ObjectOrArray);
-        }
+          const queryPipe$ = of(null)
+            .pipe(
+              switchMap(() => getQuery()),
+              map((getResponse) => {
+                onDataUpdate(getResponse.data);
 
-        const queryPipe$ = of(null)
-          .pipe(
-            switchMap(() => getQuery()),
-            map((getResponse) => {
-              onDataUpdate(getResponse.data);
+                return getResponse;
+              }),
+              delayWhen((getResponse) => timer(isFinished(getResponse) ? 0 : queryTimeout)),
+              repeat(),
+            );
 
-              return getResponse;
-            }),
-            delayWhen((getResponse) => timer(isFinished(getResponse) ? 0 : queryTimeout)),
-            repeat(),
-          );
+          if (_options.isInfinite) {
+            return merge(
+              of(response.data as ObjectOrArray),
+              queryPipe$.pipe(map((currentResponse) => currentResponse.data as ObjectOrArray)),
+            );
+          }
 
-        if (_options.isInfinite) {
-          return merge(
-            of(response.data as ObjectOrArray),
-            queryPipe$.pipe(map((currentResponse) => currentResponse.data as ObjectOrArray)),
-          );
-        }
+          onDataUpdate(response.data);
 
-        onDataUpdate(response.data);
-
-        return queryPipe$
-          .pipe(
-            skipWhile((getResponse) => !isFinished(getResponse)),
-            map((finalResponse) => finalResponse.data as ObjectOrArray),
-            take(1),
-          );
-      }),
-    ) as Observable<GenericObject>;
+          return queryPipe$
+            .pipe(
+              skipWhile((getResponse) => !isFinished(getResponse)),
+              map((finalResponse) => finalResponse.data as ObjectOrArray),
+              take(1),
+            );
+        }),
+      ) as Observable<GenericObject>;
   }
 }
