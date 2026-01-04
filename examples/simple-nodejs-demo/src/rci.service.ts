@@ -1,6 +1,6 @@
 import {Observable, catchError, exhaustMap, of} from 'rxjs';
 import {AxiosTransport} from '@rci-tools/adapter-axios';
-import {GenericObject, GenericResponse, RciBackgroundProcess, RciManager, RciQuery, SessionManager} from '@rci-tools/core';
+import {GenericResponse, RciBackgroundProcess, RciManager, RciQuery, SessionManager} from '@rci-tools/core';
 
 export interface DeviceCredentials {
   address: string;
@@ -35,10 +35,15 @@ export class RciService {
       );
   }
 
-  public queueBackgroundProcess(path: string, data: GenericObject): RciBackgroundProcess {
+  public queueBackgroundProcess(
+    path: string,
+    data: RciQuery['data'],
+    options?: {timeout?: number},
+  ): RciBackgroundProcess {
     console.log('Adding a "continued" task to the queue', path, data);
 
-    const process = this.manager.queueBackgroundProcess({path, data});
+    const query: RciQuery = {path, data: data || {}};
+    const process = this.manager.queueBackgroundProcess(query, options);
 
     process.done$
       .subscribe((done) => {
