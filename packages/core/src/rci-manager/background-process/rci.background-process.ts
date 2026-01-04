@@ -3,6 +3,7 @@ import {
   NEVER,
   Observable,
   ReplaySubject,
+  Subject,
   delayWhen,
   filter,
   map,
@@ -10,8 +11,6 @@ import {
   race,
   repeat,
   skipWhile,
-  Subject,
-  Subscription,
   switchMap,
   take,
   timer,
@@ -61,19 +60,17 @@ export class RciBackgroundProcess<CommandType extends string = string> {
   public readonly data: RciQuery['data'];
   public readonly options: RciBackgroundProcessOptions;
 
-  public readonly responseSub$: Subject<GenericObject | null> = new Subject<GenericObject | null>();
-  public readonly doneSub$: Subject<RCI_BACKGROUND_PROCESS_FINISH_REASON> = new Subject<
+  private readonly responseSub$: Subject<GenericObject | null> = new Subject<GenericObject | null>();
+  private readonly doneSub$: Subject<RCI_BACKGROUND_PROCESS_FINISH_REASON> = new Subject<
     RCI_BACKGROUND_PROCESS_FINISH_REASON
   >();
-  public readonly abortSub$: ReplaySubject<void> = new ReplaySubject<void>(1);
+  private readonly abortSub$: ReplaySubject<void> = new ReplaySubject<void>(1);
 
-  protected readonly rciPath: string;
-  protected readonly httpTransport: HttpTransport<BaseHttpResponse>;
+  private readonly rciPath: string;
+  private readonly httpTransport: HttpTransport<BaseHttpResponse>;
 
-  private readonly stateSub$: BehaviorSubject<RCI_BACKGROUND_PROCESS_STATE> = new BehaviorSubject<RCI_BACKGROUND_PROCESS_STATE>(RCI_BACKGROUND_PROCESS_STATE.INIT);
+  private readonly stateSub$ = new BehaviorSubject<RCI_BACKGROUND_PROCESS_STATE>(RCI_BACKGROUND_PROCESS_STATE.INIT);
   private readonly startTrigger$: Subject<void> = new Subject<void>();
-  private readonly start$: Observable<this>;
-  private startSubscription?: Subscription;
 
   constructor(
     command: CommandType,
@@ -91,18 +88,19 @@ export class RciBackgroundProcess<CommandType extends string = string> {
     this.data$ = this.responseSub$.asObservable().pipe(filter(Boolean));
     this.done$ = this.doneSub$.asObservable();
     this.state$ = this.stateSub$.asObservable();
-    this.start$ = this.startTrigger$
+
+    this.startTrigger$
       .pipe(
-        filter(() => this.stateSub$.value === RCI_BACKGROUND_PROCESS_STATE.INIT || this.stateSub$.value === RCI_BACKGROUND_PROCESS_STATE.QUEUED),
+        filter(() =>
+          this.stateSub$.value === RCI_BACKGROUND_PROCESS_STATE.INIT
+          || this.stateSub$.value === RCI_BACKGROUND_PROCESS_STATE.QUEUED
+        ),
         map(() => {
           this.stateSub$.next(RCI_BACKGROUND_PROCESS_STATE.RUNNING);
 
           return this;
         }),
-      );
-
-    // subscribe to start$ to execute HTTP requests when process starts
-    this.start$
+      )
       .subscribe(() => {
         this.execute();
       });
@@ -150,7 +148,7 @@ export class RciBackgroundProcess<CommandType extends string = string> {
     return true;
   }
 
-  public setQueued(trigger: Subject<void>): boolean {
+  public setQueued(trigger: Observable<unknown>): boolean {
     if (this.stateSub$.value !== RCI_BACKGROUND_PROCESS_STATE.INIT) {
       console.error(`Cannot queue process: current state is ${this.stateSub$.value}`);
 
@@ -159,14 +157,13 @@ export class RciBackgroundProcess<CommandType extends string = string> {
 
     this.stateSub$.next(RCI_BACKGROUND_PROCESS_STATE.QUEUED);
 
-    // unsubscribe from previous trigger and subscribe to queue trigger
-    if (this.startSubscription) {
-      this.startSubscription.unsubscribe();
-    }
-
-    this.startSubscription = trigger.subscribe(() => {
-      this.startTrigger$.next();
-    });
+    trigger
+      .pipe(
+        take(1),
+      )
+      .subscribe(() => {
+        this.startTrigger$.next();
+      });
 
     return true;
   }
