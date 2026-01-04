@@ -67,8 +67,8 @@ interface RciManager<
 > {
   execute(query: RciTask<QueryPath>): Observable<any>;
   queue(query: RciTask<QueryPath>, options?: QueueOptions): Observable<any>;
-  executeBackgroundProcess(query: RciQuery<BackgroundQueryPath>, options?: RciBackgroundTaskOptions): RciBackgroundProcess;
-  queueBackgroundProcess(query: RciQuery<BackgroundQueryPath>, options?: RciBackgroundTaskOptions): RciBackgroundProcess;
+  initBackgroundProcess(query: RciQuery<BackgroundQueryPath>, options?: RciBackgroundProcessOptions): RciBackgroundProcess;
+  queueBackgroundProcess(query: RciQuery<BackgroundQueryPath>, options?: RciBackgroundProcessOptions): RciBackgroundProcess;
 }
 ```
 
@@ -318,35 +318,40 @@ all$
   });
 ```
 
-#### 4. Фоновые процессы
+#### Фоновые процессы
 
 Для [фоновых процессов](../../docs/RCI_API.ru.md#23-фоновые-процессы)
 `RciManager` предоставляет два метода, также принимающих объекты `RciQuery`:
 
-- **`executeBackgroundProcess(query, options?)`**: возвращает объект `RciBackgroundProcess`,
-  который можно вручную прервать. HTTP-запрос на запуск фонового процесса отправляется сразу при вызове.
-  Однако этот метод не предотвращает параллельный запуск нескольких фоновых процессов
-  с одной и той же командой, но разными аргументами.
+- **`initBackgroundProcess(query, options?)`**: возвращает объект `RciBackgroundProcess`,
+  который нужно запускать вручную. Этот метод полезен, если вам нужен полный контроль
+- над жизненным циклом фонового процесса (вы также можете вручную прервать процесс до его завершения).
 
-- **`queueBackgroundProcess(query, options?)`**: Ставит фоновый процесс в очередь. Запросы с одинаковым
-  значением `path` группируются в одну очередь, что гарантирует, что несколько вызовов одной и той же команды
-  с разными аргументами не будут выполняться параллельно.
+- **`queueBackgroundProcess(query, options?)`**: Ставит фоновый процесс в очередь.
+  Запросы с одинаковым значением `path` группируются в одну очередь, что гарантирует,
+  что несколько вызовов одной и той же команды с разными аргументами не будут
+  выполняться параллельно. Это важно для обхода ограничений API при работе в браузере,
+  где обычно используется одна HTTP-сессия для всех запросов.
 
 Оба метода возвращают объект `RciBackgroundProcess` со следующими свойствами:
+- `state$`: Observable, который выдаёт обновления состояния процесса
 - `data$`: Observable, который выдаёт обновления данных по мере выполнения фонового процесса
 - `done$`: Observable, который выдаёт событие по завершении процесса (с причиной: `'completed'`, `'aborted'` или `'timed_out'`)
+- `start()`: Метод для ручного запуска процесса (не должен вызываться для процессов из очереди)
 - `abort()`: Метод для ручного прерывания процесса
 
 ```typescript
 interface RciBackgroundProcess {
+  state$: Observable<RCI_BACKGROUND_PROCESS_STATE>;
   data$: Observable<GenericObject | null>;
   done$: Observable<RCI_BACKGROUND_PROCESS_FINISH_REASON>;
 
-  abort(): void
+  start(): boolean;
+  abort(): boolean;
 }
 ```
 
-Пример использования `executeBackgroundProcess`:
+Пример использования `initBackgroundProcess`:
 
 ```typescript
 const pingQuery: RciQuery = {
@@ -358,7 +363,7 @@ const pingQuery: RciQuery = {
   },
 };
 
-const ping$ = rciManager.executeBackgroundProcess(pingQuery);
+const ping$ = rciManager.initBackgroundProcess(pingQuery);
 
 ping$.data$
   .subscribe((data) => {
@@ -369,6 +374,8 @@ ping$.done$
   .subscribe((reason) => {
     console.log('Ping завершён:', reason);
   });
+
+ping$.start();
 ```
 
 Вы также можете вручную прервать фоновый процесс до его завершения:
@@ -383,7 +390,7 @@ const pingQuery: RciQuery = {
   },
 };
 
-const ping$ = rciManager.executeBackgroundProcess(pingQuery);
+const ping$ = rciManager.initBackgroundProcess(pingQuery);
 
 ping$.data$
   .subscribe((data) => {
@@ -395,10 +402,13 @@ ping$.done$
     console.log('Ping завершён:', reason);
   });
 
+ping$.start();
+
 setTimeout(() => ping$.abort(), 4000);
 ```
 
-Пример с `queueBackgroundProcess`:
+Для управления несколькими фоновыми процессами с одной и той же командой, но разными аргументами,
+используйте `queueBackgroundProcess`, чтобы они не выполнялись параллельно:
 
 ```typescript
 import {forkJoin, firstValueFrom} from 'rxjs';
