@@ -121,7 +121,7 @@ const executeBackgroundProcesses = async (rciService: RciService): Promise<void>
     return {task: process, description: item.description, index};
   });
 
-  // manually abort process #2 after 1 second (after waiting for process #1 to complete)
+  // manually abort process #2 after waiting for process #1 to complete + 1 second
   pingTasks[0]!.task.done$.subscribe(
     () => {
       console.log('\n[!] Manually aborting process #2 after 1 second [!]\n');
