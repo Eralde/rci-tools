@@ -7,17 +7,8 @@
 `@rci-tools/core` &mdash; is an `npm` package for interacting with the [RCI API](../../docs/RCI_API.md).
 Two main classes exported by this package are:
 
-- [SessionManager](./src/session-manager/session-manager.ts): Handles authentication on the device.
-- [RciManager](./src/rci-manager/rci.manager.ts): The main class to interact with the API.
-
-The `SessionManager` implements [password-based authentication](../../docs/AUTH.md).
-
-The `RciManager` is responsible for actual device configuration/monitoring.
-It has a few advantages over just using `fetch/xhr/axios/...`:
-- queries from multiple method calls can be batched into a single HTTP request
-- there is a simple priority system:
-  priority queries block the non-priority ones until they are finished
-- it provides a convenient way to handle background processes
+- [SessionManager](./src/session-manager/session-manager.ts): Implements [password-based authentication](../../docs/AUTH.md).
+- [RciManager](./src/rci-manager/rci.manager.ts): The main class to interact with the API in a uniform way.
 
 Both classes require an [`HTTP transport` instance](./src/transport/http.transport.ts) to
 send HTTP requests to the device. The `@rci-tools/core` module providers
@@ -56,8 +47,14 @@ Two remaining methods are:
 
 ### `RciManager`
 
-The `RciManager` is used to interact with the RCI API.
-It has the following interface:
+The `RciManager` class is used to interact with the RCI API.
+It has a few advantages over just using `fetch/xhr/axios/...`:
+- queries from multiple method calls can be batched into a single HTTP request
+- there is a simple priority system:
+  priority queries block the non-priority ones until they are finished
+- it provides a convenient way to handle background processes
+
+The `RciManager` class has the following interface:
 
 ```typescript
 interface RciManager<
