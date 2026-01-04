@@ -21,10 +21,10 @@ import {BaseHttpResponse, HttpTransport} from '../../transport';
 import {RciQuery} from '../query';
 
 export interface RciBackgroundProcessOptions {
-  duration?: number;
+  timeout?: number;
 }
 
-export const DEFAULT_BACKGROUND_PROCESS_OPTIONS: RciBackgroundProcessOptions = {duration: 0};
+export const DEFAULT_BACKGROUND_PROCESS_OPTIONS: RciBackgroundProcessOptions = {timeout: 0};
 
 export enum RCI_BACKGROUND_PROCESS_FINISH_REASON {
   DONE = 'DONE',
@@ -177,8 +177,8 @@ export class RciBackgroundProcess<CommandType extends string = string> {
   }
 
   protected execute(): void {
-    const timeoutTrigger$ = this.options.duration
-      ? timer(this.options.duration)
+    const timeoutTrigger$ = this.options.timeout
+      ? timer(this.options.timeout)
       : NEVER;
 
     const timeout$ = timeoutTrigger$.pipe(map(() => RCI_BACKGROUND_PROCESS_FINISH_REASON.TIMED_OUT));
@@ -195,11 +195,11 @@ export class RciBackgroundProcess<CommandType extends string = string> {
 
     const race$: Observable<GenericObject | RCI_BACKGROUND_PROCESS_FINISH_REASON> = race(task$, timeout$, abort$);
 
-    race$.subscribe((result) => {
+    race$.subscribe((result: GenericObject | RCI_BACKGROUND_PROCESS_FINISH_REASON) => {
       if (typeof result === 'string') {
         if (Object.values(RCI_BACKGROUND_PROCESS_FINISH_REASON).includes(result)) {
           this.responseSub$.next(null);
-          this.doneSub$.next(result as RCI_BACKGROUND_PROCESS_FINISH_REASON);
+          this.doneSub$.next(result);
           this.doneSub$.complete();
         } else {
           this.markDone();
