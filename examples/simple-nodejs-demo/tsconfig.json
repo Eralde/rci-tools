@@ -16,13 +16,5 @@
   },
   "include": [
     "src"
-  ],
-  "references": [
-    {
-      "path": "../../packages/core"
-    },
-    {
-      "path": "../../packages/adapter-axios"
-    }
   ]
 }
