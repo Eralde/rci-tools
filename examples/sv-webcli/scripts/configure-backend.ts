@@ -16,7 +16,7 @@ import {
 } from './conf';
 import {config} from './args';
 
-const {sshHost, sshPort, sshKey, httpPort, ttydScriptsDir} = config;
+const {sshHost, sshPort, sshKey, httpPort, ttydScriptsDir, remoteWwwRoot} = config;
 
 let password = '';
 
@@ -71,7 +71,12 @@ const configureBackend = async (): Promise<void> => {
 
     console.log('\nStep 1: ensuring required packages are installed');
     try {
-      await executeRemoteCommand(ssh, sshHost, 'PATH=/opt/sbin:/opt/bin:$PATH opkg update', 'Updating opkg package lists');
+      await executeRemoteCommand(
+        ssh,
+        sshHost,
+        'PATH=/opt/sbin:/opt/bin:$PATH opkg update',
+        'Updating opkg package lists',
+      );
 
       const pkgList = PACKAGES_LIST.join(' ');
 
@@ -113,13 +118,18 @@ const configureBackend = async (): Promise<void> => {
 
       console.log(`${LIGHTTPD_CONF_TEMPLATE} copied successfully.`);
 
+      // Escape the www root path for use in sed (escape forward slashes)
+      const escapedWwwRoot = remoteWwwRoot.replace(/\//g, '\\/');
+
       // a) get current `br0` address and replace <DEVICE_HOME_SEGMENT_IP> in the config template with it
       // b) replace <HTTP_PORT> with `httpPortValue`
+      // c) replace <WWW_ROOT> with escaped `remoteWwwRoot`
       const getIpAndFillTemplateCmd = `
         HOME_IP=$(/opt/sbin/ip -4 addr show br0 | /opt/bin/awk '/inet / {print $2}' | /opt/bin/cut -d/ -f1) && \
         /opt/bin/sed \
             -e "s/<DEVICE_HOME_SEGMENT_IP>/$HOME_IP/g" \
             -e "s/<HTTP_PORT>/${httpPort}/g" \
+            -e "s/<WWW_ROOT>/${escapedWwwRoot}/g" \
             ${remoteTemplatePath} > ${remoteConfPath}
       `;
 
@@ -130,6 +140,15 @@ const configureBackend = async (): Promise<void> => {
         `Filling ${LIGHTTPD_CONF} template on ${sshHost}`,
       );
       console.log(`${LIGHTTPD_CONF} filled successfully from template.`);
+
+      await executeRemoteCommand(
+        ssh,
+        sshHost,
+        `rm -f ${remoteTemplatePath}`,
+        `Removing lighttpd conf template from ${sshHost}`,
+      );
+
+      console.log('Lighttpd configuration template processing complete.');
     } catch (error) {
       console.error(`Failed to copy or process ${LIGHTTPD_CONF_TEMPLATE}`);
       process.exit(1);

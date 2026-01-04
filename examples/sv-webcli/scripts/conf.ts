@@ -19,8 +19,8 @@ export const PACKAGES_LIST = [
 ];
 
 export const LIGHTTPD_CONF_TEMPLATE = 'template.lighttpd.conf';
-export const LIGHTTPD_CONF = 'lighttpd.conf';
-export const LIGHTTPD_CONF_REMOTE_DIR = '/opt/etc/lighttpd';
+export const LIGHTTPD_CONF = '100-sv-webcli.conf';
+export const LIGHTTPD_CONF_REMOTE_DIR = '/opt/etc/lighttpd/conf.d';
 
 // CLI argument option names
 export const ARG_DEVICE_ADDR = 'device-addr';
