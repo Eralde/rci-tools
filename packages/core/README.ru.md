@@ -65,8 +65,8 @@ interface RciManager<
   QueryPath extends string = string, // допустимые значения 'path' для обычных RCI-запросов
   BackgroundQueryPath extends string = string // допустимые значения 'path' для фоновых процессов
 > {
-  execute(query: RciTask<QueryPath>): GenericResponse;
-  queue(query: RciTask<QueryPath>, options?: QueueOptions): GenericResponse;
+  execute(query: RciTask<QueryPath>): Observable<any>;
+  queue(query: RciTask<QueryPath>, options?: QueueOptions): Observable<any>;
   executeBackgroundProcess(query: RciQuery<BackgroundQueryPath>, options?: RciBackgroundTaskOptions): RciBackgroundProcess;
   queueBackgroundProcess(query: RciQuery<BackgroundQueryPath>, options?: RciBackgroundTaskOptions): RciBackgroundProcess;
 }

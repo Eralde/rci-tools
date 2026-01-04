@@ -1,6 +1,3 @@
-import {Observable} from 'rxjs';
-import type {ObjectOrArray} from '../type.utils';
-
 export interface QueueOptions {
   saveConfiguration?: boolean;
   isPriorityTask?: boolean;
@@ -12,5 +9,3 @@ export interface RciResponse {
   status?: unknown;
   body?: unknown;
 }
-
-export type GenericResponse = Observable<ObjectOrArray>;

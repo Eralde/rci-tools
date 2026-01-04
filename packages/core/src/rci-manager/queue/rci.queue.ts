@@ -3,7 +3,6 @@ import {buffer, catchError, exhaustMap, filter, map, switchMap, take, takeUntil,
 import {RciPayloadHelper} from '../payload';
 import type {BaseHttpResponse, HttpTransport} from '../../transport';
 import type {GenericObject, ObjectOrArray} from '../../type.utils';
-import type {GenericResponse} from '../rci.manager.types';
 import {RCI_QUERY_TIMEOUT} from '../rci.manager.constants';
 import {RciQuery, RciTask} from '../query';
 import {RCI_QUEUE_STATE, RciQueueOptions, RciQueueState, Task} from './rci.queue.types';
@@ -64,7 +63,7 @@ export class RciQueue<ResponseType extends BaseHttpResponse> {
       && obj?.[0].length === 0;
   }
 
-  public addTask(query: RciTask, saveConfiguration: boolean = false): GenericResponse {
+  public addTask(query: RciTask, saveConfiguration: boolean = false): Observable<any> {
     const task$ = this.processTask(query, saveConfiguration);
 
     if (!this.blockerQueue) {
@@ -105,7 +104,7 @@ export class RciQueue<ResponseType extends BaseHttpResponse> {
       );
   }
 
-  private processTask(query: RciTask, saveConfiguration: boolean = false): GenericResponse {
+  private processTask(query: RciTask, saveConfiguration: boolean = false): Observable<any> {
     // Outer Observable is required to avoid adding a new task
     // until returned Observable is actually subscribed to
     return of(true)

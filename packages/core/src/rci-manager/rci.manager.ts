@@ -1,10 +1,11 @@
+import {Observable} from 'rxjs';
 import {map, timeout} from 'rxjs/operators';
 import {BaseHttpResponse, HttpTransport} from '../transport';
 import {RciQuery, RciTask} from './query';
 import {RCI_QUEUE_DEFAULT_BATCH_TIMEOUT, RciQueue} from './queue';
 import {RciBackgroundProcess, RciBackgroundProcessOptions, RciBackgroundTaskQueue} from './background-process';
 import {RciPayloadHelper} from './payload';
-import type {GenericResponse, QueueOptions} from './rci.manager.types';
+import type {QueueOptions} from './rci.manager.types';
 import {DEFAULT_QUEUE_OPTIONS, RCI_QUERY_TIMEOUT} from './rci.manager.constants';
 
 export class RciManager<
@@ -43,7 +44,7 @@ export class RciManager<
     );
   }
 
-  public execute(query: RciTask<QueryPath>): GenericResponse {
+  public execute(query: RciTask<QueryPath>): Observable<any> {
     const isSingleQuery = !Array.isArray(query);
     const queryList: Array<RciQuery<QueryPath>> = isSingleQuery
       ? [query]
@@ -72,7 +73,7 @@ export class RciManager<
   public queue(
     query: RciTask<QueryPath>,
     options: QueueOptions = DEFAULT_QUEUE_OPTIONS,
-  ): GenericResponse {
+  ): Observable<any> {
     if (options.isPriorityTask) {
       return this.priorityQueue.addTask(query, options.saveConfiguration);
     } else {
