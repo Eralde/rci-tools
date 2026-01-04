@@ -20,10 +20,14 @@ import {BaseHttpResponse, HttpTransport} from '../../transport';
 import {RciQuery} from '../query';
 
 export interface RciBackgroundProcessOptions {
-  timeout?: number;
+  pollInterval?: number; // time between polling requests to check for updates
+  timeout?: number; // timeout that will abort the background process
 }
 
-export const DEFAULT_BACKGROUND_PROCESS_OPTIONS: RciBackgroundProcessOptions = {timeout: 0};
+export const DEFAULT_BACKGROUND_PROCESS_OPTIONS: Required<RciBackgroundProcessOptions> = {
+  pollInterval: 1000,
+  timeout: 0,
+};
 
 export enum RCI_BACKGROUND_PROCESS_FINISH_REASON {
   DONE = 'DONE',
@@ -41,16 +45,6 @@ export enum RCI_BACKGROUND_PROCESS_STATE {
   TIMED_OUT = 'TIMED_OUT',
 }
 
-interface BackgroundProcessOptions {
-  timeout?: number;
-  onDataUpdate?: (data: GenericObject) => void;
-}
-
-const DEFAULT_BACKGROUND_PROCESS_EXECUTION_OPTIONS: BackgroundProcessOptions = {
-  timeout: 1000,
-  onDataUpdate: () => {},
-};
-
 export class RciBackgroundProcess<CommandType extends string = string> {
   public readonly data$: Observable<GenericObject | null>;
   public readonly done$: Observable<RCI_BACKGROUND_PROCESS_FINISH_REASON>;
@@ -60,11 +54,9 @@ export class RciBackgroundProcess<CommandType extends string = string> {
   public readonly data: RciQuery['data'];
   public readonly options: RciBackgroundProcessOptions;
 
-  private readonly responseSub$: Subject<GenericObject | null> = new Subject<GenericObject | null>();
-  private readonly doneSub$: Subject<RCI_BACKGROUND_PROCESS_FINISH_REASON> = new Subject<
-    RCI_BACKGROUND_PROCESS_FINISH_REASON
-  >();
-  private readonly abortSub$: ReplaySubject<void> = new ReplaySubject<void>(1);
+  private readonly responseSub$ = new Subject<GenericObject | null>();
+  private readonly doneSub$ = new Subject<RCI_BACKGROUND_PROCESS_FINISH_REASON>();
+  private readonly abortSub$ = new ReplaySubject<void>(1);
 
   private readonly rciPath: string;
   private readonly httpTransport: HttpTransport<BaseHttpResponse>;
@@ -184,10 +176,6 @@ export class RciBackgroundProcess<CommandType extends string = string> {
     const task$ = this.executeTask(
       this.command,
       this.data,
-      {
-        timeout: 1000, // default timeout
-        onDataUpdate: (data) => this.responseSub$.next(data),
-      },
     );
 
     const race$: Observable<GenericObject | RCI_BACKGROUND_PROCESS_FINISH_REASON> = race(task$, timeout$, abort$);
@@ -202,7 +190,7 @@ export class RciBackgroundProcess<CommandType extends string = string> {
           this.markDone();
         }
       } else {
-        this.responseSub$.next(result as GenericObject);
+        this.responseSub$.next(result);
         this.markDone();
       }
 
@@ -213,23 +201,15 @@ export class RciBackgroundProcess<CommandType extends string = string> {
   protected executeTask(
     path: string,
     data: RciQuery['data'],
-    options: BackgroundProcessOptions = {},
   ): Observable<GenericObject> {
-    const _options = {
-      ...DEFAULT_BACKGROUND_PROCESS_EXECUTION_OPTIONS,
-      ...options,
-    };
-
-    const queryTimeout = Math.max(1, _options.timeout ?? 0);
+    const pollInterval = Math.max(1, this.options.pollInterval ?? DEFAULT_BACKGROUND_PROCESS_OPTIONS.pollInterval);
     const url = `${this.rciPath}${path.replace(/\./g, '/')}`;
-    const onDataUpdate = _options.onDataUpdate ?? (() => {});
 
+    const onDataUpdate: (data: GenericObject) => void = (data) => this.responseSub$.next(data);
     const isFinished = (response: BaseHttpResponse) => !response?.data?.['continued'];
-
-    const postQuery = () => this.httpTransport.post(url, data);
     const getQuery = () => this.httpTransport.get(url);
 
-    return postQuery()
+    return this.httpTransport.post(url, data)
       .pipe(
         switchMap((response) => {
           if (isFinished(response)) {
@@ -244,7 +224,7 @@ export class RciBackgroundProcess<CommandType extends string = string> {
 
                 return getResponse;
               }),
-              delayWhen((getResponse) => timer(isFinished(getResponse) ? 0 : queryTimeout)),
+              delayWhen((getResponse) => timer(isFinished(getResponse) ? 0 : pollInterval)),
               repeat(),
             );
 
