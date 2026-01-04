@@ -2,7 +2,7 @@ import {map, timeout} from 'rxjs/operators';
 import {BaseHttpResponse, HttpTransport} from '../transport';
 import {RciQuery, RciTask} from './query';
 import {RCI_QUEUE_DEFAULT_BATCH_TIMEOUT, RciQueue} from './queue';
-import {RciBackgroundProcess, RciBackgroundTaskOptions, RciBackgroundTaskQueue} from './background-process';
+import {RciBackgroundProcess, RciBackgroundProcessOptions, RciBackgroundTaskQueue} from './background-process';
 import {RciPayloadHelper} from './payload';
 import type {GenericResponse, QueueOptions} from './rci.manager.types';
 import {DEFAULT_QUEUE_OPTIONS, RCI_QUERY_TIMEOUT} from './rci.manager.constants';
@@ -82,7 +82,7 @@ export class RciManager<
 
   public initBackgroundProcess(
     query: RciQuery<BackgroundQueryPath>,
-    options: RciBackgroundTaskOptions = {},
+    options: RciBackgroundProcessOptions = {},
   ): RciBackgroundProcess<BackgroundQueryPath> {
     return new RciBackgroundProcess<BackgroundQueryPath>(
       query.path,
@@ -95,7 +95,7 @@ export class RciManager<
 
   public queueBackgroundProcess(
     query: RciQuery<BackgroundQueryPath>,
-    options: RciBackgroundTaskOptions = {},
+    options: RciBackgroundProcessOptions = {},
   ): RciBackgroundProcess<BackgroundQueryPath> {
     const {path} = query;
     const key = String(path);

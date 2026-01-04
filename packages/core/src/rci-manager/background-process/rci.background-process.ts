@@ -1,11 +1,11 @@
 import {
+  BehaviorSubject,
   NEVER,
   Observable,
   ReplaySubject,
   delayWhen,
   filter,
   map,
-  merge,
   of,
   race,
   repeat,
@@ -18,20 +18,13 @@ import {
 } from 'rxjs';
 import type {GenericObject, ObjectOrArray} from '../../type.utils';
 import {BaseHttpResponse, HttpTransport} from '../../transport';
-import {BackgroundTaskOptions} from '../rci.manager.types';
 import {RciQuery} from '../query';
 
-export interface RciBackgroundTaskOptions {
+export interface RciBackgroundProcessOptions {
   duration?: number;
 }
 
-export const DEFAULT_BACKGROUND_TASK_OPTIONS: RciBackgroundTaskOptions = {duration: 0};
-
-export const DEFAULT_BACKGROUND_TASK_EXECUTION_OPTIONS: BackgroundTaskOptions = {
-  timeout: 1000,
-  isInfinite: false,
-  onDataUpdate: () => {},
-};
+export const DEFAULT_BACKGROUND_PROCESS_OPTIONS: RciBackgroundProcessOptions = {duration: 0};
 
 export enum RCI_BACKGROUND_PROCESS_FINISH_REASON {
   DONE = 'DONE',
@@ -49,14 +42,24 @@ export enum RCI_BACKGROUND_PROCESS_STATE {
   TIMED_OUT = 'TIMED_OUT',
 }
 
+interface BackgroundProcessOptions {
+  timeout?: number;
+  onDataUpdate?: (data: GenericObject) => void;
+}
+
+const DEFAULT_BACKGROUND_PROCESS_EXECUTION_OPTIONS: BackgroundProcessOptions = {
+  timeout: 1000,
+  onDataUpdate: () => {},
+};
+
 export class RciBackgroundProcess<CommandType extends string = string> {
   public readonly data$: Observable<GenericObject | null>;
   public readonly done$: Observable<RCI_BACKGROUND_PROCESS_FINISH_REASON>;
-  public readonly start$: Observable<this>;
+  public readonly state$: Observable<RCI_BACKGROUND_PROCESS_STATE>;
 
   public readonly command: CommandType;
   public readonly data: RciQuery['data'];
-  public readonly options: RciBackgroundTaskOptions;
+  public readonly options: RciBackgroundProcessOptions;
 
   public readonly responseSub$: Subject<GenericObject | null> = new Subject<GenericObject | null>();
   public readonly doneSub$: Subject<RCI_BACKGROUND_PROCESS_FINISH_REASON> = new Subject<
@@ -67,14 +70,15 @@ export class RciBackgroundProcess<CommandType extends string = string> {
   protected readonly rciPath: string;
   protected readonly httpTransport: HttpTransport<BaseHttpResponse>;
 
-  private state: RCI_BACKGROUND_PROCESS_STATE = RCI_BACKGROUND_PROCESS_STATE.INIT;
+  private readonly stateSub$: BehaviorSubject<RCI_BACKGROUND_PROCESS_STATE> = new BehaviorSubject<RCI_BACKGROUND_PROCESS_STATE>(RCI_BACKGROUND_PROCESS_STATE.INIT);
   private readonly startTrigger$: Subject<void> = new Subject<void>();
+  private readonly start$: Observable<this>;
   private startSubscription?: Subscription;
 
   constructor(
     command: CommandType,
     data: RciQuery['data'],
-    options: RciBackgroundTaskOptions,
+    options: RciBackgroundProcessOptions,
     rciPath: string,
     httpTransport: HttpTransport<BaseHttpResponse>,
   ) {
@@ -86,11 +90,12 @@ export class RciBackgroundProcess<CommandType extends string = string> {
 
     this.data$ = this.responseSub$.asObservable().pipe(filter(Boolean));
     this.done$ = this.doneSub$.asObservable();
+    this.state$ = this.stateSub$.asObservable();
     this.start$ = this.startTrigger$
       .pipe(
-        filter(() => this.state === RCI_BACKGROUND_PROCESS_STATE.INIT || this.state === RCI_BACKGROUND_PROCESS_STATE.QUEUED),
+        filter(() => this.stateSub$.value === RCI_BACKGROUND_PROCESS_STATE.INIT || this.stateSub$.value === RCI_BACKGROUND_PROCESS_STATE.QUEUED),
         map(() => {
-          this.state = RCI_BACKGROUND_PROCESS_STATE.RUNNING;
+          this.stateSub$.next(RCI_BACKGROUND_PROCESS_STATE.RUNNING);
 
           return this;
         }),
@@ -105,22 +110,22 @@ export class RciBackgroundProcess<CommandType extends string = string> {
     // subscribe to done$ to update state
     this.done$.subscribe((reason: RCI_BACKGROUND_PROCESS_FINISH_REASON) => {
       if (reason === RCI_BACKGROUND_PROCESS_FINISH_REASON.DONE) {
-        this.state = RCI_BACKGROUND_PROCESS_STATE.COMPLETED;
+        this.stateSub$.next(RCI_BACKGROUND_PROCESS_STATE.COMPLETED);
       } else if (reason === RCI_BACKGROUND_PROCESS_FINISH_REASON.ABORTED) {
-        this.state = RCI_BACKGROUND_PROCESS_STATE.ABORTED;
+        this.stateSub$.next(RCI_BACKGROUND_PROCESS_STATE.ABORTED);
       } else if (reason === RCI_BACKGROUND_PROCESS_FINISH_REASON.TIMED_OUT) {
-        this.state = RCI_BACKGROUND_PROCESS_STATE.TIMED_OUT;
+        this.stateSub$.next(RCI_BACKGROUND_PROCESS_STATE.TIMED_OUT);
       }
     });
   }
 
   public getState(): RCI_BACKGROUND_PROCESS_STATE {
-    return this.state;
+    return this.stateSub$.value;
   }
 
   public start(): boolean {
-    if (this.state !== RCI_BACKGROUND_PROCESS_STATE.INIT) {
-      console.error(`Cannot start process: current state is ${this.state}`);
+    if (this.stateSub$.value !== RCI_BACKGROUND_PROCESS_STATE.INIT) {
+      console.error(`Cannot start process: current state is ${this.stateSub$.value}`);
 
       return false;
     }
@@ -131,13 +136,13 @@ export class RciBackgroundProcess<CommandType extends string = string> {
   }
 
   public abort(): boolean {
-    if (this.state !== RCI_BACKGROUND_PROCESS_STATE.RUNNING) {
-      console.error(`Cannot abort process: current state is ${this.state}`);
+    if (this.stateSub$.value !== RCI_BACKGROUND_PROCESS_STATE.RUNNING) {
+      console.error(`Cannot abort process: current state is ${this.stateSub$.value}`);
 
       return false;
     }
 
-    this.state = RCI_BACKGROUND_PROCESS_STATE.ABORTING;
+    this.stateSub$.next(RCI_BACKGROUND_PROCESS_STATE.ABORTING);
 
     this.abortSub$.next();
     this.abortSub$.complete();
@@ -145,14 +150,14 @@ export class RciBackgroundProcess<CommandType extends string = string> {
     return true;
   }
 
-  public setQueued(trigger: Subject<void>): void {
-    if (this.state !== RCI_BACKGROUND_PROCESS_STATE.INIT) {
-      console.error(`Cannot queue process: current state is ${this.state}`);
+  public setQueued(trigger: Subject<void>): boolean {
+    if (this.stateSub$.value !== RCI_BACKGROUND_PROCESS_STATE.INIT) {
+      console.error(`Cannot queue process: current state is ${this.stateSub$.value}`);
 
-      return;
+      return false;
     }
 
-    this.state = RCI_BACKGROUND_PROCESS_STATE.QUEUED;
+    this.stateSub$.next(RCI_BACKGROUND_PROCESS_STATE.QUEUED);
 
     // unsubscribe from previous trigger and subscribe to queue trigger
     if (this.startSubscription) {
@@ -162,6 +167,8 @@ export class RciBackgroundProcess<CommandType extends string = string> {
     this.startSubscription = trigger.subscribe(() => {
       this.startTrigger$.next();
     });
+
+    return true;
   }
 
   protected markDone(): void {
@@ -170,12 +177,11 @@ export class RciBackgroundProcess<CommandType extends string = string> {
   }
 
   protected execute(): void {
-    // Condition for optional abort of an ongoing task
-    const cancelTrigger$ = this.options.duration
+    const timeoutTrigger$ = this.options.duration
       ? timer(this.options.duration)
       : NEVER;
 
-    const cancel$ = cancelTrigger$.pipe(map(() => RCI_BACKGROUND_PROCESS_FINISH_REASON.TIMED_OUT));
+    const timeout$ = timeoutTrigger$.pipe(map(() => RCI_BACKGROUND_PROCESS_FINISH_REASON.TIMED_OUT));
     const abort$ = this.abortSub$.pipe(map(() => RCI_BACKGROUND_PROCESS_FINISH_REASON.ABORTED));
 
     const task$ = this.executeTask(
@@ -183,12 +189,11 @@ export class RciBackgroundProcess<CommandType extends string = string> {
       this.data,
       {
         timeout: 1000, // default timeout
-        isInfinite: false,
         onDataUpdate: (data) => this.responseSub$.next(data),
       },
     );
 
-    const race$: Observable<GenericObject | RCI_BACKGROUND_PROCESS_FINISH_REASON> = race(task$, cancel$, abort$);
+    const race$: Observable<GenericObject | RCI_BACKGROUND_PROCESS_FINISH_REASON> = race(task$, timeout$, abort$);
 
     race$.subscribe((result) => {
       if (typeof result === 'string') {
@@ -211,10 +216,10 @@ export class RciBackgroundProcess<CommandType extends string = string> {
   protected executeTask(
     path: string,
     data: RciQuery['data'],
-    options: BackgroundTaskOptions = {},
+    options: BackgroundProcessOptions = {},
   ): Observable<GenericObject> {
     const _options = {
-      ...DEFAULT_BACKGROUND_TASK_EXECUTION_OPTIONS,
+      ...DEFAULT_BACKGROUND_PROCESS_EXECUTION_OPTIONS,
       ...options,
     };
 
@@ -245,13 +250,6 @@ export class RciBackgroundProcess<CommandType extends string = string> {
               delayWhen((getResponse) => timer(isFinished(getResponse) ? 0 : queryTimeout)),
               repeat(),
             );
-
-          if (_options.isInfinite) {
-            return merge(
-              of(response.data as ObjectOrArray),
-              queryPipe$.pipe(map((currentResponse) => currentResponse.data as ObjectOrArray)),
-            );
-          }
 
           onDataUpdate(response.data);
 

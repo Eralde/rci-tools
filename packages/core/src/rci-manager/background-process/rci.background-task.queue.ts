@@ -7,7 +7,7 @@ import {
 import type {Values} from '../../type.utils';
 import {RciQuery} from '../query';
 import {BaseHttpResponse, HttpTransport} from '../../transport';
-import {RciBackgroundProcess, RciBackgroundTaskOptions, DEFAULT_BACKGROUND_TASK_OPTIONS} from './rci.background-process';
+import {RciBackgroundProcess, RciBackgroundProcessOptions, DEFAULT_BACKGROUND_PROCESS_OPTIONS} from './rci.background-process';
 
 export const RCI_BACKGROUND_TASK_QUEUE_STATE = {
   // the queue is ready to process tasks
@@ -49,7 +49,7 @@ export class RciBackgroundTaskQueue<QueryPath extends string = string> {
 
   public push(
     data: RciQuery['data'],
-    options: RciBackgroundTaskOptions = DEFAULT_BACKGROUND_TASK_OPTIONS,
+    options: RciBackgroundProcessOptions = DEFAULT_BACKGROUND_PROCESS_OPTIONS,
   ): RciBackgroundProcess<QueryPath> {
     const trigger = new Subject<void>();
 
