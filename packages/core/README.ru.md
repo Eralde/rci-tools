@@ -7,24 +7,14 @@
 `@rci-tools/core` &mdash; это `npm`-пакет для взаимодействия с [RCI API](../../docs/RCI_API.ru.md).
 Два основных класса, экспортируемых этим пакетом:
 
-- [SessionManager](./src/session-manager/session-manager.ts) &mdash; для аутентификации на устройстве
-- [RciManager](./src/rci-manager/rci.manager.ts) &mdash; основной класс для работы с API
+- [SessionManager](./src/session-manager/session-manager.ts): реализует [аутентификацию по паролю](../../docs/AUTH.md);
+- [RciManager](./src/rci-manager/rci.manager.ts): основной класс для работы с API в едином стиле;
 
-`SessionManager` реализует [аутентификацию по паролю](../../docs/AUTH.md).
-
-`RciManager` реализует обертку над HTTP-транспортом, позволяющую управлять
-устройством через RCI API. Он имеет несколько преимуществ по сравнению
-с использованием `fetch/xhr/axios/...`:
-- разные запросы к API могут быть объединены в один HTTP-запрос
-- также есть простая система приоритетов:
-  приоритетные запросы блокируют обычные, пока не завершатся
-- кроме того, реализован способ работы с фоновыми процессами,
-  который предотвращает параллельный запуск одной и той же команды с разными аргументами
-
-Оба класса требуют объект с интерфейсом `HttpTransport` для отправки HTTP-запросов.
-Модуль `@rci-tools/core` предоставляет [обёртку над `fetch`](./src/transport/fetch/fetch.transport.ts) для этого.
-Используйте один и тот же экземпляр `FetchTransport` и для `SessionManager`, и для `RciManager`,
-чтобы запросы от `RciManager` отправлялись в рамках авторизованной HTTP-сессии.
+Оба класса требуют экземпляр [`HTTP транспорта`](./src/transport/http.transport.ts)
+для отправки HTTP-запросов к устройству. Модуль `@rci-tools/core` предоставляет
+[обёртку над `fetch`](./src/transport/fetch/fetch.transport.ts) в качестве такого транспорта.
+Передавайте один и тот же экземпляр `FetchTransport` и в `SessionManager`,
+и в `RciManager`, чтобы запросы от `RciManager` отправлялись в рамках авторизованной HTTP-сессии.
 
 ## Установка
 
@@ -57,26 +47,30 @@ interface SessionManager<ResponseType extends BaseHttpResponse = BaseHttpRespons
 
 ### `RciManager`
 
-`RciManager` используется для взаимодействия с RCI API.
-Он имеет следующий интерфейс:
+Класс `RciManager` используется для взаимодействия с RCI API.
+Он имеет несколько преимуществ по сравнению с использованием непосредственно `fetch/xhr/axios/...`:
+- несколько запросов через `RciManager` могут быть объединены в один HTTP-запрос к устройству
+- доступна простая система приоритетов: приоритетные запросы блокируют обычные, пока не завершатся
+- доступен удобный способ работы с фоновыми процессами
+
+Класс `RciManager` имеет следующий интерфейс:
 
 ```typescript
 interface RciManager<
   QueryPath extends string = string, // допустимые значения 'path' для обычных RCI-запросов
   BackgroundQueryPath extends string = string // допустимые значения 'path' для фоновых процессов
 > {
-  execute(query: RciTask<QueryPath>): GenericResponse;
-  queue(query: RciTask<QueryPath>, options?: QueueOptions): GenericResponse;
-  executeBackgroundProcess(query: RciQuery<BackgroundQueryPath>, options?: RciBackgroundTaskOptions): RciBackgroundProcess;
-  queueBackgroundProcess(query: RciQuery<BackgroundQueryPath>, options?: RciBackgroundTaskOptions): RciBackgroundProcess;
+  execute(query: RciTask<QueryPath>): Observable<any>;
+  queue(query: RciTask<QueryPath>, options?: QueueOptions): Observable<any>;
+  initBackgroundProcess(query: RciQuery<BackgroundQueryPath>, options?: RciBackgroundProcessOptions): RciBackgroundProcess;
+  queueBackgroundProcess(query: RciQuery<BackgroundQueryPath>, options?: RciBackgroundProcessOptions): RciBackgroundProcess;
 }
 ```
 
 `RciManager` активно использует [корневой ресурс API (`/rci/`)](../../docs/RCI_API.ru.md#31-корневой-ресурс-api).
-Взаимодействие как с [настройками](../../docs/RCI_API.ru.md#21-настройки), так и с
-[действиями](../../docs/RCI_API.ru.md#22-действия) реализовано через объекты `RciQuery`,
-отправляемые на корневой ресурс.
-Интерфейс `RciQuery` выглядит следующим образом:
+Взаимодействие как с [настройками](../../docs/RCI_API.ru.md#21-настройки),
+так и с [действиями](../../docs/RCI_API.ru.md#22-действия) в нем реализовано через объекты `RciQuery`,
+отправляемые на корневой ресурс. Интерфейс `RciQuery` выглядит следующим образом:
 
 ```typescript
 export interface RciQuery<PathType extends string = string> { // `PathType` можно сузить до подмножества допустимых значений `path`
@@ -105,7 +99,7 @@ export interface RciQuery<PathType extends string = string> { // `PathType` мо
 }
 ```
 
-Аналогично, запрос:
+Аналогично, запрос с `path` и `data`:
 ```typescript
 {
   path: 'interface',
@@ -127,13 +121,13 @@ export interface RciQuery<PathType extends string = string> { // `PathType` мо
 }
 ```
 
-Отправка такого вложенного объекта на корневую конечную точку API приведёт к получению
-ответа, вложенного аналогичным образом. Если флаг `extractData` установлен в `true`
-(или не указан: он имеет значение `true` по умолчанию), то `RciManager`
-извлечёт соответствующую часть ответа из объекта с ответом.
+Отправка такого вложенного объекта на корневой ресурс RCI API вернет объект,
+в котором нужные данные вложены аналогичным образом. Если флаг `extractData`
+установлен в `true` (или не указан: он имеет значение `true` по умолчанию),
+то `RciManager` извлечёт нужную часть ответа автоматически.
 
-Существует определённая гибкость в том, как один и тот же объект может быть представлен
-как `RciQuery`. Например, оба запроса
+Существует определённая гибкость в том, как один и тот же объект
+может быть представлен как `RciQuery`. Например, оба запроса
 
 ```typescript
 {path: 'ip.telnet.session', data: {timeout: 123456}}
@@ -158,8 +152,7 @@ export interface RciQuery<PathType extends string = string> { // `PathType` мо
 }
 ```
 
-При создании объектов `RciQuery`, вы можете использовать тот вариант,
-который удобнее для вас.
+Вы можете использовать тот вариант, который удобнее для вас.
 
 #### `execute` vs `queue`
 
@@ -170,17 +163,20 @@ export interface RciQuery<PathType extends string = string> { // `PathType` мо
   - Вручную управлять моментом отправки HTTP-запроса
   - Последовательно вызывать несколько запросов с точным контролем времени
 
-- **`queue(query, options?)`**: Добавляет запрос во внутреннюю очередь, которая объединяет
-  несколько запросов в один HTTP-запрос. `RciManager` сам управляет подпиской
-  и моментом отправки HTTP-запросов. Очередь автоматически:
+- **`queue(query, options?)`**: Добавляет запрос во внутреннюю очередь,
+  которая объединяет несколько запросов в один HTTP-запрос. `RciManager` сам управляет
+  подпиской и моментом отправки HTTP-запросов. Очередь автоматически:
   - Объединяет несколько запросов в один HTTP-запрос
-  - Ждёт определенное время, пока наберется содержимое для следующего "батча"
+  - Удаляет дублирующиеся запросы из батча
+  - Ждёт определённое время перед отправкой HTTP-запроса, собирая данные из разных вызовов `queue`
   - Обрабатывает приоритетные запросы через отдельную очередь, блокируя обычную
 
 Оба метода возвращают [rxjs Observable](https://rxjs.dev/guide/observable),
 на который нужно подписаться, чтобы получить результат. Ниже приведено несколько примеров использования.
 
-#### 1. Базовый пример
+#### Примеры использования
+
+##### 1. Базовый пример
 
 ```typescript
 import {Observable, of, firstValueFrom} from 'rxjs';
@@ -208,7 +204,7 @@ auth$
     // Observable, возвращаемые методом `queue`,
     // преобразуются в Promise для того, чтобы код примера было проще читать.
 
-    // _настройка_
+    // настройка
     const changeHomeDescription: RciQuery = {
       path: 'interface',
       data: {name: 'Bridge0', description: 'My awesome home network'},
@@ -216,7 +212,7 @@ auth$
 
     const changeSettingResult = await rciManager.queue(changeHomeDescription).toPromise(); // объект со статусом выполнения команды
 
-    // соответствующее _действие_ (_настройка_ с префиксом 'show.rc')
+    // соответствующее действие (настройка с префиксом 'show.rc')
     const readInterfaceDescription: RciQuery = {
       path: 'show.rc.interface.description', // чтение из "running-config"
       data: {name: 'Bridge0'},
@@ -224,7 +220,7 @@ auth$
 
     const readSettingResult = await rciManager.queue(readInterfaceDescription).toPromise(); // 'My awesome home network'
 
-    // другое _действие_
+    // другое действие
     const showVersion: RciQuery = { // data по умолчанию {}
       path: 'show.version',
     };
@@ -235,7 +231,7 @@ auth$
   });
 ```
 
-#### 2. Несколько запросов
+##### 2. Несколько запросов
 
 ```typescript
 import {forkJoin} from 'rxjs';
@@ -251,7 +247,7 @@ const queries: RciQuery[] = [
 
 const batch1$ = rciManager.queue(queries); // Оба запроса будут отправлены одним HTTP-запросом
 
-bastch1$
+batch1$
   .pipe(
     exhaustMap((results) => {
       queries.forEach((query, index) => {
@@ -274,14 +270,12 @@ bastch1$
   });
 ```
 
-#### 3. Приоритетные запросы
+##### 3. Приоритетные запросы
 
-Если вы используете метод `queue`, но определенный запрос нужно отправить быстрее (не дожидаясь,
-пока очередь соберёт пакет из нескольких запросов/закончит обработку предыдущего "батча"),
-можно отправить его как приоритетный. Очередь для приоритетных запросов собирает данные
-для "батча" в рамках одного цикла event loop а затем отправляет HTTP-запрос к устройству.
-Приоритетная очередь блокирует обычную очередь до тех пор, пока не опустеет
-(даже если обычная уже ждёт ответа).
+Если вы используете batching-очередь, но нужно отправить запрос почти сразу,
+можно отправить его как приоритетный. Приоритетные запросы группируются
+только в рамках следующей "микрозадачи" (event loop microtask).
+Приоритетная очередь блокирует обычную, пока не опустеет (даже если обычная уже ждёт ответа на HTTP-запрос).
 
 ```typescript
 import {delay} from 'rxjs/operators';
@@ -306,47 +300,52 @@ const all$ = forkJoin([
   executePriority$
 ]);
 
-// Приоритетный запрос заблокирует "обычный" запрос, пока не завершится.
+// Приоритетный запрос заблокирует обычный, пока не завершится.
 // Если посмотреть, сколько HTTP-запросов было отправлено, то их окажется три:
 //
-// 1. Пакетный запрос из первого вызова `execute` -> отменён приоритетным запросом
+// 1. Батч-запрос из первого вызова `execute` -> отменён приоритетным запросом
 // 2. Приоритетный запрос из второго вызова `execute`
-// 3. Пакетный запрос из первого вызова `execute` -> повторно выполнен после приоритетного
+// 3. Батч-запрос из первого вызова `execute` -> повторно выполнен после приоритетного
 all$
   .subscribe((allResults) => {
     console.log(allResults);
   });
 ```
 
-#### 4. Фоновые процессы
+#### Фоновые процессы
 
-Для [фоновых процессов](../../docs/RCI_API.ru.md#23-фоновые-процессы)
-`RciManager` предоставляет два метода, также принимающих объекты `RciQuery`:
+Для [фоновых процессов](../../docs/RCI_API.ru.md#23-фоновые-процессы) `RciManager`
+предоставляет два метода, также принимающих объекты `RciQuery`:
 
-- **`executeBackgroundProcess(query, options?)`**: возвращает объект `RciBackgroundProcess`,
-  который можно вручную прервать. HTTP-запрос на запуск фонового процесса отправляется сразу при вызове.
-  Однако этот метод не предотвращает параллельный запуск нескольких фоновых процессов
-  с одной и той же командой, но разными аргументами.
+- **`initBackgroundProcess(query, options?)`**: возвращает объект `RciBackgroundProcess`,
+  который нужно запускать вручную. Этот метод полезен, если вам нужен полный контроль
+  над жизненным циклом фонового процесса (вы также можете вручную прервать процесс до его завершения).
 
-- **`queueBackgroundProcess(query, options?)`**: Ставит фоновый процесс в очередь. Запросы с одинаковым
-  значением `path` группируются в одну очередь, что гарантирует, что несколько вызовов одной и той же команды
-  с разными аргументами не будут выполняться параллельно.
+- **`queueBackgroundProcess(query, options?)`**: Ставит фоновый процесс в очередь.
+  Запросы с одинаковым значением `path` группируются в одну очередь, что гарантирует,
+  что одна и та же команда с разными аргументами не будет выполняться параллельно.
+  Это важно для обхода ограничений API при работе в браузере, где обычно используется
+  одна HTTP-сессия для всех запросов.
 
 Оба метода возвращают объект `RciBackgroundProcess` со следующими свойствами:
+- `state$`: Observable, который выдаёт обновления состояния процесса
 - `data$`: Observable, который выдаёт обновления данных по мере выполнения фонового процесса
 - `done$`: Observable, который выдаёт событие по завершении процесса (с причиной: `'completed'`, `'aborted'` или `'timed_out'`)
+- `start()`: Метод для ручного запуска процесса (не должен вызываться для процессов из очереди)
 - `abort()`: Метод для ручного прерывания процесса
 
 ```typescript
 interface RciBackgroundProcess {
+  state$: Observable<RCI_BACKGROUND_PROCESS_STATE>;
   data$: Observable<GenericObject | null>;
   done$: Observable<RCI_BACKGROUND_PROCESS_FINISH_REASON>;
 
-  abort(): void
+  start(): boolean;
+  abort(): boolean;
 }
 ```
 
-Пример использования `executeBackgroundProcess`:
+Вот базовый пример использования `initBackgroundProcess`:
 
 ```typescript
 const pingQuery: RciQuery = {
@@ -358,7 +357,7 @@ const pingQuery: RciQuery = {
   },
 };
 
-const ping$ = rciManager.executeBackgroundProcess(pingQuery);
+const ping$ = rciManager.initBackgroundProcess(pingQuery);
 
 ping$.data$
   .subscribe((data) => {
@@ -369,6 +368,8 @@ ping$.done$
   .subscribe((reason) => {
     console.log('Ping завершён:', reason);
   });
+
+ping$.start();
 ```
 
 Вы также можете вручную прервать фоновый процесс до его завершения:
@@ -383,7 +384,7 @@ const pingQuery: RciQuery = {
   },
 };
 
-const ping$ = rciManager.executeBackgroundProcess(pingQuery);
+const ping$ = rciManager.initBackgroundProcess(pingQuery);
 
 ping$.data$
   .subscribe((data) => {
@@ -395,10 +396,14 @@ ping$.done$
     console.log('Ping завершён:', reason);
   });
 
+ping$.start();
+
 setTimeout(() => ping$.abort(), 4000);
 ```
 
-Пример с `queueBackgroundProcess`:
+Для управления несколькими фоновыми процессами с одной и той же командой,
+но разными аргументами, используйте `queueBackgroundProcess`,
+чтобы они не выполнялись параллельно:
 
 ```typescript
 import {forkJoin, firstValueFrom} from 'rxjs';
@@ -423,6 +428,9 @@ const finalResults = await firstValueFrom(forkJoin(done$));
 console.log('Все фоновые процессы завершены:', finalResults);
 ```
 
-В этом примере два запроса `tools.ping` будут объединены в одну очередь (выполняться последовательно),
-и два запроса `components.list` также будут объединены, предотвращая конфликты
-от одновременного запуска одной и той же команды с разными аргументами.
+В этом примере два запроса `tools.ping` будут выполнены последовательно
+и два запроса `components.list` также будут выполнены последовательно;
+Последовательное выполнение позволяет избежать неоднозначности, связанной с тем,
+что, когда несколько экземпляров одного и того же фонового процесса запущены
+параллельно из одной HTTP-сессии, невозможно понять, статус какого из процессов
+возвращается в ответ на GET-запрос.

@@ -2,7 +2,7 @@ import {Observable} from 'rxjs';
 import {
   FetchTransport,
   RciBackgroundProcess,
-  RciBackgroundTaskOptions,
+  RciBackgroundProcessOptions,
   RciManager,
   RciQuery,
   SessionManager,

@@ -1,6 +1,6 @@
 import {Observable, catchError, exhaustMap, of} from 'rxjs';
 import {AxiosTransport} from '@rci-tools/adapter-axios';
-import {GenericObject, GenericResponse, RciBackgroundProcess, RciManager, RciQuery, SessionManager} from '@rci-tools/core';
+import {RciBackgroundProcess, RciManager, RciQuery, SessionManager} from '@rci-tools/core';
 
 export interface DeviceCredentials {
   address: string;
@@ -23,7 +23,7 @@ export class RciService {
     this.auth = new SessionManager(address, this.transport);
   }
 
-  public execute(query: RciQuery | RciQuery[]): GenericResponse {
+  public execute(query: RciQuery | RciQuery[]): Observable<any> {
     return this.ensureAuth()
       .pipe(
         exhaustMap(() => this.manager.queue(query)),
@@ -35,17 +35,31 @@ export class RciService {
       );
   }
 
-  public queueBackgroundProcess(path: string, data: GenericObject): RciBackgroundProcess {
+  public initBackgroundProcess(
+    path: string,
+    data: RciQuery['data'],
+    options?: {timeout?: number; pollInterval?: number},
+  ): RciBackgroundProcess {
+    const query: RciQuery = {path, data: data || {}};
+    return this.manager.initBackgroundProcess(query, options);
+  }
+
+  public queueBackgroundProcess(
+    path: string,
+    data: RciQuery['data'],
+    options?: {timeout?: number},
+  ): RciBackgroundProcess {
     console.log('Adding a "continued" task to the queue', path, data);
 
-    const query = this.manager.queueBackgroundProcess({path, data});
+    const query: RciQuery = {path, data: data || {}};
+    const process = this.manager.queueBackgroundProcess(query, options);
 
-    query.done$
+    process.done$
       .subscribe((done) => {
         console.warn('"continued" task done', {path, data, done});
       });
 
-    return query;
+    return process;
   }
 
   public ensureAuth(): Observable<boolean> {

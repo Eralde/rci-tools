@@ -26,7 +26,7 @@ const runDev = () => {
   }
 
   let proxyAddr;
-  let command = 'vite';
+  const command = 'pnpm exec vite';
 
   if (argv.proxyAddr) {
     proxyAddr = argv.proxyAddr;
@@ -35,7 +35,9 @@ const runDev = () => {
   } else {
     proxyAddr = process.env.PROXY_ADDR;
 
-    console.log(`[Dev Runner]: No proxy address specified via CLI, using PROXY_ADDR from .env as fallback: ${proxyAddr}`);
+    console.log(
+      `[Dev Runner]: No proxy address specified via CLI, using PROXY_ADDR from .env as fallback: ${proxyAddr}`,
+    );
   }
 
   if (!proxyAddr) {
@@ -45,7 +47,14 @@ const runDev = () => {
 
   try {
     console.log(`[Dev Runner]: Running command: ${command}`);
-    execSync(command, {stdio: 'inherit', env: {PROXY_ADDR: proxyAddr}});
+    execSync(
+      command,
+      {
+        stdio: 'inherit',
+        env: {...process.env, PROXY_ADDR: proxyAddr},
+        shell: true,
+      },
+    );
   } catch (error) {
     console.error('[Dev Runner]: Vite development server failed:', error.message);
     process.exit(1);

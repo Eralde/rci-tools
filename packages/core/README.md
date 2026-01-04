@@ -7,22 +7,12 @@
 `@rci-tools/core` &mdash; is an `npm` package for interacting with the [RCI API](../../docs/RCI_API.md).
 Two main classes exported by this package are:
 
-- [SessionManager](./src/session-manager/session-manager.ts): Handles authentication on the device.
-- [RciManager](./src/rci-manager/rci.manager.ts): The main class to interact with the API.
-
-The `SessionManager` implements [password-based authentication](../../docs/AUTH.md).
-
-The `RciManager` is responsible for actual device configuration/monitoring.
-It has a few advantages over just using `fetch/xhr/axios/...`:
-- queries from multiple method calls can be batched into a single HTTP request
-- there is a simple priority system:
-  priority queries block the non-priority ones until they are finished
-- a way to work with the background processes
-  that avoids running same command with different arguments in parallel
+- [SessionManager](./src/session-manager/session-manager.ts): Implements [password-based authentication](../../docs/AUTH.md).
+- [RciManager](./src/rci-manager/rci.manager.ts): The main class to interact with the API in a uniform way.
 
 Both classes require an [`HTTP transport` instance](./src/transport/http.transport.ts) to
 send HTTP requests to the device. The `@rci-tools/core` module providers
-[a wrapper over `fetch`](./src/transport/fetch/fetch.transport.ts) for that.
+[a wrapper over `fetch`](./src/transport/fetch/fetch.transport.ts) as such transport.
 Pass the same instance of `FetchTransport` to both `SessionManager` and `RciManager`
 so that requests from `RciManager` are sent within an authorized HTTP session.
 
@@ -50,25 +40,31 @@ interface SessionManager<ResponseType extends BaseHttpResponse = BaseHttpRespons
 }
 ```
 
-It is pretty straightforward -- use `isAuthenticated`/`login`/`logout` for the auth session management.
+Use `isAuthenticated`/`login`/`logout` methods for the auth session management.
 Two remaining methods are:
-- `getRealmHeader`: can be used to get the device name before authenticating (e.g., to show it on the login screen)
+- `getRealmHeader`: allows to get the device name before authenticating (e.g., to show it on the login screen)
 - `toggleErrorLogging`: enables/disables logging of HTTP errors to the console
 
 ### `RciManager`
 
-The `RciManager` is used to interact with the RCI API.
-It has the following interface:
+The `RciManager` class is used to interact with the RCI API.
+It has a few advantages over just using `fetch/xhr/axios/...`:
+- queries from multiple method calls can be batched into a single HTTP request
+- there is a simple priority system:
+  priority queries block the non-priority ones until they are finished
+- it provides a convenient way to handle background processes
+
+The `RciManager` class has the following interface:
 
 ```typescript
 interface RciManager<
   QueryPath extends string = string, // valid 'path' values for regular RCI queries
   BackgroundQueryPath extends string = string // valid 'path' values for background process RCI queries
 > {
-  execute(query: RciTask<QueryPath>): GenericResponse;
-  queue(query: RciTask<QueryPath>, options?: QueueOptions): GenericResponse;
-  executeBackgroundProcess(query: RciQuery<BackgroundQueryPath>, options?: RciBackgroundTaskOptions): RciBackgroundProcess;
-  queueBackgroundProcess(query: RciQuery<BackgroundQueryPath>, options?: RciBackgroundTaskOptions): RciBackgroundProcess;
+  execute(query: RciTask<QueryPath>): Observable<any>;
+  queue(query: RciTask<QueryPath>, options?: QueueOptions): Observable<any>;
+  initBackgroundProcess(query: RciQuery<BackgroundQueryPath>, options?: RciBackgroundProcessOptions): RciBackgroundProcess;
+  queueBackgroundProcess(query: RciQuery<BackgroundQueryPath>, options?: RciBackgroundProcessOptions): RciBackgroundProcess;
 }
 ```
 
@@ -182,7 +178,9 @@ The `RciManager` provides two methods for sending API queries:
 Both methods return a [rxjs Observable](https://rxjs.dev/guide/observable)
 that you must subscribe to in order to receive the result. Below are a few usage examples.
 
-#### 1. A basic example
+#### Usage Examples
+
+##### 1. A basic example
 
 ```typescript
 import {Observable, of, firstValueFrom} from 'rxjs';
@@ -237,7 +235,7 @@ auth$
   });
 ```
 
-#### 2. Multiple queries
+##### 2. Multiple queries
 
 ```typescript
 import {forkJoin} from 'rxjs';
@@ -276,7 +274,7 @@ bastch1$
   });
 ```
 
-#### 3. Priority queries
+##### 3. Priority queries
 
 If you use the batching queue, but need to send a query almost immediately,
 you can send it is a priority one. Priority queries are batched within
@@ -319,36 +317,39 @@ all$
   });
 ```
 
-#### 4. Background Processes
+#### Background Processes
 
 For [background processes](../../docs/RCI_API.md#23-background-processes),
 the `RciManager` provides two methods that accept `RciQuery` objects:
 
-- **`executeBackgroundProcess(query, options?)`**: returns an `RciBackgroundProcess` object
-  that can be manually aborted. The request to start the background process is sent immediately.
-  However, this method does not prevent multiple background processes with the same command
-  but different arguments from running in parallel.
+- **`initBackgroundProcess(query, options?)`**: returns an `RciBackgroundProcess` object
+  that must be started manually. This method is useful when you need full control over
+  the background process lifecycle (you also can abort the ongoing process before it finishes).  
 
 - **`queueBackgroundProcess(query, options?)`**: Queues a background process. Queries with the same
   `path` are grouped into a single queue, ensuring that the same command with different arguments
-  doesn't run in parallel. This prevents conflicts when, for example, multiple ping operations
-  with different hosts are requested.
+  doesn't run in parallel. This is a workaround for certain API restrictions if the `RciManager`
+  is used in a browser, since the browser usually uses a single HTTP session to handle all API requests.
 
 Both methods return a `RciBackgroundProcess` object with:
+- `start(): boolean`: A method to manually abort the process (should not be called for queued processes)
+- `abort(): boolean`: A method to manually abort the process
+- `state$`: An Observable that emits data on process state change
 - `data$`: An Observable that emits data updates as the background process runs
 - `done$`: An Observable that emits when the process finishes (with a reason: `'completed'`, `'aborted'`, or `'timed_out'`)
-- `abort()`: A method to manually abort the process
 
 ```typescript
 interface RciBackgroundProcess {
+  state$: Observable<RCI_BACKGROUND_PROCESS_STATE>;
   data$: Observable<GenericObject | null>;
   done$: Observable<RCI_BACKGROUND_PROCESS_FINISH_REASON>;
 
-  abort(): void
+  start(): boolean;
+  abort(): boolean;
 }
 ```
 
-Here's a basic example using `executeBackgroundProcess`:
+Here's a basic example using `initBackgroundProcess`:
 
 ```typescript
 const pingQuery: RciQuery = {
@@ -360,7 +361,7 @@ const pingQuery: RciQuery = {
   },
 };
 
-const ping$ = rciManager.executeBackgroundProcess(pingQuery);
+const ping$ = rciManager.initBackgroundProcess(pingQuery);
 
 ping$.data$
   .subscribe((data) => {
@@ -371,6 +372,8 @@ ping$.done$
   .subscribe((reason) => {
     console.log('Ping finished:', reason);
   });
+
+ping$.start();
 ```
 
 You also can abort a background process manually before it finishes:
@@ -385,7 +388,7 @@ const pingQuery: RciQuery = {
   },
 };
 
-const ping$ = rciManager.executeBackgroundProcess(pingQuery);
+const ping$ = rciManager.initBackgroundProcess(pingQuery);
 
 ping$.data$
   .subscribe((data) => {
@@ -396,6 +399,8 @@ ping$.done$
   .subscribe((reason) => {
     console.log('Ping finished:', reason);
   });
+
+ping$.start();
 
 setTimeout(() => ping$.abort(), 4000);
 ```

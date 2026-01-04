@@ -1,11 +1,11 @@
+import {Observable} from 'rxjs';
 import {map, timeout} from 'rxjs/operators';
 import {BaseHttpResponse, HttpTransport} from '../transport';
-import type {GenericObject} from '../type.utils';
 import {RciQuery, RciTask} from './query';
 import {RCI_QUEUE_DEFAULT_BATCH_TIMEOUT, RciQueue} from './queue';
-import {RciBackgroundProcess, RciBackgroundTaskOptions, RciBackgroundTaskQueue} from './background-process';
+import {RciBackgroundProcess, RciBackgroundProcessOptions, RciBackgroundTaskQueue} from './background-process';
 import {RciPayloadHelper} from './payload';
-import type {GenericResponse, QueueOptions} from './rci.manager.types';
+import type {QueueOptions} from './rci.manager.types';
 import {DEFAULT_QUEUE_OPTIONS, RCI_QUERY_TIMEOUT} from './rci.manager.constants';
 
 export class RciManager<
@@ -36,15 +36,15 @@ export class RciManager<
     this.batchQueue = new RciQueue(
       this.rciPath,
       this.httpTransport,
-      // the batch queue will be blocked any time the priority queue is used to execute something
       {
         batchTimeout: Math.max(this.batchTimeout, 0),
+        // the batch queue will be blocked any time the priority queue is used to execute something
         blockerQueue: this.priorityQueue,
       },
     );
   }
 
-  public execute(query: RciTask<QueryPath>): GenericResponse {
+  public execute(query: RciTask<QueryPath>): Observable<any> {
     const isSingleQuery = !Array.isArray(query);
     const queryList: Array<RciQuery<QueryPath>> = isSingleQuery
       ? [query]
@@ -73,7 +73,7 @@ export class RciManager<
   public queue(
     query: RciTask<QueryPath>,
     options: QueueOptions = DEFAULT_QUEUE_OPTIONS,
-  ): GenericResponse {
+  ): Observable<any> {
     if (options.isPriorityTask) {
       return this.priorityQueue.addTask(query, options.saveConfiguration);
     } else {
@@ -81,19 +81,23 @@ export class RciManager<
     }
   }
 
-  public executeBackgroundProcess(
+  public initBackgroundProcess(
     query: RciQuery<BackgroundQueryPath>,
-    options: RciBackgroundTaskOptions = {},
-  ): RciBackgroundProcess {
-    const queue = new RciBackgroundTaskQueue<BackgroundQueryPath>(this.rciPath, query.path, this.httpTransport);
-
-    return queue.push(query.data as GenericObject, options);
+    options: RciBackgroundProcessOptions = {},
+  ): RciBackgroundProcess<BackgroundQueryPath> {
+    return new RciBackgroundProcess<BackgroundQueryPath>(
+      query.path,
+      query.data || {},
+      options,
+      this.rciPath,
+      this.httpTransport,
+    );
   }
 
   public queueBackgroundProcess(
     query: RciQuery<BackgroundQueryPath>,
-    options: RciBackgroundTaskOptions = {},
-  ): RciBackgroundProcess {
+    options: RciBackgroundProcessOptions = {},
+  ): RciBackgroundProcess<BackgroundQueryPath> {
     const {path} = query;
     const key = String(path);
     const data = query.data || {};
@@ -106,6 +110,6 @@ export class RciManager<
       );
     }
 
-    return this.backgroundQueues[key].push(data as GenericObject, options);
+    return this.backgroundQueues[key].push(data, options);
   }
 }

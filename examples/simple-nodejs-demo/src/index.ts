@@ -1,8 +1,16 @@
-import {catchError, firstValueFrom, forkJoin, of, timeout, TimeoutError} from 'rxjs';
+import {TimeoutError, catchError, firstValueFrom, forkJoin, of, timeout} from 'rxjs';
 import inquirer from 'inquirer';
 import {RciQuery} from '@rci-tools/core';
 import * as _ from 'lodash';
 import {DeviceCredentials, RciService} from './rci.service';
+
+const getTimestampStr = (): string => {
+  return new Date().toISOString().split('T')[1]?.slice(0, -1) || '';
+};
+
+const logTimestamped = (...args: any[]): void => {
+  console.log(`[${getTimestampStr()}]`, ...args);
+};
 
 const getDeviceCredentials = async (): Promise<DeviceCredentials> => {
   return inquirer
@@ -53,46 +61,207 @@ const executeRegularQueries = async (rciService: RciService): Promise<void> => {
   console.log('\b----------------------------------------------------------\n');
 };
 
-const executeContinuedQueries = async (rciService: RciService): Promise<void> => {
-  console.log('\n----------------------------------------------------------\n');
-  console.log('\n\nQueuing "continued" queries\n\n');
+const runBackgroundProcess = async (rciService: RciService): Promise<void> => {
+  const path: string = 'components.list';
 
-  const continuedQueries: RciQuery[] = [
-    {path: 'tools.ping', data: {host: 'google.com', packetsize: 84, count: 5}},
-    {path: 'tools.ping', data: {host: 'google.com', packetsize: 84, count: 5}},
-    {path: 'components.list', data: {sandbox: 'stable'}},
-    {path: 'components.list', data: {sandbox: 'draft'}},
+  console.log('\n----------------------------------------------------------\n');
+  console.log(`Using "${path}" command with manual start/abort control\n\n`);
+
+  const query: RciQuery = {
+    path,
+    data: {sandbox: 'preview'},
+  };
+
+  // Initialize the background process (but don't start it yet)
+  const process = rciService.initBackgroundProcess(path, query.data || {});
+
+  console.log(`Initialized "${path}" process (state: ${process.getState()})`);
+  console.log('The background process is not started yet\n');
+
+  // Subscribe to state changes
+  process.state$
+    .subscribe((state) => {
+      logTimestamped(`Process state changed: ${state}`);
+    });
+
+  // Subscribe to data updates
+  process.data$
+    .subscribe((data) => {
+      logTimestamped('Received data update:', JSON.stringify(data, null, 2));
+    });
+
+  // Subscribe to completion
+  process.done$
+    .subscribe((reason) => {
+      logTimestamped(`Process finished with reason: ${reason}`);
+    });
+
+  // Wait a bit before starting
+  console.log('Waiting 1 second before starting the process...\n');
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+
+  // Manually start the process
+  console.log('Starting the process manually...\n');
+  const started = process.start();
+
+  if (!started) {
+    console.error('Failed to start the process');
+    return;
+  }
+
+  // Wait for the process to complete
+  console.log('Waiting for the process to complete...\n');
+  await firstValueFrom(process.done$);
+
+  console.log('\n----------------------------------------------------------\n');
+  console.log('Summary:\n');
+  console.log(`✓ Process was initialized but not started automatically`);
+  console.log(`✓ Process was manually started using process.start()`);
+  console.log(`✓ Process completed successfully\n`);
+};
+
+const queueBackgroundProcesses = async (rciService: RciService): Promise<void> => {
+  const toolsPingPath: string = 'tools.ping';
+  const componentsListPath: string = 'components.list';
+
+  console.log('\n----------------------------------------------------------\n');
+  console.log('\nDemonstrating queued and parallel execution of background processes\n');
+  console.log(`Queuing 5 "${toolsPingPath}" queries (sequential) and 2 "${componentsListPath}" queries (sequential)\n`);
+  console.log(`The two queues will run in parallel with each other\n\n`);
+
+  // Create 5 ping queries with different arguments
+  const pingQueries: Array<{query: RciQuery; description: string; timeout?: number}> = [
+    {
+      query: {path: toolsPingPath, data: {host: 'google.com', packetsize: 84, count: 3}},
+      description: 'Ping #1: google.com (3 packets)',
+    },
+    {
+      query: {path: toolsPingPath, data: {host: 'github.com', packetsize: 84, count: 5}},
+      description: 'Ping #2: github.com (5 packets)',
+    },
+    {
+      query: {path: toolsPingPath, data: {host: 'stackoverflow.com', packetsize: 84, count: 4}},
+      description: 'Ping #3: stackoverflow.com (4 packets)',
+      timeout: 2000, // This one will time out after 2 seconds
+    },
+    {
+      query: {path: toolsPingPath, data: {host: 'example.com', packetsize: 84, count: 10}},
+      description: 'Ping #4: example.com (10 packets)',
+    },
+    {
+      query: {path: toolsPingPath, data: {host: 'wikipedia.org', packetsize: 84, count: 3}},
+      description: 'Ping #5: wikipedia.org (3 packets)',
+    },
   ];
 
-  const continuedTasks = continuedQueries.map((query) => {
-    return rciService.queueBackgroundProcess(query.path, query.data || {});
+  // Create 2 components.list queries with different sandboxes
+  const componentsQueries: Array<{query: RciQuery; description: string}> = [
+    {
+      query: {path: componentsListPath, data: {sandbox: 'stable'}},
+      description: 'Components.list #1: stable sandbox',
+    },
+    {
+      query: {path: componentsListPath, data: {sandbox: 'draft'}},
+      description: 'Components.list #2: testing sandbox',
+    },
+  ];
+
+  console.log(`Queuing "${toolsPingPath}" processes (${pingQueries.length} total):\n`);
+  pingQueries.forEach((item, index) => {
+    console.log(`  ${index + 1}. ${item.description}`);
   });
 
-  setTimeout(
-    () => {
-      console.log('\n[!] Manually aborting two "continued" tasks [!]\n');
+  console.log(`\nQueuing "${componentsListPath}" processes (${componentsQueries.length} total):\n`);
+  componentsQueries.forEach((item, index) => {
+    console.log(`  ${index + 1}. ${item.description}`);
+  });
 
-      continuedTasks[0]!.abort();
-      continuedTasks[2]!.abort();
-    },
-    500,
-  );
+  console.log('');
 
-  const done$ = continuedTasks
-    .map((task) => task.done$);
+  // Queue all ping processes - they will be executed sequentially since they share the same path
+  const pingTasks = pingQueries.map((item, index) => {
+    const process = rciService.queueBackgroundProcess(
+      item.query.path,
+      item.query.data || {},
+      item.timeout ? {timeout: item.timeout} : {},
+    );
+
+    process.state$
+      .subscribe((state) => {
+        const hostPart = item.description.split(':')[1]?.trim() || item.description;
+        logTimestamped(`Ping #${index + 1} (${hostPart}) state: ${state}`);
+      });
+
+    process.data$
+      .subscribe(() => {
+        logTimestamped(`Ping #${index + 1} received data update`);
+      });
+
+    return {task: process, description: item.description, index, type: 'ping' as const};
+  });
+
+  // Queue all components.list processes - they will be executed sequentially since they share the same path
+  const componentsTasks = componentsQueries.map((item, index) => {
+    const process = rciService.queueBackgroundProcess(
+      item.query.path,
+      item.query.data || {},
+    );
+
+    process.state$
+      .subscribe((state) => {
+        const sandboxPart = item.description.split(':')[1]?.trim() || item.description;
+        logTimestamped(`Components.list #${index + 1} (${sandboxPart}) state: ${state}`);
+      });
+
+    process.data$
+      .subscribe(() => {
+        logTimestamped(`Components.list #${index + 1} received data update`);
+      });
+
+    return {task: process, description: item.description, index, type: 'components' as const};
+  });
+
+  console.log('All processes have been queued. They will start automatically.\n');
+
+  // Wait for all processes to complete
+  const allTasks = [...pingTasks, ...componentsTasks];
+  const done$ = allTasks.map((item) => item.task.done$);
+
+  console.log(`Waiting for all ${allTasks.length} processes to complete...\n`);
 
   const finalResults = await firstValueFrom(forkJoin(done$));
 
-  console.log('\nFinal results for "continued" queries:\n');
-  continuedQueries.forEach((query, index) => {
+  console.log('\n----------------------------------------------------------\n');
+  console.log('Final results for queued processes:\n');
+  console.log('(Demonstrating queued execution within same path, parallel across different paths)\n');
+
+  pingQueries.forEach((item, index) => {
+    const finishReason = finalResults[index];
     const chunks = [
-      `- Query: ${_.padStart(query.path, 20, ' ')}`,
-      `Data: ${_.padStart(JSON.stringify(query.data || {}), 50, ' ')}`,
-      `Finish reason: ${finalResults[index]}`,
+      `${toolsPingPath} #${index + 1}: ${_.padEnd(item.description, 45, ' ')}`,
+      `Finish: ${_.padStart(finishReason, 12, ' ')}`,
     ];
 
-    console.warn(chunks.join(' | '));
+    console.log(chunks.join(' | '));
   });
+
+  componentsQueries.forEach((item, index) => {
+    const finishReason = finalResults[pingQueries.length + index];
+    const chunks = [
+      `${componentsListPath} #${index + 1}: ${_.padEnd(item.description, 45, ' ')}`,
+      `Finish: ${_.padStart(finishReason, 12, ' ')}`,
+    ];
+
+    console.log(chunks.join(' | '));
+  });
+
+  console.log('\n----------------------------------------------------------\n');
+  console.log('Summary:\n');
+  console.log(`✓ 5 "${toolsPingPath}" queries were queued and executed sequentially`);
+  console.log(`✓ 2 "${componentsListPath}" queries were queued and executed sequentially`);
+  console.log(`✓ The two queues ran in parallel with each other`);
+  console.log(`✓ "${toolsPingPath}" #3 timed out after 2 seconds`);
+  console.log('✓ All processes completed (either DONE, ABORTED, or TIMED_OUT)\n');
 };
 
 const main = async (): Promise<void> => {
@@ -124,8 +293,9 @@ const main = async (): Promise<void> => {
       }
 
       await executeRegularQueries(rciService);
-      await executeContinuedQueries(rciService);
+      await runBackgroundProcess(rciService);
+      await queueBackgroundProcesses(rciService);
     });
-}
+};
 
 void main();
