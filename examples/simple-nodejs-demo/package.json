@@ -6,7 +6,8 @@
   "author": "Eralde",
   "license": "ISC",
   "scripts": {
-    "dev": "tsx src/index.ts"
+    "dev": "tsx src/index.ts",
+    "fmt": "dprint fmt \"./src/**/*.ts\""
   },
   "dependencies": {
     "inquirer": "^12.9.0",
