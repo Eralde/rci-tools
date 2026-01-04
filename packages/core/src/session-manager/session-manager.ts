@@ -4,8 +4,6 @@ import {md5} from 'hash-wasm';
 import jsSha from 'jssha';
 import type {BaseHttpResponse, HttpTransport} from '../transport';
 
-const AUTH_URI = '/auth';
-
 interface PasswordData {
   token: string;
   login: string;
@@ -22,7 +20,7 @@ export class SessionManager<ResponseType extends BaseHttpResponse = BaseHttpResp
     private host: string,
     private httpTransport: HttpTransport<ResponseType>,
   ) {
-    this.authUri = `${this.host}${AUTH_URI}`;
+    this.authUri = `${this.host}/auth`;
   }
 
   public isAuthenticated(): Observable<boolean> {
