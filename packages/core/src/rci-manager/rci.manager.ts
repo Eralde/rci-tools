@@ -1,10 +1,8 @@
-import {map, takeUntil, timeout} from 'rxjs/operators';
+import {map, timeout} from 'rxjs/operators';
 import {BaseHttpResponse, HttpTransport} from '../transport';
-import type {GenericObject} from '../type.utils';
 import {RciQuery, RciTask} from './query';
 import {RCI_QUEUE_DEFAULT_BATCH_TIMEOUT, RciQueue} from './queue';
 import {RciBackgroundProcess, RciBackgroundTaskOptions, RciBackgroundTaskQueue} from './background-process';
-import {RciBackgroundTask} from './background-process/rci.background-task';
 import {RciPayloadHelper} from './payload';
 import type {GenericResponse, QueueOptions} from './rci.manager.types';
 import {DEFAULT_QUEUE_OPTIONS, RCI_QUERY_TIMEOUT} from './rci.manager.constants';
@@ -86,22 +84,13 @@ export class RciManager<
     query: RciQuery<BackgroundQueryPath>,
     options: RciBackgroundTaskOptions = {},
   ): RciBackgroundProcess<BackgroundQueryPath> {
-    const task = new RciBackgroundTask<BackgroundQueryPath>(query.path, query.data as GenericObject || {}, options);
-    const process = new RciBackgroundProcess<BackgroundQueryPath>(task);
-
-    // Subscribe to start$ to execute the process when it starts
-    process.start$
-      .pipe(takeUntil(process.done$))
-      .subscribe((processInstance) => {
-        const queue = new RciBackgroundTaskQueue<BackgroundQueryPath>(
-          this.rciPath,
-          query.path,
-          this.httpTransport,
-        );
-        queue.executeProcess(processInstance);
-      });
-
-    return process;
+    return new RciBackgroundProcess<BackgroundQueryPath>(
+      query.path,
+      query.data || {},
+      options,
+      this.rciPath,
+      this.httpTransport,
+    );
   }
 
   public queueBackgroundProcess(
@@ -120,6 +109,6 @@ export class RciManager<
       );
     }
 
-    return this.backgroundQueues[key].push(data as GenericObject, options);
+    return this.backgroundQueues[key].push(data, options);
   }
 }
