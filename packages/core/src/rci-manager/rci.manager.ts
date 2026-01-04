@@ -35,9 +35,9 @@ export class RciManager<
     this.batchQueue = new RciQueue(
       this.rciPath,
       this.httpTransport,
-      // the batch queue will be blocked any time the priority queue is used to execute something
       {
         batchTimeout: Math.max(this.batchTimeout, 0),
+        // the batch queue will be blocked any time the priority queue is used to execute something
         blockerQueue: this.priorityQueue,
       },
     );
