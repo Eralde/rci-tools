@@ -35,6 +35,15 @@ export class RciService {
       );
   }
 
+  public initBackgroundProcess(
+    path: string,
+    data: RciQuery['data'],
+    options?: {timeout?: number; pollInterval?: number},
+  ): RciBackgroundProcess {
+    const query: RciQuery = {path, data: data || {}};
+    return this.manager.initBackgroundProcess(query, options);
+  }
+
   public queueBackgroundProcess(
     path: string,
     data: RciQuery['data'],

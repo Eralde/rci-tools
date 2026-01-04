@@ -4,6 +4,14 @@ import {RciQuery} from '@rci-tools/core';
 import * as _ from 'lodash';
 import {DeviceCredentials, RciService} from './rci.service';
 
+const getTimestampStr = (): string => {
+  return new Date().toISOString().split('T')[1]?.slice(0, -1) || '';
+};
+
+const logTimestamped = (...args: any[]): void => {
+  console.log(`[${getTimestampStr()}]`, ...args);
+};
+
 const getDeviceCredentials = async (): Promise<DeviceCredentials> => {
   return inquirer
     .prompt([
@@ -53,7 +61,66 @@ const executeRegularQueries = async (rciService: RciService): Promise<void> => {
   console.log('\b----------------------------------------------------------\n');
 };
 
-const executeBackgroundProcesses = async (rciService: RciService): Promise<void> => {
+const runBackgroundProcess = async (rciService: RciService): Promise<void> => {
+  const path: string = 'components.list';
+
+  console.log('\n----------------------------------------------------------\n');
+  console.log(`Using "${path}" command with manual start/abort control\n\n`);
+
+  const query: RciQuery = {
+    path,
+    data: {sandbox: 'stable'},
+  };
+
+  // Initialize the background process (but don't start it yet)
+  const process = rciService.initBackgroundProcess(path, query.data || {});
+
+  console.log(`Initialized "${path}" process (state: ${process.getState()})`);
+  console.log('The background process is not started yet\n');
+
+  // Subscribe to state changes
+  process.state$
+    .subscribe((state) => {
+      logTimestamped(`Process state changed: ${state}`);
+    });
+
+  // Subscribe to data updates
+  process.data$
+    .subscribe((data) => {
+      logTimestamped('Received data update:', JSON.stringify(data, null, 2));
+    });
+
+  // Subscribe to completion
+  process.done$
+    .subscribe((reason) => {
+      logTimestamped(`Process finished with reason: ${reason}`);
+    });
+
+  // Wait a bit before starting
+  console.log('Waiting 1 second before starting the process...\n');
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+
+  // Manually start the process
+  console.log('Starting the process manually...\n');
+  const started = process.start();
+
+  if (!started) {
+    console.error('Failed to start the process');
+    return;
+  }
+
+  // Wait for the process to complete
+  console.log('Waiting for the process to complete...\n');
+  await firstValueFrom(process.done$);
+
+  console.log('\n----------------------------------------------------------\n');
+  console.log('Summary:\n');
+  console.log(`✓ Process was initialized but not started automatically`);
+  console.log(`✓ Process was manually started using process.start()`);
+  console.log(`✓ Process completed successfully\n`);
+};
+
+const queueBackgroundProcesses = async (rciService: RciService): Promise<void> => {
   const path: string = 'tools.ping';
 
   console.log('\n----------------------------------------------------------\n');
@@ -104,18 +171,15 @@ const executeBackgroundProcesses = async (rciService: RciService): Promise<void>
 
     process.state$
       .subscribe((state) => {
-        const timestamp = new Date().toISOString().split('T')[1]?.slice(0, -1) || '';
         const hostPart = item.description.split(':')[1]?.trim() || item.description;
 
-        console.log(`[${timestamp}] Ping #${index + 1} (${hostPart}) state: ${state}`);
+        logTimestamped(`Ping #${index + 1} (${hostPart}) state: ${state}`);
       });
 
     // data updates
     process.data$
       .subscribe(() => {
-        const timestamp = new Date().toISOString().split('T')[1]?.slice(0, -1) || '';
-
-        console.log(`[${timestamp}] Ping #${index + 1} received data update`);
+        logTimestamped(`Ping #${index + 1} received data update`);
       });
 
     return {task: process, description: item.description, index};
@@ -195,7 +259,8 @@ const main = async (): Promise<void> => {
       }
 
       await executeRegularQueries(rciService);
-      await executeBackgroundProcesses(rciService);
+      await runBackgroundProcess(rciService);
+      await queueBackgroundProcesses(rciService);
     });
 };
 

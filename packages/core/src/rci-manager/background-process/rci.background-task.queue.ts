@@ -1,13 +1,12 @@
-import {
-  BehaviorSubject,
-  ReplaySubject,
-  Subject,
-  Subscription,
-} from 'rxjs';
+import {BehaviorSubject, ReplaySubject, Subject, Subscription} from 'rxjs';
 import type {Values} from '../../type.utils';
 import {RciQuery} from '../query';
 import {BaseHttpResponse, HttpTransport} from '../../transport';
-import {RciBackgroundProcess, RciBackgroundProcessOptions, DEFAULT_BACKGROUND_PROCESS_OPTIONS} from './rci.background-process';
+import {
+  DEFAULT_BACKGROUND_PROCESS_OPTIONS,
+  RciBackgroundProcess,
+  RciBackgroundProcessOptions,
+} from './rci.background-process';
 
 export const RCI_BACKGROUND_TASK_QUEUE_STATE = {
   // the queue is ready to process tasks
@@ -18,7 +17,6 @@ export const RCI_BACKGROUND_TASK_QUEUE_STATE = {
 } as const;
 
 export type RciBackgroundTaskQueueState = Values<typeof RCI_BACKGROUND_TASK_QUEUE_STATE>;
-
 
 interface QueuedProcess<QueryPath extends string = string> {
   process: RciBackgroundProcess<QueryPath>;
@@ -115,5 +113,4 @@ export class RciBackgroundTaskQueue<QueryPath extends string = string> {
         });
       });
   }
-
 }
