@@ -69,7 +69,7 @@ const runBackgroundProcess = async (rciService: RciService): Promise<void> => {
 
   const query: RciQuery = {
     path,
-    data: {sandbox: 'stable'},
+    data: {sandbox: 'preview'},
   };
 
   // Initialize the background process (but don't start it yet)
@@ -171,15 +171,10 @@ const queueBackgroundProcesses = async (rciService: RciService): Promise<void> =
     console.log(`  ${index + 1}. ${item.description}`);
   });
 
-  setTimeout(
-    () => {
-      console.log(`\nQueuing "${componentsListPath}" processes (${componentsQueries.length} total):\n`);
-      componentsQueries.forEach((item, index) => {
-        console.log(`  ${index + 1}. ${item.description}`);
-      });
-    },
-    2000,
-  );
+  console.log(`\nQueuing "${componentsListPath}" processes (${componentsQueries.length} total):\n`);
+  componentsQueries.forEach((item, index) => {
+    console.log(`  ${index + 1}. ${item.description}`);
+  });
 
   console.log('');
 
