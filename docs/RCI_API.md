@@ -149,7 +149,7 @@ Creating/editing an object via RCI can be done as a single action (HTTP request)
 Actions are commands that do not modify the device configuration.
 For example, reading the current CPU load, ejecting a USB storage device,
 or clearing the system log are all examples of actions. Actions are executed instantly,
-unlike [background processes](#2-3-background-processes).
+unlike [background processes](#23-background-processes).
 
 - `GET` &rarr; Same as `POST` for `readonly` actions (see below); not applicable to other actions.
 - `POST` &rarr; Execute the action and return its result.
@@ -164,7 +164,7 @@ support `GET` requests. For example, `GET rci/eula/accept` will return an error.
 
 For convenience, RCI also provides special prefixes (`rci/show/rc` and `rci/show/sc`)
 that allow you to **read** settings via a `POST` request. See the
-[Reading configuration via POST requests](#3-reading-configuration-via-post-requests)
+[Reading configuration via POST requests](#32-reading-configuration-via-post-requests)
 section for more details. Resources with the `show/rc` and `show/sc` prefixes are also considered actions.
 
 ### 2.3 Background processes
@@ -592,9 +592,9 @@ $ curl -X POST http://192.168.1.1/rci/system/reboot \
 
 ### 3.1 Root API resource
 
-[Example 2.4.3](#2-4-3-ip-telnet-nested-setting) demonstrates the flexibility of RCI API
+[Example 2.4.3](#243-ip-telnet-nested-setting) demonstrates the flexibility of RCI API
 when querying a nested resource. That example also mentions the **root** API resource
-(`/rci/` = `/rci` + `/`). The root resource is a [setting](#2-1-settings). If you query
+(`/rci/` = `/rci` + `/`). The root resource is a [setting](#21-settings). If you query
 the root resource via GET, you will receive a JSON object containing almost the entire
 device configuration. Similarly, if you send a POST request to the root resource, you
 can change almost any setting on your device. Having a root resource is an additional
