@@ -8,6 +8,7 @@
   "license": "ISC",
   "scripts": {
     "dev": "tsx scripts/dev.ts",
+    "dev-no-backend": "tsx scripts/dev-no-backend.ts",
     "build": "vite build",
     "preview": "tsx scripts/preview.ts",
     "check": "svelte-check",
