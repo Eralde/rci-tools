@@ -131,6 +131,34 @@ describe('RciPayloadHelper', () => {
     });
   });
 
+  describe('batchTasks', () => {
+    it('should sort "show" queries first and "system.configuration.save" last', () => {
+      const tasks = [
+        {
+          isSingleQuery: false,
+          subject: null as any,
+          queries: [
+            {path: SYSTEM_CONFIGURATION_SAVE, data: {}, extractData: true},
+            {path: SYSTEM_DESCRIPTION, data: 'foobar', extractData: true},
+          ],
+        },
+        {
+          isSingleQuery: false,
+          subject: null as any,
+          queries: [
+            {path: SHOW_VERSION, extractData: true},
+            {path: INTERFACE, data: {name: 'Bridge0'}, extractData: true},
+          ],
+        },
+      ];
+
+      const {queryArray} = RciPayloadHelper.batchTasks(tasks as any);
+
+      expect(queryArray[0]).toEqual(expectObjectContainingPath(SHOW_VERSION));
+      expect(last(queryArray)).toEqual(expectObjectContainingPath(SYSTEM_CONFIGURATION_SAVE));
+    });
+  });
+
   it('inflateResponse(compactQueries(list)) === list.map(RciPayloadHelper.toQueryObject) for any list and any sortMask', () => {
     const list: RciQuery[] = [
       {path: SHOW_VERSION},
