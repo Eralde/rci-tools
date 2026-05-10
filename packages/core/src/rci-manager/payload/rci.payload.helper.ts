@@ -93,7 +93,7 @@ export class RciPayloadHelper {
   public static batchTasks(tasks: Task[]): CompactPayload {
     const allQueries: RciQuery[] = flatMap(tasks, 'queries');
 
-    return RciPayloadHelper.compactQueries(allQueries, QUERY_SORT.SHOW_FIRST & QUERY_SORT.SAVE_CONFIGURATION_LAST);
+    return RciPayloadHelper.compactQueries(allQueries, QUERY_SORT.SHOW_FIRST | QUERY_SORT.SAVE_CONFIGURATION_LAST);
   }
 
   public static splitResponsesPerTask(
