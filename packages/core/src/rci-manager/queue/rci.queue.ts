@@ -6,19 +6,18 @@ import type {GenericObject, ObjectOrArray} from '../../type.utils';
 import {RCI_QUERY_TIMEOUT} from '../rci.manager.constants';
 import {RciQuery, RciTask} from '../query';
 import {RCI_QUEUE_STATE, RciQueueOptions, RciQueueState, Task} from './rci.queue.types';
-import {RCI_QUEUE_DEFAULT_OPTIONS, SAVE_CONFIGURATION_QUERY} from './rci.queue.constants';
+import {RCI_QUEUE_BUSY_STATES, RCI_QUEUE_DEFAULT_OPTIONS, SAVE_CONFIGURATION_QUERY} from './rci.queue.constants';
 
 export class RciQueue<ResponseType extends BaseHttpResponse> {
-  private readonly stateSub$: BehaviorSubject<RciQueueState> = new BehaviorSubject<RciQueueState>(
-    RCI_QUEUE_STATE.READY,
-  );
+  // @dprint-ignore
+  private readonly stateSub$: BehaviorSubject<RciQueueState> = new BehaviorSubject<RciQueueState>(RCI_QUEUE_STATE.READY);
 
   public readonly state$ = this.stateSub$.asObservable();
 
   public readonly isBusy$ = this.state$
     .pipe(
       map((state) => {
-        return [RCI_QUEUE_STATE.AWAITING_RESPONSE, RCI_QUEUE_STATE.PENDING].includes(state);
+        return RCI_QUEUE_BUSY_STATES.includes(state);
       }),
     );
 
@@ -36,6 +35,7 @@ export class RciQueue<ResponseType extends BaseHttpResponse> {
   private readonly blockerQueue: RciQueue<ResponseType> | null;
   private pendingTasksCount = 0;
   private batchTimeout: number;
+  private batchSubscription: Subscription;
 
   constructor(
     private rciPath: string,
@@ -50,7 +50,7 @@ export class RciQueue<ResponseType extends BaseHttpResponse> {
     this.batchTimeout = _options.batchTimeout;
     this.blockerQueue = _options.blockerQueue;
 
-    this.initializeBatchSubscription();
+    this.batchSubscription = this.initializeBatchSubscription();
   }
 
   public static createImpossibleApiResponse(): ObjectOrArray {
@@ -126,6 +126,13 @@ export class RciQueue<ResponseType extends BaseHttpResponse> {
 
   private setState(state: RciQueueState): void {
     this.stateSub$.next(state);
+  }
+
+  public destroy(): void {
+    this.batchSubscription.unsubscribe();
+    this.stateSub$.complete();
+    this.tasks$.complete();
+    this.batchFinish$.complete();
   }
 
   private provideDataToTasks(chunkedResponses: GenericObject[][], tasks: Task[]): void {
