@@ -1,12 +1,15 @@
-import {BehaviorSubject, Observable, Subject, Subscription, of, race, timer} from 'rxjs';
+import {BehaviorSubject, EMPTY, Observable, Subject, Subscription, of, race} from 'rxjs';
 import {buffer, catchError, exhaustMap, filter, map, switchMap, take, takeUntil, timeout} from 'rxjs/operators';
 import {RciPayloadHelper} from '../payload';
 import type {BaseHttpResponse, HttpTransport} from '../../transport';
 import type {GenericObject, ObjectOrArray} from '../../type.utils';
 import {RCI_QUERY_TIMEOUT} from '../rci.manager.constants';
 import {RciQuery, RciTask} from '../query';
+import {BatchInfo, BatchScheduler, TimerScheduler} from '../scheduler';
+import {QueryStatsCollector} from '../stats';
 import {RCI_QUEUE_STATE, RciQueueOptions, RciQueueState, Task} from './rci.queue.types';
 import {RCI_QUEUE_BUSY_STATES, RCI_QUEUE_DEFAULT_OPTIONS, SAVE_CONFIGURATION_QUERY} from './rci.queue.constants';
+import {QueueNotIdleError} from './queue-not-idle.error';
 
 export class RciQueue<ResponseType extends BaseHttpResponse> {
   // @dprint-ignore
@@ -33,22 +36,34 @@ export class RciQueue<ResponseType extends BaseHttpResponse> {
     .pipe(buffer(this.batchFinish$));
 
   private readonly blockerQueue: RciQueue<ResponseType> | null;
+  private scheduler: BatchScheduler;
+  private readonly queueName: string;
+  private readonly statsCollector: QueryStatsCollector | null;
+
   private pendingTasksCount = 0;
-  private batchTimeout: number;
-  private batchSubscription: Subscription;
+  private batchSubscription: Subscription | null = null;
+  private batchCreatedAt = 0;
+  private currentBatch: Task[] = [];
+  private currentBatchSub$: Subject<BatchInfo> | null = null;
+  private currentSchedulerSub: Subscription | null = null;
+  private isDestroyed = false;
 
   constructor(
     private rciPath: string,
     private httpTransport: HttpTransport<ResponseType>,
     private options: Partial<RciQueueOptions<ResponseType>> = {},
+    scheduler?: BatchScheduler,
+    statsCollector?: QueryStatsCollector | null,
   ) {
     const _options = {
       ...RCI_QUEUE_DEFAULT_OPTIONS,
       ...this.options,
     };
 
-    this.batchTimeout = _options.batchTimeout;
     this.blockerQueue = _options.blockerQueue;
+    this.queueName = _options.queueName ?? 'unknown';
+    this.scheduler = scheduler ?? new TimerScheduler(Math.max(_options.batchTimeout, 0));
+    this.statsCollector = statsCollector ?? null;
 
     this.batchSubscription = this.initializeBatchSubscription();
   }
@@ -116,6 +131,12 @@ export class RciQueue<ResponseType extends BaseHttpResponse> {
             this.startBatch();
           }
 
+          this.currentBatch.push(task);
+          this.currentBatchSub$?.next({
+            tasks: [...this.currentBatch],
+            createdAt: this.batchCreatedAt,
+            elapsedMs: Date.now() - this.batchCreatedAt,
+          });
           this.tasks$.next(task);
           this.pendingTasksCount++;
 
@@ -129,10 +150,30 @@ export class RciQueue<ResponseType extends BaseHttpResponse> {
   }
 
   public destroy(): void {
-    this.batchSubscription.unsubscribe();
+    if (this.isDestroyed) {
+      return;
+    }
+
+    this.isDestroyed = true;
+
+    this.closeCurrentWindow();
+    this.scheduler.destroy();
+    this.batchSubscription?.unsubscribe();
+
+    this.batchSubscription = null;
+
     this.stateSub$.complete();
     this.tasks$.complete();
     this.batchFinish$.complete();
+  }
+
+  public setScheduler(scheduler: BatchScheduler): void {
+    if (this.stateSub$.value !== RCI_QUEUE_STATE.READY) {
+      throw new QueueNotIdleError(this.stateSub$.value);
+    }
+
+    this.scheduler.destroy();
+    this.scheduler = scheduler;
   }
 
   private provideDataToTasks(chunkedResponses: GenericObject[][], tasks: Task[]): void {
@@ -165,6 +206,8 @@ export class RciQueue<ResponseType extends BaseHttpResponse> {
             queryMap,
           } = RciPayloadHelper.batchTasks(tasks);
 
+          const sentAt = Date.now();
+
           // Moving catchError to the outer pipe
           // will cancel the batch$ Observable if an error occurs
           return this.httpTransport.sendQueryArray(this.rciPath, queryArray)
@@ -174,13 +217,13 @@ export class RciQueue<ResponseType extends BaseHttpResponse> {
               catchError((httpClientError) => of([[], httpClientError])),
               map(([batchedResponse, httpClientError]) => {
                 // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-                return [batchedResponse, httpClientError, queryMap, tasks];
+                return [batchedResponse, httpClientError, queryMap, tasks, sentAt];
               }),
             );
         }),
       )
       .subscribe((data) => {
-        const [batchedResponse, httpClientError, queryMap, tasks] = data;
+        const [batchedResponse, httpClientError, queryMap, tasks, sentAt] = data;
 
         if (httpClientError) {
           this.provideErrorDataToTasks(httpClientError, tasks);
@@ -188,6 +231,22 @@ export class RciQueue<ResponseType extends BaseHttpResponse> {
           const chunkedResponses = RciPayloadHelper.splitResponsesPerTask(batchedResponse, tasks, queryMap);
 
           this.provideDataToTasks(chunkedResponses, tasks);
+        }
+
+        const durationMs = Date.now() - sentAt;
+
+        try {
+          this.statsCollector?.collect({
+            queueName: this.queueName,
+            taskCount: tasks.length,
+            queryCount: tasks.reduce((sum, task) => sum + task.queries.length, 0),
+            sentAt,
+            durationMs,
+            success: !httpClientError,
+            error: httpClientError ?? undefined,
+          });
+        } catch {
+          // stats collection must not affect queue flow
         }
 
         this.onResponseProcessingFinish();
@@ -216,11 +275,40 @@ export class RciQueue<ResponseType extends BaseHttpResponse> {
   }
 
   private startBatch(): void {
+    this.closeCurrentWindow();
     this.setState(RCI_QUEUE_STATE.BATCHING_TASKS);
+    this.batchCreatedAt = Date.now();
 
-    timer(this.batchTimeout)
-      .pipe(take(1))
-      .subscribe(() => this.batchFinish$.next());
+    this.currentBatchSub$ = new Subject<BatchInfo>();
+
+    this.currentSchedulerSub = this.scheduler
+      .scheduleBatch(this.currentBatchSub$.asObservable())
+      .pipe(
+        take(1),
+        catchError((error) => {
+          console.error('[RciQueue] Scheduler error, forcing batch flush:', error);
+          this.batchFinish$.next();
+          this.closeCurrentWindow();
+          return EMPTY;
+        }),
+      )
+      .subscribe(() => {
+        this.batchFinish$.next();
+        this.closeCurrentWindow();
+      });
+  }
+
+  private closeCurrentWindow(): void {
+    this.currentSchedulerSub?.unsubscribe();
+
+    this.currentSchedulerSub = null;
+
+    this.currentBatchSub$?.complete();
+
+    this.currentBatchSub$ = null;
+    this.currentBatch = [];
+
+    this.scheduler.reset();
   }
 
   private onResponseProcessingFinish(): void {

@@ -1,12 +1,21 @@
-import {Observable} from 'rxjs';
-import {map, timeout} from 'rxjs/operators';
+import {Observable, throwError} from 'rxjs';
+import {filter, finalize, map, shareReplay, take, tap, timeout} from 'rxjs/operators';
 import {BaseHttpResponse, HttpTransport} from '../transport';
 import {RciQuery, RciTask} from './query';
-import {RCI_QUEUE_DEFAULT_BATCH_TIMEOUT, RciQueue} from './queue';
+import {RCI_QUEUE_DEFAULT_BATCH_TIMEOUT, RCI_QUEUE_STATE, RciQueue} from './queue';
+import {BatchScheduler, TimerScheduler} from './scheduler';
 import {RciBackgroundProcess, RciBackgroundProcessOptions, RciBackgroundTaskQueue} from './background-process';
 import {RciPayloadHelper} from './payload';
-import type {QueueOptions} from './rci.manager.types';
+import type {QueueOptions, RciManagerOptions} from './rci.manager.types';
 import {DEFAULT_QUEUE_OPTIONS, RCI_QUERY_TIMEOUT} from './rci.manager.constants';
+import {QueryStats, QueryStatsCollector} from './stats';
+
+export class SchedulerReplacementInProgressError extends Error {
+  constructor() {
+    super('A scheduler replacement is already in progress.');
+    this.name = 'SchedulerReplacementInProgressError';
+  }
+}
 
 export class RciManager<
   QueryPath extends string = string,
@@ -15,14 +24,18 @@ export class RciManager<
   protected readonly batchQueue: RciQueue<BaseHttpResponse>;
   protected readonly priorityQueue: RciQueue<BaseHttpResponse>;
   protected readonly backgroundQueues: Record<string, RciBackgroundTaskQueue<BackgroundQueryPath>> = {};
+  private readonly statsCollector = new QueryStatsCollector();
+  private currentSchedulerSwap$: Observable<void> | null = null;
 
   protected readonly rciPath: string;
 
   constructor(
     private host: string,
     private httpTransport: HttpTransport<BaseHttpResponse>,
-    private batchTimeout = RCI_QUEUE_DEFAULT_BATCH_TIMEOUT,
+    private options: RciManagerOptions = {},
   ) {
+    const batchTimeout = this.options.batchTimeout ?? RCI_QUEUE_DEFAULT_BATCH_TIMEOUT;
+
     this.rciPath = `${this.host}/rci/`;
 
     this.priorityQueue = new RciQueue(
@@ -30,18 +43,60 @@ export class RciManager<
       this.httpTransport,
       {
         batchTimeout: 0,
+        queueName: 'priority',
       },
+      new TimerScheduler(0),
+      this.statsCollector,
     );
 
     this.batchQueue = new RciQueue(
       this.rciPath,
       this.httpTransport,
       {
-        batchTimeout: Math.max(this.batchTimeout, 0),
+        batchTimeout: Math.max(batchTimeout, 0),
         // the batch queue will be blocked any time the priority queue is used to execute something
         blockerQueue: this.priorityQueue,
+        queueName: 'batch',
       },
+      this.options.batchScheduler ?? new TimerScheduler(Math.max(batchTimeout, 0)),
+      this.statsCollector,
     );
+  }
+
+  public get stats$(): Observable<QueryStats> {
+    return this.statsCollector.stats$;
+  }
+
+  public toggleStats(enabled: boolean): void {
+    this.statsCollector.toggle(enabled);
+  }
+
+  public setBatchScheduler(scheduler: BatchScheduler, timeoutMs: number = 30_000): Observable<void> {
+    if (this.currentSchedulerSwap$) {
+      return throwError(() => new SchedulerReplacementInProgressError());
+    }
+
+    const swap$ = this.batchQueue.state$
+      .pipe(
+        filter((state) => state === RCI_QUEUE_STATE.READY),
+        take(1),
+        timeout(timeoutMs),
+        tap(() => {
+          this.batchQueue.setScheduler(scheduler);
+        }),
+        map(() => undefined),
+        finalize(() => {
+          this.currentSchedulerSwap$ = null;
+        }),
+        shareReplay({bufferSize: 1, refCount: false}),
+      );
+
+    this.currentSchedulerSwap$ = swap$;
+    swap$.subscribe({
+      error: () => undefined,
+    });
+
+    return swap$;
   }
 
   public execute(query: RciTask<QueryPath>): Observable<any> {
@@ -111,5 +166,11 @@ export class RciManager<
     }
 
     return this.backgroundQueues[key].push(data, options);
+  }
+
+  public destroy(): void {
+    this.batchQueue.destroy();
+    this.priorityQueue.destroy();
+    this.statsCollector.destroy();
   }
 }

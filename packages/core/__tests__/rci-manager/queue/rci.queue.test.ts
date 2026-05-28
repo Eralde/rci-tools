@@ -1,7 +1,10 @@
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
-import {of, firstValueFrom} from 'rxjs';
+import {NEVER, of, firstValueFrom} from 'rxjs';
 import {take, toArray} from 'rxjs/operators';
 import {RciQueue} from '../../../src/rci-manager/queue/rci.queue';
+import {QueueNotIdleError} from '../../../src/rci-manager/queue/queue-not-idle.error';
+import type {BatchInfo, BatchScheduler} from '../../../src/rci-manager/scheduler';
+import {TimerScheduler} from '../../../src/rci-manager/scheduler';
 import type {BaseHttpResponse, HttpTransport} from '../../../src/transport';
 
 function makeTransport(): HttpTransport<BaseHttpResponse> {
@@ -79,6 +82,60 @@ describe('RciQueue', () => {
 
       queue.destroy();
       expect(() => queue.destroy()).not.toThrow();
+    });
+  });
+
+  describe('BatchInfo emissions', () => {
+    it('emits stable createdAt, increasing elapsedMs, and immutable task snapshots', () => {
+      const transport = makeTransport();
+      const snapshots: BatchInfo[] = [];
+      const scheduler: BatchScheduler = {
+        scheduleBatch: (batch$) => {
+          batch$.subscribe((info) => {
+            snapshots.push(info);
+          });
+          return NEVER;
+        },
+        reset: vi.fn(),
+        destroy: vi.fn(),
+      };
+      const queue = new RciQueue('http://device/rci/', transport, {batchTimeout: 100}, scheduler);
+
+      vi.setSystemTime(1_000);
+      queue.addTask({path: 'show.version'}).subscribe();
+      vi.setSystemTime(1_010);
+      queue.addTask({path: 'show.system'}).subscribe();
+
+      expect(snapshots).toHaveLength(2);
+      expect(snapshots[0]?.createdAt).toBe(1_000);
+      expect(snapshots[1]?.createdAt).toBe(1_000);
+      expect(snapshots[0]?.elapsedMs).toBe(0);
+      expect(snapshots[1]?.elapsedMs).toBe(10);
+      expect(snapshots[0]?.tasks).toHaveLength(1);
+      expect(snapshots[1]?.tasks).toHaveLength(2);
+      expect(snapshots[0]?.tasks).not.toBe(snapshots[1]?.tasks);
+    });
+  });
+
+  describe('setScheduler()', () => {
+    it('throws QueueNotIdleError when queue is not READY', () => {
+      const transport = makeTransport();
+      const queue = new RciQueue('http://device/rci/', transport, {batchTimeout: 100});
+
+      queue.addTask({path: 'show.version'}).subscribe();
+
+      expect(() => {
+        queue.setScheduler(new TimerScheduler(1));
+      }).toThrowError(QueueNotIdleError);
+    });
+
+    it('replaces scheduler in READY state', () => {
+      const transport = makeTransport();
+      const queue = new RciQueue('http://device/rci/', transport, {batchTimeout: 100});
+
+      expect(() => {
+        queue.setScheduler(new TimerScheduler(1));
+      }).not.toThrow();
     });
   });
 });

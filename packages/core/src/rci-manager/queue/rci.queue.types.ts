@@ -7,6 +7,7 @@ import {RciQueue} from './rci.queue';
 export interface RciQueueOptions<ResponseType extends BaseHttpResponse> {
   batchTimeout: number;
   blockerQueue: RciQueue<ResponseType> | null;
+  queueName?: string;
 }
 
 export const RCI_QUEUE_STATE = {
