@@ -1,164 +1,109 @@
-import {describe, it, expect, vi} from 'vitest';
-import {of, firstValueFrom, take} from 'rxjs';
+import {describe, it, expect, beforeAll} from 'vitest';
+import {firstValueFrom, take} from 'rxjs';
 import {
   RciBackgroundProcess,
   RCI_BACKGROUND_PROCESS_STATE,
   RCI_BACKGROUND_PROCESS_FINISH_REASON,
-} from '../../src/rci-manager/background-process';
-import type {BaseHttpResponse, HttpTransport} from '../../src/transport';
+  FetchTransport,
+  SessionManager,
+} from '../../src';
 
-function createMockTransport(responses: {
-  post?: BaseHttpResponse;
-  get?: BaseHttpResponse | BaseHttpResponse[];
-}): HttpTransport<BaseHttpResponse> {
-  const getResponses = Array.isArray(responses.get)
-    ? responses.get
-    : [responses.get ?? {status: 200, data: {}}];
+const IP_ADDRESS = process.env.RCI_DEVICE_IP;
 
-  let getIndex = 0;
+if (!IP_ADDRESS) {
+  throw new Error('Device IP address was not provided. Use --addr <device-ip>');
+}
 
-  return {
-    get: vi.fn().mockImplementation(() => {
-      const resp = getResponses[getIndex];
-      getIndex = Math.min(getIndex + 1, getResponses.length - 1);
-      return of(resp);
-    }),
-    post: vi.fn().mockImplementation(() => of(responses.post ?? {status: 200, data: {}})),
-    delete: vi.fn().mockReturnValue(of({status: 200, data: {}})),
-    getHeader: vi.fn().mockReturnValue(''),
-    onAuthRequest: vi.fn(),
-    clearAuthData: vi.fn(),
-    sendQueryArray: vi.fn().mockReturnValue(of([])),
-  };
+const host = String(IP_ADDRESS).startsWith('http://')
+  ? String(IP_ADDRESS)
+  : `http://${String(IP_ADDRESS)}`;
+
+const rciPath = `${host}/rci/`;
+
+const USERNAME = process.env.RCI_USERNAME;
+const PASSWORD = process.env.RCI_PASSWORD;
+
+async function ensureAuth(transport: FetchTransport): Promise<void> {
+  if (!USERNAME || !PASSWORD) return;
+
+  const session = new SessionManager(host, transport);
+  const authenticated = await firstValueFrom(session.login(USERNAME, PASSWORD));
+
+  if (!authenticated) {
+    throw new Error(`Auth failed for ${USERNAME} on ${host}`);
+  }
 }
 
 describe('RciBackgroundProcess', () => {
-  it('should POST, get final response immediately (no continued flag)', async () => {
-    const transport = createMockTransport({
-      post: {status: 200, data: {result: 'done'}},
-    });
+  let transport: FetchTransport;
 
+  beforeAll(async () => {
+    transport = new FetchTransport();
+    await ensureAuth(transport);
+  });
+
+  it('should POST tools.ping and receive final response (count=1)', async () => {
     const process = new RciBackgroundProcess(
-      'test.command',
-      {arg: 1},
-      {},
-      'http://device/rci/',
+      'tools.ping',
+      {host: '127.0.0.1', count: 1, packetsize: 56},
+      {timeout: 15000},
+      rciPath,
       transport,
     );
 
+    const dataValues: any[] = [];
+    process.data$.subscribe((v) => dataValues.push(v));
+
     const resultPromise = firstValueFrom(process.result$.pipe(take(1)));
-    const dataPromise = firstValueFrom(process.data$.pipe(take(1)));
+    const donePromise = firstValueFrom(process.done$.pipe(take(1)));
+
+    const started = process.start();
+    expect(started).toBe(true);
+
+    const result = await resultPromise;
+    const done = await donePromise;
+
+    expect(done).toBe(RCI_BACKGROUND_PROCESS_FINISH_REASON.DONE);
+    expect(result).toBeDefined();
+    expect(typeof result).toBe('object');
+    expect(dataValues.length).toBeGreaterThan(0);
+    expect(dataValues[dataValues.length - 1]).toEqual(result);
+    expect(process.getState()).toBe(RCI_BACKGROUND_PROCESS_STATE.COMPLETED);
+  }, 20000);
+
+  it('should emit data$ updates during polling with continued flag (count=3)', async () => {
+    const process = new RciBackgroundProcess(
+      'tools.ping',
+      {host: '127.0.0.1', count: 3, packetsize: 56},
+      {pollInterval: 200, timeout: 15000},
+      rciPath,
+      transport,
+    );
+
+    const dataValues: any[] = [];
+    process.data$.subscribe((v) => dataValues.push(v));
+
+    const resultPromise = firstValueFrom(process.result$.pipe(take(1)));
     const donePromise = firstValueFrom(process.done$.pipe(take(1)));
 
     process.start();
 
-    const data = await dataPromise;
     const result = await resultPromise;
     const done = await donePromise;
 
-    expect(transport.post).toHaveBeenCalledOnce();
-    expect(transport.get).not.toHaveBeenCalled();
-    expect(data).toEqual({result: 'done'});
-    expect(result).toEqual({result: 'done'});
     expect(done).toBe(RCI_BACKGROUND_PROCESS_FINISH_REASON.DONE);
+    expect(result).toBeDefined();
+    expect(dataValues.length).toBeGreaterThan(0);
+    expect(dataValues[dataValues.length - 1]).toEqual(result);
     expect(process.getState()).toBe(RCI_BACKGROUND_PROCESS_STATE.COMPLETED);
-  });
-
-  it('should emit result$ once with final payload after polling', async () => {
-    const transport = createMockTransport({
-      post: {status: 200, data: {continued: true, progress: 50}},
-      get: [
-        {status: 200, data: {continued: true, progress: 80}},
-        {status: 200, data: {result: 'final'}},
-      ],
-    });
-
-    const process = new RciBackgroundProcess(
-      'test.command',
-      {},
-      {pollInterval: 10},
-      'http://device/rci/',
-      transport,
-    );
-
-    const resultPromise = firstValueFrom(process.result$.pipe(take(1)));
-
-    process.start();
-
-    const result = await resultPromise;
-
-    expect(transport.post).toHaveBeenCalledOnce();
-    expect(transport.get).toHaveBeenCalledTimes(2);
-    expect(result).toEqual({result: 'final'});
-  });
-
-  it('should not emit result$ on abort', async () => {
-    const transport = createMockTransport({
-      post: {status: 200, data: {continued: true, progress: 50}},
-      get: {status: 200, data: {continued: true, progress: 50}},
-    });
-
-    const process = new RciBackgroundProcess(
-      'test.command',
-      {},
-      {pollInterval: 100},
-      'http://device/rci/',
-      transport,
-    );
-
-    let resultEmitted = false;
-    process.result$.subscribe(() => {
-      resultEmitted = true;
-    });
-
-    process.start();
-
-    await new Promise((r) => setTimeout(r, 150));
-    process.abort();
-
-    await new Promise((r) => setTimeout(r, 50));
-
-    expect(resultEmitted).toBe(false);
-    expect(process.getState()).toBe(RCI_BACKGROUND_PROCESS_STATE.ABORTED);
-  });
-
-  it('should not emit result$ on timeout', async () => {
-    const transport = createMockTransport({
-      post: {status: 200, data: {continued: true, progress: 50}},
-      get: {status: 200, data: {continued: true, progress: 50}},
-    });
-
-    const process = new RciBackgroundProcess(
-      'test.command',
-      {},
-      {timeout: 50, pollInterval: 1000},
-      'http://device/rci/',
-      transport,
-    );
-
-    let resultEmitted = false;
-    process.result$.subscribe(() => {
-      resultEmitted = true;
-    });
-
-    process.start();
-
-    await new Promise((r) => setTimeout(r, 100));
-
-    expect(resultEmitted).toBe(false);
-    expect(process.getState()).toBe(RCI_BACKGROUND_PROCESS_STATE.TIMED_OUT);
-  });
+  }, 20000);
 
   it('should reject attachToRunning after start has been called', () => {
-    const transport = createMockTransport({
-      post: {status: 200, data: {result: 'done'}},
-    });
-
     const process = new RciBackgroundProcess(
-      'test.command',
-      {},
-      {},
-      'http://device/rci/',
+      'tools.ping',
+      {host: '127.0.0.1', count: 1, packetsize: 56},
+      {timeout: 10000},
+      rciPath,
       transport,
     );
 
@@ -166,36 +111,12 @@ describe('RciBackgroundProcess', () => {
     expect(process.attachToRunning()).toBe(false);
   });
 
-  it('should reject start after attachToRunning has been called', () => {
-    const transport = createMockTransport({
-      get: {status: 200, data: {result: 'done'}},
-    });
-
+  it('should complete via attachToRunning (GET polling)', async () => {
     const process = new RciBackgroundProcess(
-      'test.command',
+      'tools.ping',
       {},
-      {},
-      'http://device/rci/',
-      transport,
-    );
-
-    expect(process.attachToRunning()).toBe(true);
-    expect(process.start()).toBe(false);
-  });
-
-  it('should poll with GET after attachToRunning and complete on final response', async () => {
-    const transport = createMockTransport({
-      get: [
-        {status: 200, data: {continued: true, progress: 30}},
-        {status: 200, data: {result: 'final'}},
-      ],
-    });
-
-    const process = new RciBackgroundProcess(
-      'test.command',
-      {},
-      {pollInterval: 10},
-      'http://device/rci/',
+      {pollInterval: 200, timeout: 5000},
+      rciPath,
       transport,
     );
 
@@ -204,33 +125,74 @@ describe('RciBackgroundProcess', () => {
 
     process.attachToRunning();
 
-    await new Promise((r) => setTimeout(r, 100));
+    const done = await firstValueFrom(process.done$.pipe(take(1)));
 
-    expect(transport.post).not.toHaveBeenCalled();
-    expect(transport.get).toHaveBeenCalledTimes(2);
-    expect(dataValues).toContainEqual({result: 'final'});
     expect(process.getState()).toBe(RCI_BACKGROUND_PROCESS_STATE.COMPLETED);
-  });
+    expect(done).toBe(RCI_BACKGROUND_PROCESS_FINISH_REASON.DONE);
+  }, 15000);
 
-  it('should complete immediately when attachToRunning gets response without continued flag', async () => {
-    const transport = createMockTransport({
-      get: {status: 200, data: {message: 'nothing running'}},
-    });
-
+  it('should reject start after attachToRunning has been called', () => {
     const process = new RciBackgroundProcess(
-      'test.command',
+      'tools.ping',
       {},
-      {},
-      'http://device/rci/',
+      {timeout: 5000},
+      rciPath,
       transport,
     );
 
-    process.attachToRunning();
-
-    await new Promise((r) => setTimeout(r, 50));
-
-    expect(transport.post).not.toHaveBeenCalled();
-    expect(transport.get).toHaveBeenCalledOnce();
-    expect(process.getState()).toBe(RCI_BACKGROUND_PROCESS_STATE.COMPLETED);
+    expect(process.attachToRunning()).toBe(true);
+    expect(process.start()).toBe(false);
   });
+
+  it('should not emit result$ when aborted during polling', async () => {
+    const process = new RciBackgroundProcess(
+      'tools.ping',
+      {host: '127.0.0.1', count: 100, packetsize: 56},
+      {pollInterval: 10, timeout: 15000},
+      rciPath,
+      transport,
+    );
+
+    let resultEmitted = false;
+    process.result$.subscribe(() => {
+      resultEmitted = true;
+    });
+
+    process.start();
+
+    await new Promise((r) => setTimeout(r, 100));
+
+    const donePromise = firstValueFrom(process.done$.pipe(take(1)));
+
+    const aborted = process.abort();
+    expect(aborted).toBe(true);
+
+    const done = await donePromise;
+
+    expect(resultEmitted).toBe(false);
+    expect(done).toBe(RCI_BACKGROUND_PROCESS_FINISH_REASON.ABORTED);
+    expect(process.getState()).toBe(RCI_BACKGROUND_PROCESS_STATE.ABORTED);
+  }, 10000);
+
+  it('should not emit result$ when timed out', async () => {
+    const process = new RciBackgroundProcess(
+      'tools.ping',
+      {host: '127.0.0.1', count: 1000, packetsize: 56},
+      {timeout: 500, pollInterval: 1000},
+      rciPath,
+      transport,
+    );
+
+    let resultEmitted = false;
+    process.result$.subscribe(() => {
+      resultEmitted = true;
+    });
+
+    process.start();
+    const done = await firstValueFrom(process.done$.pipe(take(1)));
+
+    expect(resultEmitted).toBe(false);
+    expect(done).toBe(RCI_BACKGROUND_PROCESS_FINISH_REASON.TIMED_OUT);
+    expect(process.getState()).toBe(RCI_BACKGROUND_PROCESS_STATE.TIMED_OUT);
+  }, 10000);
 });

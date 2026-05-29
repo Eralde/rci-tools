@@ -197,23 +197,31 @@ export class RciBackgroundProcess<CommandType extends string = string> {
 
     const race$: Observable<GenericObject | RCI_BACKGROUND_PROCESS_FINISH_REASON> = race(task$, timeout$, abort$);
 
-    race$.subscribe((result: GenericObject | RCI_BACKGROUND_PROCESS_FINISH_REASON) => {
-      if (typeof result === 'string') {
-        if (Object.values(RCI_BACKGROUND_PROCESS_FINISH_REASON).includes(result)) {
-          this.responseSub$.next(null);
-          this.doneSub$.next(result);
-          this.doneSub$.complete();
+    race$.subscribe({
+      next: (result: GenericObject | RCI_BACKGROUND_PROCESS_FINISH_REASON) => {
+        if (typeof result === 'string') {
+          if (Object.values(RCI_BACKGROUND_PROCESS_FINISH_REASON).includes(result)) {
+            this.responseSub$.next(null);
+            this.doneSub$.next(result);
+            this.doneSub$.complete();
+          } else {
+            this.markDone();
+          }
         } else {
+          this.responseSub$.next(result);
+          this.resultSub$.next(result);
           this.markDone();
         }
-      } else {
-        this.responseSub$.next(result);
-        this.resultSub$.next(result);
-        this.markDone();
-      }
 
-      this.responseSub$.complete();
-      this.resultSub$.complete();
+        this.responseSub$.complete();
+        this.resultSub$.complete();
+      },
+      error: () => {
+        this.responseSub$.complete();
+        this.resultSub$.complete();
+        this.doneSub$.next(RCI_BACKGROUND_PROCESS_FINISH_REASON.ABORTED);
+        this.doneSub$.complete();
+      },
     });
   }
 
