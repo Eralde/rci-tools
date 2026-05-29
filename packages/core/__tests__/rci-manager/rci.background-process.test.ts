@@ -39,6 +39,7 @@ describe('RciBackgroundProcess', () => {
 
   beforeAll(async () => {
     transport = new FetchTransport();
+
     await ensureAuth(transport);
   });
 
@@ -52,12 +53,14 @@ describe('RciBackgroundProcess', () => {
     );
 
     const dataValues: any[] = [];
+
     process.data$.subscribe((v) => dataValues.push(v));
 
     const resultPromise = firstValueFrom(process.result$.pipe(take(1)));
     const donePromise = firstValueFrom(process.done$.pipe(take(1)));
 
     const started = process.start();
+
     expect(started).toBe(true);
 
     const result = await resultPromise;
@@ -81,6 +84,7 @@ describe('RciBackgroundProcess', () => {
     );
 
     const dataValues: any[] = [];
+
     process.data$.subscribe((v) => dataValues.push(v));
 
     const resultPromise = firstValueFrom(process.result$.pipe(take(1)));
@@ -163,8 +167,8 @@ describe('RciBackgroundProcess', () => {
     await new Promise((r) => setTimeout(r, 100));
 
     const donePromise = firstValueFrom(process.done$.pipe(take(1)));
-
     const aborted = process.abort();
+
     expect(aborted).toBe(true);
 
     const done = await donePromise;
@@ -184,11 +188,13 @@ describe('RciBackgroundProcess', () => {
     );
 
     let resultEmitted = false;
+
     process.result$.subscribe(() => {
       resultEmitted = true;
     });
 
     process.start();
+
     const done = await firstValueFrom(process.done$.pipe(take(1)));
 
     expect(resultEmitted).toBe(false);

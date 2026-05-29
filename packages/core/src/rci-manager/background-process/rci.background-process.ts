@@ -33,6 +33,7 @@ export enum RCI_BACKGROUND_PROCESS_FINISH_REASON {
   DONE = 'DONE',
   ABORTED = 'ABORTED',
   TIMED_OUT = 'TIMED_OUT',
+  ERROR = 'ERROR',
 }
 
 export enum RCI_BACKGROUND_PROCESS_STATE {
@@ -43,6 +44,7 @@ export enum RCI_BACKGROUND_PROCESS_STATE {
   ABORTING = 'ABORTING',
   ABORTED = 'ABORTED',
   TIMED_OUT = 'TIMED_OUT',
+  ERROR = 'ERROR',
 }
 
 export class RciBackgroundProcess<CommandType extends string = string> {
@@ -109,6 +111,8 @@ export class RciBackgroundProcess<CommandType extends string = string> {
         this.stateSub$.next(RCI_BACKGROUND_PROCESS_STATE.ABORTED);
       } else if (reason === RCI_BACKGROUND_PROCESS_FINISH_REASON.TIMED_OUT) {
         this.stateSub$.next(RCI_BACKGROUND_PROCESS_STATE.TIMED_OUT);
+      } else if (reason === RCI_BACKGROUND_PROCESS_FINISH_REASON.ERROR) {
+        this.stateSub$.next(RCI_BACKGROUND_PROCESS_STATE.ERROR);
       }
     });
   }
@@ -219,7 +223,7 @@ export class RciBackgroundProcess<CommandType extends string = string> {
       error: () => {
         this.responseSub$.complete();
         this.resultSub$.complete();
-        this.doneSub$.next(RCI_BACKGROUND_PROCESS_FINISH_REASON.ABORTED);
+        this.doneSub$.next(RCI_BACKGROUND_PROCESS_FINISH_REASON.ERROR);
         this.doneSub$.complete();
       },
     });
