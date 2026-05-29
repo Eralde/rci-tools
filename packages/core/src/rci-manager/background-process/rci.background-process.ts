@@ -47,6 +47,7 @@ export enum RCI_BACKGROUND_PROCESS_STATE {
 
 export class RciBackgroundProcess<CommandType extends string = string> {
   public readonly data$: Observable<GenericObject | null>;
+  public readonly result$: Observable<GenericObject | null>;
   public readonly done$: Observable<RCI_BACKGROUND_PROCESS_FINISH_REASON>;
   public readonly state$: Observable<RCI_BACKGROUND_PROCESS_STATE>;
 
@@ -55,6 +56,7 @@ export class RciBackgroundProcess<CommandType extends string = string> {
   public readonly options: RciBackgroundProcessOptions;
 
   private readonly responseSub$ = new Subject<GenericObject | null>();
+  private readonly resultSub$ = new Subject<GenericObject | null>();
   private readonly doneSub$ = new Subject<RCI_BACKGROUND_PROCESS_FINISH_REASON>();
   private readonly abortSub$ = new ReplaySubject<void>(1);
 
@@ -63,6 +65,7 @@ export class RciBackgroundProcess<CommandType extends string = string> {
 
   private readonly stateSub$ = new BehaviorSubject<RCI_BACKGROUND_PROCESS_STATE>(RCI_BACKGROUND_PROCESS_STATE.INIT);
   private readonly startTrigger$: Subject<void> = new Subject<void>();
+  private isAttached = false;
 
   constructor(
     command: CommandType,
@@ -78,6 +81,7 @@ export class RciBackgroundProcess<CommandType extends string = string> {
     this.httpTransport = httpTransport;
 
     this.data$ = this.responseSub$.asObservable().pipe(filter(Boolean));
+    this.result$ = this.resultSub$.asObservable();
     this.done$ = this.doneSub$.asObservable();
     this.state$ = this.stateSub$.asObservable();
 
@@ -120,6 +124,19 @@ export class RciBackgroundProcess<CommandType extends string = string> {
       return false;
     }
 
+    this.startTrigger$.next();
+
+    return true;
+  }
+
+  public attachToRunning(): boolean {
+    if (this.stateSub$.value !== RCI_BACKGROUND_PROCESS_STATE.INIT) {
+      console.error(`Cannot attach to process: current state is ${this.stateSub$.value}`);
+
+      return false;
+    }
+
+    this.isAttached = true;
     this.startTrigger$.next();
 
     return true;
@@ -191,10 +208,12 @@ export class RciBackgroundProcess<CommandType extends string = string> {
         }
       } else {
         this.responseSub$.next(result);
+        this.resultSub$.next(result);
         this.markDone();
       }
 
       this.responseSub$.complete();
+      this.resultSub$.complete();
     });
   }
 
@@ -209,7 +228,11 @@ export class RciBackgroundProcess<CommandType extends string = string> {
     const isFinished = (response: BaseHttpResponse) => !response?.data?.['continued'];
     const getQuery = () => this.httpTransport.get(url);
 
-    return this.httpTransport.post(url, data)
+    const initialRequest$ = this.isAttached
+      ? this.httpTransport.get(url)
+      : this.httpTransport.post(url, data);
+
+    return initialRequest$
       .pipe(
         switchMap((response) => {
           if (isFinished(response)) {
