@@ -315,7 +315,15 @@ all$
 #### Фоновые процессы
 
 Для [фоновых процессов](../../docs/RCI_API.ru.md#23-фоновые-процессы) `RciManager`
-предоставляет два метода, также принимающих объекты `RciQuery`:
+предоставляет два метода, также принимающих объекты `RciQuery`
+и дополнительные настройки:
+
+```typescript
+interface RciBackgroundProcessOptions {
+  pollInterval?: number; // интервал между GET-запросами в мс. По умолчанию: 1000
+  timeout?: number;      // таймаут до прерывания процесса в мс. По умолчанию: 0 (без таймаута)
+}
+```
 
 - **`initBackgroundProcess(query, options?)`**: возвращает объект `RciBackgroundProcess`,
   который нужно запускать вручную. Этот метод полезен, если вам нужен полный контроль
@@ -328,19 +336,28 @@ all$
   одна HTTP-сессия для всех запросов.
 
 Оба метода возвращают объект `RciBackgroundProcess` со следующими свойствами:
-- `state$`: Observable, который выдаёт обновления состояния процесса
+- `start(): boolean`: Запускает процесс вручную. Возвращает `false`, если процесс уже запущен.
+- `attachToRunning(): boolean`: Подключается к уже запущенному фоновому процессу
+  (например, запущенному через `RciManager.execute()`). Пропускает начальный POST-запрос
+  и сразу начинает опрос через GET. Возвращает `false`, если `start()` уже был вызван
+  или процесс не в состоянии `INIT`.
+- `abort(): boolean`: Прерывает процесс вручную. Возвращает `false`, если процесс не запущен.
+- `state$`: Observable, который выдаёт изменения состояния процесса
+  (`INIT` &rarr; `RUNNING` &rarr; `COMPLETED` / `ABORTED` / `TIMED_OUT`)
 - `data$`: Observable, который выдаёт обновления данных по мере выполнения фонового процесса
-- `done$`: Observable, который выдаёт событие по завершении процесса (с причиной: `'completed'`, `'aborted'` или `'timed_out'`)
-- `start()`: Метод для ручного запуска процесса (не должен вызываться для процессов из очереди)
-- `abort()`: Метод для ручного прерывания процесса
+- `result$`: Observable, который выдаёт финальный результат один раз, непосредственно перед завершением процесса.
+  Не выдаёт значения при прерывании или таймауте.
+- `done$`: Observable, который выдаёт событие по завершении процесса (с причиной: `DONE`, `ABORTED` или `TIMED_OUT`)
 
 ```typescript
 interface RciBackgroundProcess {
   state$: Observable<RCI_BACKGROUND_PROCESS_STATE>;
   data$: Observable<GenericObject | null>;
+  result$: Observable<GenericObject | null>;
   done$: Observable<RCI_BACKGROUND_PROCESS_FINISH_REASON>;
 
   start(): boolean;
+  attachToRunning(): boolean;
   abort(): boolean;
 }
 ```
@@ -399,6 +416,40 @@ ping$.done$
 ping$.start();
 
 setTimeout(() => ping$.abort(), 4000);
+```
+
+Если фоновый процесс уже был запущен (например, через `RciManager.execute()`),
+к нему можно подключиться с помощью `attachToRunning()`, чтобы получать
+результаты опроса без отправки нового POST-запроса:
+
+```typescript
+import {RciManager, RciQuery} from '@rci-tools/core';
+
+const host = 'http://192.168.1.1';
+const transport = new FetchTransport();
+const rciManager = new RciManager(host, transport);
+
+// Шаг 1: запускаем фоновый процесс через обычный вызов API
+const startFwCheckQuery: RciQuery = {
+  path: 'components.list',
+  data: {},
+};
+
+await firstValueFrom(rciManager.execute(startFwCheckQuery));
+// Устройство отвечает {continued: true} — процесс запущен
+
+// Шаг 2: создаём экземпляр фонового процесса и подключаемся к нему
+const pollProcess = rciManager.initBackgroundProcess(
+  {path: 'components.list'},
+  {pollInterval: 1000, timeout: 30000},
+);
+
+pollProcess.result$
+  .subscribe((result) => {
+    console.log('Проверка обновлений завершена:', result);
+  });
+
+pollProcess.attachToRunning(); // опрашивает через GET, POST не отправляется
 ```
 
 Для управления несколькими фоновыми процессами с одной и той же командой,
