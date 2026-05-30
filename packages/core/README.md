@@ -277,7 +277,7 @@ bastch1$
 ##### 3. Priority queries
 
 If you use the batching queue, but need to send a query almost immediately,
-you can send it is a priority one. Priority queries are batched within
+you can send it as a priority one. Priority queries are batched within
 the next event loop "tick" only. The priority queue blocks the regular
 batching queue until it is empty (even if the batching one is already
 waiting for a response).
@@ -330,6 +330,8 @@ interface RciBackgroundProcessOptions {
 }
 ```
 
+The main difference between the two methods is how the background process is started:
+
 - **`initBackgroundProcess(query, options?)`**: returns an `RciBackgroundProcess` object
   that must be started manually. This method is useful when you need full control over
   the background process lifecycle (you also can abort the ongoing process before it finishes).  
@@ -345,10 +347,10 @@ Both methods return a `RciBackgroundProcess` object with:
   via `RciManager.execute()`). Skips the initial POST and polls via GET immediately.
   Returns `false` if `start()` was already called, or the process is not in `INIT` state.
 - `abort(): boolean`: Manually aborts the process. Returns `false` if not running.
-- `state$`: Emits state changes (`INIT` &rarr; `RUNNING` &rarr; `COMPLETED` / `ABORTED` / `TIMED_OUT`)
+- `state$`: Emits state changes (`RCI_BACKGROUND_PROCESS_STATE`)
 - `data$`: Emits polled data updates as the background process runs
 - `result$`: Emits the final payload once, right before the process completes. Does NOT emit on abort or timeout.
-- `done$`: Emits when the process finishes, with a reason (`DONE`, `ABORTED`, or `TIMED_OUT`)
+- `done$`: Emits when the process finishes, with a reason (`RCI_BACKGROUND_PROCESS_FINISH_REASON`)
 
 ```typescript
 interface RciBackgroundProcess {
