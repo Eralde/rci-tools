@@ -46,6 +46,7 @@ describe('RuleScheduler', () => {
     const firstRule = vi.fn((snapshot: BatchSnapshot) => {
       return snapshot.queryPaths.some((path) => path === 'show.interface');
     });
+
     const secondRule = vi.fn(() => true);
     const thirdRule = vi.fn(() => true);
     const batch$ = new Subject<BatchSnapshot>();

@@ -9,6 +9,7 @@ describe('RuleScheduler integration', () => {
     const scheduler = new RuleScheduler([
       (snapshot) => snapshot.queryPaths.some((path) => path === 'show.interface.stat'),
     ]);
+
     const queue = new RciQueue('http://device/rci/', transport, {batchTimeout: 20}, scheduler);
 
     queue.addTask({path: 'show.version'}).subscribe();
@@ -24,6 +25,7 @@ describe('RuleScheduler integration', () => {
     const scheduler = new RuleScheduler([
       () => false,
     ]);
+
     const queue = new RciQueue('http://device/rci/', transport, {batchTimeout: 0}, scheduler);
 
     queue.addTask({path: 'show.version'}).subscribe();
