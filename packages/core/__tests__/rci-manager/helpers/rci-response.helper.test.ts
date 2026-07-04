@@ -1,6 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import {RciResponseHelper} from '../../../src/rci-manager/helpers/rci-response.helper';
-import type {RciError} from '../../../src/rci-manager/helpers/rci-response.types';
+import {RciResponseHelper, type RciError} from '../../../src';
 
 describe('RciResponseHelper', () => {
   describe('hasErrors', () => {
