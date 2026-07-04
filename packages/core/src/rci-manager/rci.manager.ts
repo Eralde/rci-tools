@@ -25,8 +25,8 @@ export class RciManager<
   protected readonly batchQueue: RciQueue<BaseHttpResponse, QueryPath>;
   protected readonly priorityQueue: RciQueue<BaseHttpResponse, QueryPath>;
   protected readonly backgroundQueues: Record<string, RciBackgroundTaskQueue<BackgroundQueryPath>> = {};
-  private readonly statsCollector = new QueryStatsCollector();
-  private currentSchedulerSwapToken: symbol | null = null;
+  protected readonly statsCollector = new QueryStatsCollector();
+  protected currentSchedulerSwapToken: symbol | null = null;
 
   protected readonly rciPath: string;
 

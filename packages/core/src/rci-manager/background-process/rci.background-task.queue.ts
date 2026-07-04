@@ -25,13 +25,9 @@ interface QueuedProcess<QueryPath extends string = string> {
 
 export class RciBackgroundTaskQueue<QueryPath extends string = string> {
   protected queuedProcesses: QueuedProcess<QueryPath>[] = [];
-  protected readonly pendingQueries$: ReplaySubject<RciQuery<QueryPath>[]> = new ReplaySubject<RciQuery<QueryPath>[]>(
-    1,
-  );
-  protected readonly nextProcess$: Subject<QueuedProcess<QueryPath>> = new Subject<QueuedProcess<QueryPath>>();
-  protected readonly stateSub$: BehaviorSubject<RciBackgroundTaskQueueState> = new BehaviorSubject<
-    RciBackgroundTaskQueueState
-  >(
+  protected readonly pendingQueries$ = new ReplaySubject<RciQuery<QueryPath>[]>(1);
+  protected readonly nextProcess$ = new Subject<QueuedProcess<QueryPath>>();
+  protected readonly stateSub$ = new BehaviorSubject<RciBackgroundTaskQueueState>(
     RCI_BACKGROUND_TASK_QUEUE_STATE.READY,
   );
 

@@ -89,10 +89,10 @@ export class RciBackgroundProcess<CommandType extends string = string> {
 
     this.startTrigger$
       .pipe(
-        filter(() =>
-          this.stateSub$.value === RCI_BACKGROUND_PROCESS_STATE.INIT
-          || this.stateSub$.value === RCI_BACKGROUND_PROCESS_STATE.QUEUED
-        ),
+        filter(() => {
+          return this.stateSub$.value === RCI_BACKGROUND_PROCESS_STATE.INIT
+            || this.stateSub$.value === RCI_BACKGROUND_PROCESS_STATE.QUEUED;
+        }),
         map(() => {
           this.stateSub$.next(RCI_BACKGROUND_PROCESS_STATE.RUNNING);
 

@@ -12,8 +12,7 @@ import {RCI_QUEUE_BUSY_STATES, RCI_QUEUE_DEFAULT_OPTIONS, SAVE_CONFIGURATION_QUE
 import {QueueNotIdleError} from './queue-not-idle.error';
 
 export class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends string = string> {
-  // @dprint-ignore
-  private readonly stateSub$: BehaviorSubject<RciQueueState> = new BehaviorSubject<RciQueueState>(RCI_QUEUE_STATE.READY);
+  private readonly stateSub$ = new BehaviorSubject<RciQueueState>(RCI_QUEUE_STATE.READY);
 
   public readonly state$ = this.stateSub$.asObservable();
 
@@ -32,8 +31,7 @@ export class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends s
   private readonly batchFinish$ = new Subject<void>();
 
   // tasks batched for the next HTTP query
-  private readonly batch$: Observable<Task[]> = this.tasks$
-    .pipe(buffer(this.batchFinish$));
+  private readonly batch$: Observable<Task[]> = this.tasks$.pipe(buffer(this.batchFinish$));
 
   private readonly blockerQueue: RciQueue<ResponseType, QueryPath> | null;
   private scheduler: BatchScheduler<QueryPath>;
@@ -293,8 +291,8 @@ export class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends s
   private startBatch(): void {
     this.closeCurrentWindow();
     this.setState(RCI_QUEUE_STATE.BATCHING_TASKS);
-    this.batchCreatedAt = Date.now();
 
+    this.batchCreatedAt = Date.now();
     this.currentBatchSub$ = new Subject<BatchSnapshot<QueryPath>>();
 
     this.currentSchedulerSub = this.scheduler
@@ -305,6 +303,7 @@ export class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends s
           console.error('[RciQueue] Scheduler error, forcing batch flush:', error);
           this.batchFinish$.next();
           this.closeCurrentWindow();
+
           return EMPTY;
         }),
       )
