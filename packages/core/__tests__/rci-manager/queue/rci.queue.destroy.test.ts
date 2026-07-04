@@ -1,19 +1,6 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {of} from 'rxjs';
 import {RciQueue} from '../../../src/rci-manager/queue';
-import type {BaseHttpResponse, HttpTransport} from '../../../src';
-
-function makeTransport(): HttpTransport<BaseHttpResponse> {
-  return {
-    get: vi.fn().mockReturnValue(of({status: 200, data: {}})),
-    post: vi.fn().mockReturnValue(of({status: 200, data: {}})),
-    delete: vi.fn(),
-    getHeader: vi.fn(),
-    onAuthRequest: vi.fn(),
-    clearAuthData: vi.fn(),
-    sendQueryArray: vi.fn().mockReturnValue(of([])),
-  };
-}
+import {makeTransport} from '../../test.utils';
 
 describe('RciQueue.destroy', () => {
   beforeEach(() => {

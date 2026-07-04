@@ -1,19 +1,8 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {firstValueFrom, of, take, throwError} from 'rxjs';
+import {firstValueFrom, take, throwError} from 'rxjs';
 import {RciQueue} from '../../../src/rci-manager/queue';
-import {QueryStatsCollector, type BaseHttpResponse, type HttpTransport} from '../../../src';
-
-function makeTransport(): HttpTransport<BaseHttpResponse> {
-  return {
-    get: vi.fn().mockReturnValue(of({status: 200, data: {}})),
-    post: vi.fn().mockReturnValue(of({status: 200, data: {}})),
-    delete: vi.fn(),
-    getHeader: vi.fn(),
-    onAuthRequest: vi.fn(),
-    clearAuthData: vi.fn(),
-    sendQueryArray: vi.fn().mockImplementation((_, queryArray) => of(queryArray.map(() => ({})))),
-  };
-}
+import {QueryStatsCollector} from '../../../src';
+import {makeTransport} from '../../test.utils';
 
 describe('RciQueue stats collection', () => {
   beforeEach(() => {

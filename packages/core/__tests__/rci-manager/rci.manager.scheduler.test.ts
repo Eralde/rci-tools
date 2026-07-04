@@ -1,25 +1,12 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {NEVER, firstValueFrom, of, timer} from 'rxjs';
+import {NEVER, firstValueFrom, timer} from 'rxjs';
 import {map} from 'rxjs/operators';
 import {
   RciManager,
   SchedulerReplacementInProgressError,
-  type BaseHttpResponse,
-  type HttpTransport,
   type BatchScheduler
 } from '../../src';
-
-function makeTransport(): HttpTransport<BaseHttpResponse> {
-  return {
-    get: vi.fn().mockReturnValue(of({status: 200, data: {}})),
-    post: vi.fn().mockReturnValue(of({status: 200, data: {}})),
-    delete: vi.fn(),
-    getHeader: vi.fn(),
-    onAuthRequest: vi.fn(),
-    clearAuthData: vi.fn(),
-    sendQueryArray: vi.fn().mockImplementation((_, queryArray) => of(queryArray.map(() => ({})))),
-  };
-}
+import {makeTransport} from '../test.utils';
 
 describe('RciManager scheduler wiring', () => {
   beforeEach(() => {

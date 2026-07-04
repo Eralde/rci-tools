@@ -1,21 +1,8 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {Subject, of} from 'rxjs';
 import {RciQueue} from '../../../src/rci-manager/queue';
-import type {BatchScheduler, BatchSnapshot, BaseHttpResponse, HttpTransport} from '../../../src';
-
-function makeTransport(): HttpTransport<BaseHttpResponse> {
-  return {
-    get: vi.fn().mockReturnValue(of({status: 200, data: {}})),
-    post: vi.fn().mockReturnValue(of({status: 200, data: {}})),
-    delete: vi.fn(),
-    getHeader: vi.fn(),
-    onAuthRequest: vi.fn(),
-    clearAuthData: vi.fn(),
-    sendQueryArray: vi.fn().mockImplementation((_, queryArray) =>
-      of(queryArray.map(() => ({})))
-    ),
-  };
-}
+import type {BatchScheduler, BatchSnapshot} from '../../../src';
+import {makeTransport} from '../../test.utils';
 
 describe('RciQueue scheduler integration', () => {
   beforeEach(() => {

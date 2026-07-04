@@ -1,19 +1,7 @@
-import {describe, expect, it, vi} from 'vitest';
-import {of} from 'rxjs';
+import {describe, expect, it} from 'vitest';
 import {RciQueue} from '../../../src/rci-manager/queue';
-import {RuleScheduler, type BaseHttpResponse, type HttpTransport} from '../../../src';
-
-function makeTransport(): HttpTransport<BaseHttpResponse> {
-  return {
-    get: vi.fn().mockReturnValue(of({status: 200, data: {}})),
-    post: vi.fn().mockReturnValue(of({status: 200, data: {}})),
-    delete: vi.fn(),
-    getHeader: vi.fn(),
-    onAuthRequest: vi.fn(),
-    clearAuthData: vi.fn(),
-    sendQueryArray: vi.fn().mockImplementation((_, queryArray) => of(queryArray.map(() => ({})))),
-  };
-}
+import {RuleScheduler} from '../../../src';
+import {makeTransport} from '../../test.utils';
 
 describe('RuleScheduler integration', () => {
   it('flushes queue immediately when a rule matches the current batch', () => {
