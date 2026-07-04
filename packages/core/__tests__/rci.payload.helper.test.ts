@@ -138,16 +138,16 @@ describe('RciPayloadHelper', () => {
           isSingleQuery: false,
           subject: null as any,
           queries: [
-            {path: SYSTEM_CONFIGURATION_SAVE, data: {}, extractData: true},
-            {path: SYSTEM_DESCRIPTION, data: 'foobar', extractData: true},
+            {path: SYSTEM_CONFIGURATION_SAVE, data: {}},
+            {path: SYSTEM_DESCRIPTION, data: 'foobar'},
           ],
         },
         {
           isSingleQuery: false,
           subject: null as any,
           queries: [
-            {path: SHOW_VERSION, extractData: true},
-            {path: INTERFACE, data: {name: 'Bridge0'}, extractData: true},
+            {path: SHOW_VERSION},
+            {path: INTERFACE, data: {name: 'Bridge0'}},
           ],
         },
       ];
@@ -156,6 +156,22 @@ describe('RciPayloadHelper', () => {
 
       expect(queryArray[0]).toEqual(expectObjectContainingPath(SHOW_VERSION));
       expect(last(queryArray)).toEqual(expectObjectContainingPath(SYSTEM_CONFIGURATION_SAVE));
+    });
+  });
+
+  describe('splitResponsesPerTask', () => {
+    it('should default extractData to true and unwrap response', () => {
+      const tasks = [{
+        isSingleQuery: true,
+        queries: [{path: SHOW_VERSION}], // no `extractData` flag set
+        subject: null as any,
+      }];
+
+      const responseArray = [{show: {version: {value: '4.2.2'}}}];
+      const {queryMap} = RciPayloadHelper.batchTasks(tasks as any);
+      const chunked = RciPayloadHelper.splitResponsesPerTask(responseArray, tasks as any, queryMap);
+
+      expect(chunked[0][0]).toEqual({value: '4.2.2'});
     });
   });
 
