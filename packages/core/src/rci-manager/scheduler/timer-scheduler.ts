@@ -9,9 +9,10 @@ export class TimerScheduler<QueryPath extends string = string> implements BatchS
   ) {}
 
   public schedule(_batch$: Observable<BatchSnapshot<QueryPath>>): Observable<void> {
-    return timer(this.timeoutMs).pipe(
-      take(1),
-      map(() => undefined),
-    );
+    return timer(this.timeoutMs)
+      .pipe(
+        take(1),
+        map(() => undefined),
+      );
   }
 }

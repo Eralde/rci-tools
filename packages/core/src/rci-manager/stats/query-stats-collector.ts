@@ -3,18 +3,18 @@ import type {QueryStats} from './query-stats';
 
 export class QueryStatsCollector {
   private readonly subject$ = new Subject<QueryStats>();
-  private enabled = false;
+  private isEnabled = false;
 
   public readonly stats$ = this.subject$.asObservable();
 
   public collect(stats: QueryStats): void {
-    if (this.enabled && !this.subject$.closed) {
+    if (this.isEnabled && !this.subject$.closed) {
       this.subject$.next(stats);
     }
   }
 
-  public toggle(enabled: boolean): void {
-    this.enabled = enabled;
+  public toggle(isEnabled: boolean): void {
+    this.isEnabled = isEnabled;
   }
 
   public destroy(): void {

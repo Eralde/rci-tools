@@ -1,4 +1,4 @@
-import {defer, Observable, throwError} from 'rxjs';
+import {Observable, defer, throwError} from 'rxjs';
 import {filter, finalize, map, shareReplay, take, tap, timeout} from 'rxjs/operators';
 import {BaseHttpResponse, HttpTransport} from '../transport';
 import {RciQuery, RciTask} from './query';
@@ -13,6 +13,7 @@ import {QueryStats, QueryStatsCollector} from './stats';
 export class SchedulerReplacementInProgressError extends Error {
   constructor() {
     super('A scheduler replacement is already in progress.');
+
     this.name = 'SchedulerReplacementInProgressError';
   }
 }
