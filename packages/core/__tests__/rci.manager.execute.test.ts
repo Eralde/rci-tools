@@ -104,4 +104,19 @@ describe('RciManager.execute', () => {
     expect(Array.isArray(result)).toBe(true);
     expect(result.length).toBe(queries.length);
   });
+
+  it('should default extractData to true and unwrap show.version response', async () => {
+    const version = await firstValueFrom(rciManager.queue({path: SHOW_VERSION}));
+
+    expect(typeof version).toBe('object');
+    expect(version).not.toHaveProperty('show');
+    expect(version).not.toHaveProperty('version');
+
+    expect(version).toHaveProperty('release');
+    expect(version).toHaveProperty('title');
+    expect(version).toHaveProperty('arch');
+    expect(version).toHaveProperty('model');
+    expect(version).toHaveProperty('device');
+    expect(version).toHaveProperty('manufacturer');
+  });
 });

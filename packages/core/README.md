@@ -277,7 +277,7 @@ bastch1$
 ##### 3. Priority queries
 
 If you use the batching queue, but need to send a query almost immediately,
-you can send it is a priority one. Priority queries are batched within
+you can send it as a priority one. Priority queries are batched within
 the next event loop "tick" only. The priority queue blocks the regular
 batching queue until it is empty (even if the batching one is already
 waiting for a response).
@@ -320,7 +320,17 @@ all$
 #### Background Processes
 
 For [background processes](../../docs/RCI_API.md#23-background-processes),
-the `RciManager` provides two methods that accept `RciQuery` objects:
+the `RciManager` provides two methods that accept `RciQuery` objects
+along with optional settings:
+
+```typescript
+interface RciBackgroundProcessOptions {
+  pollInterval?: number; // ms between GET poll requests. Default: 1000
+  timeout?: number;      // ms before the process is aborted. Default: 0 (no timeout)
+}
+```
+
+The main difference between the two methods is how the background process is started:
 
 - **`initBackgroundProcess(query, options?)`**: returns an `RciBackgroundProcess` object
   that must be started manually. This method is useful when you need full control over
@@ -332,19 +342,25 @@ the `RciManager` provides two methods that accept `RciQuery` objects:
   is used in a browser, since the browser usually uses a single HTTP session to handle all API requests.
 
 Both methods return a `RciBackgroundProcess` object with:
-- `start(): boolean`: A method to manually abort the process (should not be called for queued processes)
-- `abort(): boolean`: A method to manually abort the process
-- `state$`: An Observable that emits data on process state change
-- `data$`: An Observable that emits data updates as the background process runs
-- `done$`: An Observable that emits when the process finishes (with a reason: `'completed'`, `'aborted'`, or `'timed_out'`)
+- `start(): boolean`: Manually starts the process. Returns `false` if already running.
+- `attachToRunning(): boolean`: Attaches to an already-running background process (e.g. one started
+  via `RciManager.execute()`). Skips the initial POST and polls via GET immediately.
+  Returns `false` if `start()` was already called, or the process is not in `INIT` state.
+- `abort(): boolean`: Manually aborts the process. Returns `false` if not running.
+- `state$`: Emits state changes (`RCI_BACKGROUND_PROCESS_STATE`)
+- `data$`: Emits polled data updates as the background process runs
+- `result$`: Emits the final payload once, right before the process completes. Does NOT emit on abort or timeout.
+- `done$`: Emits when the process finishes, with a reason (`RCI_BACKGROUND_PROCESS_FINISH_REASON`)
 
 ```typescript
 interface RciBackgroundProcess {
   state$: Observable<RCI_BACKGROUND_PROCESS_STATE>;
   data$: Observable<GenericObject | null>;
+  result$: Observable<GenericObject | null>;
   done$: Observable<RCI_BACKGROUND_PROCESS_FINISH_REASON>;
 
   start(): boolean;
+  attachToRunning(): boolean;
   abort(): boolean;
 }
 ```
@@ -403,6 +419,39 @@ ping$.done$
 ping$.start();
 
 setTimeout(() => ping$.abort(), 4000);
+```
+
+If a background process was already started externally (e.g. via `RciManager.execute()`),
+you can attach to it with `attachToRunning()` to poll for results without sending a new POST:
+
+```typescript
+import {RciManager, RciQuery} from '@rci-tools/core';
+
+const host = 'http://192.168.1.1';
+const transport = new FetchTransport();
+const rciManager = new RciManager(host, transport);
+
+// Step 1: start the background process via a regular API call
+const startFwCheckQuery: RciQuery = {
+  path: 'components.list',
+  data: {},
+};
+
+await firstValueFrom(rciManager.execute(startFwCheckQuery));
+// Device responds with {continued: true} — process is running
+
+// Step 2: create a background process instance and attach to it
+const pollProcess = rciManager.initBackgroundProcess(
+  {path: 'components.list'},
+  {pollInterval: 1000, timeout: 30000},
+);
+
+pollProcess.result$
+  .subscribe((result) => {
+    console.log('Firmware update check complete:', result);
+  });
+
+pollProcess.attachToRunning(); // polls via GET, no POST sent
 ```
 
 For managing multiple background processes with the same command but different arguments,

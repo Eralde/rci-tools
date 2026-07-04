@@ -135,7 +135,7 @@ export class RciPayloadHelper {
   }
 
   protected static prepareResponseData(response: GenericObject, query: RciQuery): GenericObject {
-    if (!query.extractData) {
+    if (query.extractData === false) {
       return response;
     }
 

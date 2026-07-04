@@ -235,24 +235,31 @@ const queueBackgroundProcesses = async (rciService: RciService): Promise<void> =
   console.log('Final results for queued processes:\n');
   console.log('(Demonstrating queued execution within same path, parallel across different paths)\n');
 
+  const resultRows: Array<{left: string; right: string}> = [];
+
   pingQueries.forEach((item, index) => {
     const finishReason = finalResults[index];
-    const chunks = [
-      `${toolsPingPath} #${index + 1}: ${_.padEnd(item.description, 45, ' ')}`,
-      `Finish: ${_.padStart(finishReason, 12, ' ')}`,
-    ];
 
-    console.log(chunks.join(' | '));
+    resultRows.push({
+      left: `${toolsPingPath} #${index + 1}: ${item.description}`,
+      right: `Finish: ${finishReason}`,
+    });
   });
 
   componentsQueries.forEach((item, index) => {
     const finishReason = finalResults[pingQueries.length + index];
-    const chunks = [
-      `${componentsListPath} #${index + 1}: ${_.padEnd(item.description, 45, ' ')}`,
-      `Finish: ${_.padStart(finishReason, 12, ' ')}`,
-    ];
 
-    console.log(chunks.join(' | '));
+    resultRows.push({
+      left: `${componentsListPath} #${index + 1}: ${item.description}`,
+      right: `Finish: ${finishReason}`,
+    });
+  });
+
+  const maxLeftWidth = Math.max(...resultRows.map((r) => r.left.length));
+  const maxRightWidth = Math.max(...resultRows.map((r) => r.right.length));
+
+  resultRows.forEach(({left, right}) => {
+    console.log(`${_.padEnd(left, maxLeftWidth, ' ')} | ${_.padEnd(right, maxRightWidth, ' ')}`);
   });
 
   console.log('\n----------------------------------------------------------\n');
