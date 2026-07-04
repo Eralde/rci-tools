@@ -1,8 +1,7 @@
 import {describe, expect, it, vi} from 'vitest';
 import {of} from 'rxjs';
-import {RciQueue} from '../../../src/rci-manager/queue/rci.queue';
-import {ConfigurableScheduler} from '../../../src/rci-manager/scheduler';
-import type {BaseHttpResponse, HttpTransport} from '../../../src/transport';
+import {RciQueue} from '../../../src/rci-manager/queue';
+import {ConfigurableScheduler, type BaseHttpResponse, type HttpTransport} from '../../../src';
 
 function makeTransport(): HttpTransport<BaseHttpResponse> {
   return {

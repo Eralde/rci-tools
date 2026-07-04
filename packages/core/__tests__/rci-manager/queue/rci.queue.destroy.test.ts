@@ -1,9 +1,8 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {Subject, of, timer} from 'rxjs';
+import {of, timer} from 'rxjs';
 import {map} from 'rxjs/operators';
-import {RciQueue} from '../../../src/rci-manager/queue/rci.queue';
-import type {BatchScheduler} from '../../../src/rci-manager/scheduler';
-import type {BaseHttpResponse, HttpTransport} from '../../../src/transport';
+import {RciQueue} from '../../../src/rci-manager/queue';
+import type {BatchScheduler, BaseHttpResponse, HttpTransport} from '../../../src';
 
 function makeTransport(): HttpTransport<BaseHttpResponse> {
   return {
@@ -49,9 +48,10 @@ describe('RciQueue.destroy', () => {
     };
     const queue = new RciQueue('http://device/rci/', transport, {batchTimeout: 0}, scheduler);
     const complete = vi.fn();
-    queue.state$.subscribe({complete});
 
+    queue.state$.subscribe({complete});
     queue.destroy();
+
     expect(complete).toHaveBeenCalledTimes(1);
     expect(() => queue.destroy()).not.toThrow();
   });

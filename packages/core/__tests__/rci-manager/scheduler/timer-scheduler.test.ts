@@ -1,7 +1,6 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {Subject, firstValueFrom} from 'rxjs';
-import {TimerScheduler} from '../../../src/rci-manager/scheduler/timer-scheduler';
-import type {BatchInfo} from '../../../src/rci-manager/scheduler/batch-info';
+import {TimerScheduler, type BatchInfo} from '../../../src';
 
 describe('TimerScheduler', () => {
   beforeEach(() => {

@@ -1,7 +1,6 @@
 import {describe, expect, it, vi} from 'vitest';
 import {Subject} from 'rxjs';
-import {ConfigurableScheduler} from '../../../src/rci-manager/scheduler/configurable-scheduler';
-import type {BatchInfo} from '../../../src/rci-manager/scheduler/batch-info';
+import {ConfigurableScheduler, type BatchInfo} from '../../../src';
 
 const createBatchInfo = (paths: string[], elapsedMs: number = 0): BatchInfo => {
   return {

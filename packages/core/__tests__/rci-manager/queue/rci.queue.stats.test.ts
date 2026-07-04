@@ -1,8 +1,7 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {firstValueFrom, of, take, throwError} from 'rxjs';
-import {RciQueue} from '../../../src/rci-manager/queue/rci.queue';
-import {QueryStatsCollector} from '../../../src/rci-manager/stats';
-import type {BaseHttpResponse, HttpTransport} from '../../../src/transport';
+import {RciQueue} from '../../../src/rci-manager/queue';
+import {QueryStatsCollector, type BaseHttpResponse, type HttpTransport} from '../../../src';
 
 function makeTransport(): HttpTransport<BaseHttpResponse> {
   return {
@@ -28,8 +27,19 @@ describe('RciQueue stats collection', () => {
   it('emits expected stats payload on successful batch', async () => {
     const transport = makeTransport();
     const collector = new QueryStatsCollector();
+
     collector.toggle(true);
-    const queue = new RciQueue('http://device/rci/', transport, {batchTimeout: 0, queueName: 'batch'}, undefined, collector);
+
+    const queue = new RciQueue(
+      'http://device/rci/',
+      transport,
+      {
+        batchTimeout: 0,
+        queueName: 'batch'
+      },
+      undefined,
+      collector,
+    );
 
     const statsPromise = firstValueFrom(collector.stats$.pipe(take(1)));
 
@@ -49,10 +59,23 @@ describe('RciQueue stats collection', () => {
   it('emits failed stats payload when HTTP transport errors', async () => {
     const transport = makeTransport();
     const error = new Error('transport failed');
+
     transport.sendQueryArray = vi.fn().mockReturnValue(throwError(() => error));
+
     const collector = new QueryStatsCollector();
+
     collector.toggle(true);
-    const queue = new RciQueue('http://device/rci/', transport, {batchTimeout: 0, queueName: 'batch'}, undefined, collector);
+
+    const queue = new RciQueue(
+      'http://device/rci/',
+      transport,
+      {
+        batchTimeout: 0,
+        queueName: 'batch'
+      },
+      undefined,
+      collector,
+    );
 
     const statsPromise = firstValueFrom(collector.stats$.pipe(take(1)));
 
@@ -67,11 +90,22 @@ describe('RciQueue stats collection', () => {
   it('continues queue flow when collector throws', async () => {
     const transport = makeTransport();
     const collector = new QueryStatsCollector();
+
     collector.toggle(true);
     collector.collect = vi.fn(() => {
       throw new Error('collector crash');
     });
-    const queue = new RciQueue('http://device/rci/', transport, {batchTimeout: 0, queueName: 'batch'}, undefined, collector);
+
+    const queue = new RciQueue(
+      'http://device/rci/',
+      transport,
+      {
+        batchTimeout: 0,
+        queueName: 'batch'
+      },
+      undefined,
+      collector,
+    );
 
     const resultPromise = firstValueFrom(queue.addTask({path: 'show.version'}));
 

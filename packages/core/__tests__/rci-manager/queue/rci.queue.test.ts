@@ -1,11 +1,15 @@
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {NEVER, of, firstValueFrom} from 'rxjs';
 import {take, toArray} from 'rxjs/operators';
-import {RciQueue} from '../../../src/rci-manager/queue/rci.queue';
-import {QueueNotIdleError} from '../../../src/rci-manager/queue/queue-not-idle.error';
-import type {BatchInfo, BatchScheduler} from '../../../src/rci-manager/scheduler';
-import {TimerScheduler} from '../../../src/rci-manager/scheduler';
-import type {BaseHttpResponse, HttpTransport} from '../../../src/transport';
+import {RciQueue} from '../../../src/rci-manager/queue';
+import {
+  QueueNotIdleError,
+  TimerScheduler,
+  type BatchInfo,
+  type BatchScheduler,
+  type BaseHttpResponse,
+  type HttpTransport
+} from '../../../src';
 
 function makeTransport(): HttpTransport<BaseHttpResponse> {
   return {

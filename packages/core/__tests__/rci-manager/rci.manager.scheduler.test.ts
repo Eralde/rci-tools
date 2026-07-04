@@ -1,10 +1,13 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {NEVER, firstValueFrom, of, timer} from 'rxjs';
 import {map} from 'rxjs/operators';
-import {RciManager} from '../../src/rci-manager';
-import type {BaseHttpResponse, HttpTransport} from '../../src/transport';
-import type {BatchScheduler} from '../../src/rci-manager/scheduler';
-import {SchedulerReplacementInProgressError} from '../../src/rci-manager/rci.manager';
+import {
+  RciManager,
+  SchedulerReplacementInProgressError,
+  type BaseHttpResponse,
+  type HttpTransport,
+  type BatchScheduler
+} from '../../src';
 
 function makeTransport(): HttpTransport<BaseHttpResponse> {
   return {

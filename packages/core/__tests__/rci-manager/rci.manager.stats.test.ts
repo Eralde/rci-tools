@@ -1,7 +1,6 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {firstValueFrom, of, take} from 'rxjs';
-import {RciManager} from '../../src/rci-manager';
-import type {BaseHttpResponse, HttpTransport} from '../../src/transport';
+import {RciManager, type BaseHttpResponse, type HttpTransport} from '../../src/';
 
 function makeTransport(): HttpTransport<BaseHttpResponse> {
   return {
