@@ -7,7 +7,8 @@
 `@rci-tools/core` &mdash; это `npm`-пакет для взаимодействия с [RCI API](../../docs/RCI_API.ru.md).
 Два основных класса, экспортируемых этим пакетом:
 
-- [SessionManager](./src/session-manager/session-manager.ts): реализует [аутентификацию по паролю](../../docs/AUTH.md);
+- [SessionManager](./src/session-manager/session-manager.ts):
+  реализует [аутентификацию по паролю](../../docs/AUTH.md);
 - [RciManager](./src/rci-manager/rci.manager.ts): основной класс для работы с API в едином стиле;
 
 Оба класса требуют экземпляр [`HTTP транспорта`](./src/transport/http.transport.ts)
@@ -42,13 +43,16 @@ interface SessionManager<ResponseType extends BaseHttpResponse = BaseHttpRespons
 
 Используйте методы `isAuthenticated`/`login`/`logout` для управления сессией.
 Оставшиеся два метода предназначены для вспомогательных задач:
-- `getRealmHeader`: позволяет получить имя устройства до аутентификации (например, чтобы показать его на экране входа)
+
+- `getRealmHeader`: позволяет получить имя устройства до аутентификации (например, чтобы показать
+  его на экране входа)
 - `toggleErrorLogging`: включает/отключает логирование HTTP-ошибок в консоль
 
 ### `RciManager`
 
 Класс `RciManager` используется для взаимодействия с RCI API.
 Он имеет несколько преимуществ по сравнению с использованием непосредственно `fetch/xhr/axios/...`:
+
 - несколько запросов через `RciManager` могут быть объединены в один HTTP-запрос к устройству
 - реализована простая система приоритетов:
   приоритетные запросы блокируют обычные, пока не завершатся
@@ -68,9 +72,11 @@ interface RciManager<
 }
 ```
 
-`RciManager` активно использует [корневой ресурс API (`/rci/`)](../../docs/RCI_API.ru.md#31-корневой-ресурс-api).
+`RciManager` активно использует [корневой ресурс API (
+`/rci/`)](../../docs/RCI_API.ru.md#31-корневой-ресурс-api).
 Взаимодействие как с [настройками](../../docs/RCI_API.ru.md#21-настройки),
-так и с [действиями](../../docs/RCI_API.ru.md#22-действия) в нем реализовано через объекты `RciQuery`,
+так и с [действиями](../../docs/RCI_API.ru.md#22-действия) в нем реализовано через объекты
+`RciQuery`,
 отправляемые на корневой ресурс. Интерфейс `RciQuery` выглядит следующим образом:
 
 ```typescript
@@ -85,39 +91,42 @@ export interface RciQuery<PathType extends string = string> { // `PathType` мо
 где `path` становится "путём" ко вложенному свойству, а `data` — значением по этому пути.
 
 Например, запрос:
+
 ```typescript
-{
+const query = {
   path: 'show.version'
-}
+};
 ```
 
-преобразуется в:
-```typescript
+преобразуется в (`data` по умолчанию — пустой объект):
+
+```json
 {
-  'show': {
-    'version': {} // `data` по умолчанию — пустой объект
+  "show": {
+    "version": {}
   }
 }
 ```
 
 Аналогично, запрос с `path` и `data`:
+
 ```typescript
-{
+const query = {
   path: 'interface',
   data: {
     name: 'Bridge0',
     description: 'My network'
   }
-}
+};
 ```
 
 превращается в:
 
-```typescript
+```json
 {
-  'interface': {
-    name: 'Bridge0',
-    description: 'My network'
+  "interface": {
+    "name": "Bridge0",
+    "description": "My network"
   }
 }
 ```
@@ -131,22 +140,23 @@ export interface RciQuery<PathType extends string = string> { // `PathType` мо
 может быть представлен как `RciQuery`. Например, оба запроса
 
 ```typescript
-{path: 'ip.telnet.session', data: {timeout: 123456}}
+const query = {path: 'ip.telnet.session', data: {timeout: 123456}};
 ```
 
 и
 
 ```typescript
-{path: 'ip', data: {telnet: {session: {timeout: 123456}}}}
+const query = {path: 'ip', data: {telnet: {session: {timeout: 123456}}}};
 ```
 
 будут преобразованы в один и тот же объект:
-```typescript
+
+```json
 {
-  'ip': {
-    'telnet': {
-      'session': {
-        'timeout': 123456
+  "ip": {
+    "telnet": {
+      "session": {
+        "timeout": 123456
       }
     }
   }
@@ -161,19 +171,118 @@ export interface RciQuery<PathType extends string = string> { // `PathType` мо
 
 - **`execute(query)`**: Отправляет HTTP-запрос при подписке на возвращаемый Observable.
   Вы полностью контролируете жизненный цикл подписки. Это может быть полезно, если нужно:
-  - вручную управлять моментом отправки HTTP-запроса
-  - последовательно отправить несколько запросов с точным контролем времени
+    - вручную управлять моментом отправки HTTP-запроса
+    - последовательно отправить несколько запросов с точным контролем времени
 
 - **`queue(query, options?)`**: Добавляет запрос во внутреннюю очередь,
   которая объединяет несколько запросов в один HTTP-запрос. `RciManager` сам управляет
   подпиской и моментом отправки HTTP-запросов. Очередь автоматически:
-  - объединяет несколько запросов в один HTTP-запрос
-  - удаляет дублирующиеся запросы из батча (batch)
-  - ждёт определённое время перед отправкой HTTP-запроса, собирая данные из разных вызовов `queue`
-  - обрабатывает приоритетные запросы через отдельную очередь, блокируя обычную
+    - объединяет несколько запросов в один HTTP-запрос
+    - удаляет дублирующиеся запросы из батча (batch)
+    - ждёт определённое время перед отправкой HTTP-запроса, собирая данные из разных вызовов `queue`
+    - обрабатывает приоритетные запросы через отдельную очередь, блокируя обычную
 
 Оба метода возвращают [rxjs Observable](https://rxjs.dev/guide/observable),
-на который нужно подписаться, чтобы получить результат. Ниже приведено несколько примеров использования.
+на который нужно подписаться, чтобы получить результат. Ниже приведено несколько примеров
+использования.
+
+#### Пакетное планирование (Batch Scheduling)
+
+По умолчанию `queue()` объединяет запросы в батчи с окном 20мс перед отправкой одного HTTP-запроса.
+Это поведение управляется **планировщиком (scheduler)**. Вы можете настроить пакетную обработку
+через `RciManagerOptions.batchScheduler` или заменить планировщик во время выполнения с помощью
+`replaceBatchScheduler()`.
+
+**Примечание:** Если передан `batchScheduler`, то `batchTimeout` **игнорируется**. Чтобы совместить
+таймер по умолчанию с пользовательскими правилами, скомпонуйте их явно (см. примеры ниже).
+
+##### Встроенные планировщики
+
+- `TimerScheduler(timeoutMs)` — отправляет батч после фиксированной задержки (поведение по
+  умолчанию).
+- `RuleScheduler(rules)` — отправляет батч, когда любое правило-предикат возвращает `true` для
+  текущего снимка батча.
+- `raceSchedulers(...)` — запускает несколько планировщиков параллельно; побеждает первый
+  отправивший сигнал.
+
+##### `BatchSnapshot`
+
+Планировщики получают `BatchSnapshot<QueryPath>` при добавлении каждой задачи:
+
+```ts
+interface BatchSnapshot<QueryPath extends string = string> {
+  readonly taskCount: number;
+  readonly queryCount: number;
+  readonly createdAt: number;
+  readonly elapsedMs: number;
+  readonly queryPaths: readonly QueryPath[];
+}
+```
+
+##### Примеры
+
+**Таймер по умолчанию (20мс):**
+
+```ts
+const manager = new RciManager(host, transport);
+```
+
+**Свой таймер:**
+
+```ts
+const manager = new RciManager(host, transport, {batchTimeout: 50});
+```
+
+**Гибрид: таймер + правила на основе содержимого:**
+
+```ts
+import {RciManager, raceSchedulers, TimerScheduler, RuleScheduler} from '@rci-tools/core';
+
+const manager = new RciManager(
+  host,
+  transport,
+  {
+    batchScheduler: raceSchedulers(
+      new TimerScheduler(20),
+      new RuleScheduler([
+        (batch) => batch.queryCount >= 10,
+        (batch) => batch.queryPaths.some((path) => path === 'show.interface.stat'),
+      ]),
+    ),
+  },
+);
+```
+
+**Замена планировщика во время выполнения:**
+
+```ts
+const replacement$ = manager.replaceBatchScheduler(
+  new RuleScheduler([(batch) => batch.queryPaths.some((path) => path === 'show.version')]),
+  {waitForIdleMs: 10_000},
+);
+
+replacement$.subscribe({
+  complete: () => console.log('Планировщик заменён'),
+  error: (err) => console.error('Ошибка замены планировщика:', err),
+});
+```
+
+**Пользовательский планировщик:**
+
+```ts
+import type {BatchScheduler, BatchSnapshot} from '@rci-tools/core';
+
+const customScheduler: BatchScheduler = {
+  schedule(batch$) {
+    // простая отправка после 3 задач
+    return batch$.pipe(
+      filter((snapshot) => snapshot.taskCount >= 3),
+      map(() => undefined),
+      take(1),
+    );
+  },
+};
+```
 
 #### Примеры использования
 
@@ -197,7 +306,7 @@ auth$
   .subscribe(async (isLoggedIn) => {
     if (!isLoggedIn) {
       console.error('Ошибка аутентификации');
-      
+
       return Promise.resolve(null);
     }
 
@@ -227,7 +336,7 @@ auth$
     };
 
     const actionResult = await rciManager.queue(showVersion).toPromise(); // объект с информацией о версии устройства
-    
+
     console.log(changeSettingResult, readSettingResult, actionResult);
   });
 ```
@@ -331,7 +440,8 @@ interface RciBackgroundProcessOptions {
 
 - **`initBackgroundProcess(query, options?)`**: возвращает объект `RciBackgroundProcess`,
   который нужно запускать вручную. Этот метод полезен, если вам нужен полный контроль
-  над жизненным циклом фонового процесса (вы также можете вручную прервать процесс до его завершения).
+  над жизненным циклом фонового процесса (вы также можете вручную прервать процесс до его
+  завершения).
 
 - **`queueBackgroundProcess(query, options?)`**: Ставит фоновый процесс в очередь.
   Запросы с одинаковым значением `path` группируются в одну очередь, что гарантирует,
@@ -340,6 +450,7 @@ interface RciBackgroundProcessOptions {
   одна HTTP-сессия для всех запросов.
 
 Оба метода возвращают объект `RciBackgroundProcess` со следующими свойствами:
+
 - `start(): boolean`: Запускает процесс вручную. Возвращает `false`, если процесс уже запущен.
 - `attachToRunning(): boolean`: Подключается к уже запущенному фоновому процессу
   (например, запущенному через `RciManager.execute()`). Пропускает начальный POST-запрос
@@ -348,9 +459,11 @@ interface RciBackgroundProcessOptions {
 - `abort(): boolean`: Прерывает процесс вручную. Возвращает `false`, если процесс не запущен.
 - `state$`: Observable, который выдаёт изменения состояния процесса (`RCI_BACKGROUND_PROCESS_STATE`)
 - `data$`: Observable, который выдаёт обновления данных по мере выполнения фонового процесса
-- `result$`: Observable, который выдаёт финальный результат один раз, непосредственно перед завершением процесса.
+- `result$`: Observable, который выдаёт финальный результат один раз, непосредственно перед
+  завершением процесса.
   Не выдаёт значения при прерывании или таймауте.
-- `done$`: Observable, который выдаёт значение по завершении процесса (`RCI_BACKGROUND_PROCESS_FINISH_REASON`)
+- `done$`: Observable, который выдаёт значение по завершении процесса (
+  `RCI_BACKGROUND_PROCESS_FINISH_REASON`)
 
 ```typescript
 interface RciBackgroundProcess {
