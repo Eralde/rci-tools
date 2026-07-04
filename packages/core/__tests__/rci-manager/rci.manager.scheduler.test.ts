@@ -47,16 +47,14 @@ describe('RciManager scheduler wiring', () => {
   it('uses options.batchScheduler for batch queue', () => {
     const transport = makeTransport();
     const batchScheduler: BatchScheduler = {
-      scheduleBatch: vi.fn(() => timer(0).pipe(map(() => undefined))),
-      reset: vi.fn(),
-      destroy: vi.fn(),
+      schedule: vi.fn(() => timer(0).pipe(map(() => undefined))),
     };
     const manager = new RciManager('http://device', transport, {batchScheduler});
 
     manager.queue({path: 'show.version'}).subscribe();
     vi.advanceTimersByTime(0);
 
-    expect(batchScheduler.scheduleBatch).toHaveBeenCalledTimes(1);
+    expect(batchScheduler.schedule).toHaveBeenCalledTimes(1);
     expect(transport.sendQueryArray).toHaveBeenCalledTimes(1);
   });
 
@@ -76,10 +74,8 @@ describe('RciManager scheduler wiring', () => {
     const completed = vi.fn();
 
     manager.queue({path: 'show.version'}).subscribe();
-    const swap$ = manager.setBatchScheduler({
-      scheduleBatch: () => timer(0).pipe(map(() => undefined)),
-      reset: vi.fn(),
-      destroy: vi.fn(),
+    const swap$ = manager.replaceBatchScheduler({
+      schedule: () => timer(0).pipe(map(() => undefined)),
     });
     swap$.subscribe({complete: completed});
 
@@ -93,9 +89,7 @@ describe('RciManager scheduler wiring', () => {
   it('errors with timeout when queue does not become READY', async () => {
     const transport = makeTransport();
     const neverFlushScheduler: BatchScheduler = {
-      scheduleBatch: () => NEVER,
-      reset: vi.fn(),
-      destroy: vi.fn(),
+      schedule: () => NEVER,
     };
     const manager = new RciManager('http://device', transport, {
       batchScheduler: neverFlushScheduler,
@@ -103,11 +97,9 @@ describe('RciManager scheduler wiring', () => {
     });
 
     manager.queue({path: 'show.version'}).subscribe();
-    const swapPromise = firstValueFrom(manager.setBatchScheduler({
-      scheduleBatch: () => timer(0).pipe(map(() => undefined)),
-      reset: vi.fn(),
-      destroy: vi.fn(),
-    }, 10));
+    const swapPromise = firstValueFrom(manager.replaceBatchScheduler({
+      schedule: () => timer(0).pipe(map(() => undefined)),
+    }, {waitForIdleMs: 10}));
 
     vi.advanceTimersByTime(10);
 
@@ -119,17 +111,13 @@ describe('RciManager scheduler wiring', () => {
     const manager = new RciManager('http://device', transport, {batchTimeout: 100});
 
     manager.queue({path: 'show.version'}).subscribe();
-    manager.setBatchScheduler({
-      scheduleBatch: () => timer(0).pipe(map(() => undefined)),
-      reset: vi.fn(),
-      destroy: vi.fn(),
-    }, 1000);
+    manager.replaceBatchScheduler({
+      schedule: () => timer(0).pipe(map(() => undefined)),
+    }, {waitForIdleMs: 1000}).subscribe();
 
-    await expect(firstValueFrom(manager.setBatchScheduler({
-      scheduleBatch: () => timer(0).pipe(map(() => undefined)),
-      reset: vi.fn(),
-      destroy: vi.fn(),
-    }, 1000))).rejects.toBeInstanceOf(SchedulerReplacementInProgressError);
+    await expect(firstValueFrom(manager.replaceBatchScheduler({
+      schedule: () => timer(0).pipe(map(() => undefined)),
+    }, {waitForIdleMs: 1000}))).rejects.toBeInstanceOf(SchedulerReplacementInProgressError);
   });
 
   it('shares one replacement execution across multiple subscribers', () => {
@@ -139,11 +127,9 @@ describe('RciManager scheduler wiring', () => {
     const completeB = vi.fn();
 
     manager.queue({path: 'show.version'}).subscribe();
-    const swap$ = manager.setBatchScheduler({
-      scheduleBatch: () => timer(0).pipe(map(() => undefined)),
-      reset: vi.fn(),
-      destroy: vi.fn(),
-    }, 1000);
+    const swap$ = manager.replaceBatchScheduler({
+      schedule: () => timer(0).pipe(map(() => undefined)),
+    }, {waitForIdleMs: 1000});
 
     swap$.subscribe({complete: completeA});
     swap$.subscribe({complete: completeB});
@@ -151,6 +137,47 @@ describe('RciManager scheduler wiring', () => {
     vi.advanceTimersByTime(20);
 
     expect(completeA).toHaveBeenCalledTimes(1);
+    expect(completeB).toHaveBeenCalledTimes(1);
+  });
+
+  it('creating observable without subscribing does not block later replacement', () => {
+    const transport = makeTransport();
+    const manager = new RciManager('http://device', transport, {batchTimeout: 20});
+    const completed = vi.fn();
+
+    manager.queue({path: 'show.version'}).subscribe();
+
+    manager.replaceBatchScheduler({
+      schedule: () => timer(0).pipe(map(() => undefined)),
+    }, {waitForIdleMs: 1000});
+
+    const swap2$ = manager.replaceBatchScheduler({
+      schedule: () => timer(0).pipe(map(() => undefined)),
+    }, {waitForIdleMs: 5000});
+    swap2$.subscribe({complete: completed});
+
+    vi.advanceTimersByTime(20);
+    expect(completed).toHaveBeenCalledTimes(1);
+  });
+
+  it('early unsubscribe from one subscriber does not clear active state for another', () => {
+    const transport = makeTransport();
+    const manager = new RciManager('http://device', transport, {batchTimeout: 50});
+    const completeA = vi.fn();
+    const completeB = vi.fn();
+
+    manager.queue({path: 'show.version'}).subscribe();
+    const swap$ = manager.replaceBatchScheduler({
+      schedule: () => timer(0).pipe(map(() => undefined)),
+    }, {waitForIdleMs: 1000});
+
+    const subA = swap$.subscribe({complete: completeA});
+    swap$.subscribe({complete: completeB});
+
+    subA.unsubscribe();
+
+    vi.advanceTimersByTime(50);
+    expect(completeA).not.toHaveBeenCalled();
     expect(completeB).toHaveBeenCalledTimes(1);
   });
 });

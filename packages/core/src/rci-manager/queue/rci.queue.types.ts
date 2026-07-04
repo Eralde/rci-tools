@@ -4,9 +4,9 @@ import type {ObjectOrArray, Values} from '../../type.utils';
 import {RciQuery} from '../query';
 import {RciQueue} from './rci.queue';
 
-export interface RciQueueOptions<ResponseType extends BaseHttpResponse> {
+export interface RciQueueOptions<ResponseType extends BaseHttpResponse, QueryPath extends string = string> {
   batchTimeout: number;
-  blockerQueue: RciQueue<ResponseType> | null;
+  blockerQueue: RciQueue<ResponseType, QueryPath> | null;
   queueName?: string;
 }
 

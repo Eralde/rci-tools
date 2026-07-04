@@ -1,4 +1,4 @@
-import {Observable, throwError} from 'rxjs';
+import {defer, Observable, throwError} from 'rxjs';
 import {filter, finalize, map, shareReplay, take, tap, timeout} from 'rxjs/operators';
 import {BaseHttpResponse, HttpTransport} from '../transport';
 import {RciQuery, RciTask} from './query';
@@ -21,35 +21,35 @@ export class RciManager<
   QueryPath extends string = string,
   BackgroundQueryPath extends string = string,
 > {
-  protected readonly batchQueue: RciQueue<BaseHttpResponse>;
-  protected readonly priorityQueue: RciQueue<BaseHttpResponse>;
+  protected readonly batchQueue: RciQueue<BaseHttpResponse, QueryPath>;
+  protected readonly priorityQueue: RciQueue<BaseHttpResponse, QueryPath>;
   protected readonly backgroundQueues: Record<string, RciBackgroundTaskQueue<BackgroundQueryPath>> = {};
   private readonly statsCollector = new QueryStatsCollector();
-  private currentSchedulerSwap$: Observable<void> | null = null;
+  private currentSchedulerSwapToken: symbol | null = null;
 
   protected readonly rciPath: string;
 
   constructor(
     private host: string,
     private httpTransport: HttpTransport<BaseHttpResponse>,
-    private options: RciManagerOptions = {},
+    private options: RciManagerOptions<QueryPath> = {},
   ) {
     const batchTimeout = this.options.batchTimeout ?? RCI_QUEUE_DEFAULT_BATCH_TIMEOUT;
 
     this.rciPath = `${this.host}/rci/`;
 
-    this.priorityQueue = new RciQueue(
+    this.priorityQueue = new RciQueue<BaseHttpResponse, QueryPath>(
       this.rciPath,
       this.httpTransport,
       {
         batchTimeout: 0,
         queueName: 'priority',
       },
-      new TimerScheduler(0),
+      new TimerScheduler<QueryPath>(0),
       this.statsCollector,
     );
 
-    this.batchQueue = new RciQueue(
+    this.batchQueue = new RciQueue<BaseHttpResponse, QueryPath>(
       this.rciPath,
       this.httpTransport,
       {
@@ -58,45 +58,59 @@ export class RciManager<
         blockerQueue: this.priorityQueue,
         queueName: 'batch',
       },
-      this.options.batchScheduler ?? new TimerScheduler(Math.max(batchTimeout, 0)),
+      this.options.batchScheduler ?? new TimerScheduler<QueryPath>(Math.max(batchTimeout, 0)),
       this.statsCollector,
     );
   }
 
-  public get stats$(): Observable<QueryStats> {
-    return this.statsCollector.stats$;
+  public get stats$(): Observable<QueryStats<QueryPath>> {
+    return this.statsCollector.stats$ as Observable<QueryStats<QueryPath>>;
   }
 
   public toggleStats(enabled: boolean): void {
     this.statsCollector.toggle(enabled);
   }
 
-  public setBatchScheduler(scheduler: BatchScheduler, timeoutMs: number = 30_000): Observable<void> {
-    if (this.currentSchedulerSwap$) {
-      return throwError(() => new SchedulerReplacementInProgressError());
-    }
+  public replaceBatchScheduler(
+    scheduler: BatchScheduler<QueryPath>,
+    options: {waitForIdleMs?: number} = {},
+  ): Observable<void> {
+    const waitForIdleMs = options.waitForIdleMs ?? 30_000;
+    let sharedSwap$: Observable<void> | null = null;
 
-    const swap$ = this.batchQueue.state$
-      .pipe(
-        filter((state) => state === RCI_QUEUE_STATE.READY),
-        take(1),
-        timeout(timeoutMs),
-        tap(() => {
-          this.batchQueue.setScheduler(scheduler);
-        }),
-        map(() => undefined),
-        finalize(() => {
-          this.currentSchedulerSwap$ = null;
-        }),
+    return defer(() => {
+      if (sharedSwap$) {
+        return sharedSwap$;
+      }
+
+      sharedSwap$ = defer(() => {
+        if (this.currentSchedulerSwapToken) {
+          return throwError(() => new SchedulerReplacementInProgressError());
+        }
+
+        const token = Symbol('scheduler-swap');
+        this.currentSchedulerSwapToken = token;
+
+        return this.batchQueue.state$.pipe(
+          filter((state) => state === RCI_QUEUE_STATE.READY),
+          take(1),
+          timeout(waitForIdleMs),
+          tap(() => {
+            this.batchQueue.setScheduler(scheduler);
+          }),
+          map(() => undefined),
+          finalize(() => {
+            if (this.currentSchedulerSwapToken === token) {
+              this.currentSchedulerSwapToken = null;
+            }
+          }),
+        );
+      }).pipe(
         shareReplay({bufferSize: 1, refCount: false}),
       );
 
-    this.currentSchedulerSwap$ = swap$;
-    swap$.subscribe({
-      error: () => undefined,
+      return sharedSwap$;
     });
-
-    return swap$;
   }
 
   public execute(query: RciTask<QueryPath>): Observable<any> {

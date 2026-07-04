@@ -5,9 +5,9 @@ export interface QueueOptions {
   isPriorityTask?: boolean;
 }
 
-export interface RciManagerOptions {
+export interface RciManagerOptions<QueryPath extends string = string> {
   batchTimeout?: number;
-  batchScheduler?: BatchScheduler;
+  batchScheduler?: BatchScheduler<QueryPath>;
 }
 
 export interface RciResponse {

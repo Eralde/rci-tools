@@ -4,11 +4,13 @@
 
 ## Overview
 
-`@rci-tools/core` &mdash; is an `npm` package for interacting with the [RCI API](../../docs/RCI_API.md).
-Two main classes exported by this package are:
+`@rci-tools/core` &mdash; is an `npm` package for interacting with
+the [RCI API](../../docs/RCI_API.md). Two main classes exported by this package are:
 
-- [SessionManager](./src/session-manager/session-manager.ts): Implements [password-based authentication](../../docs/AUTH.md).
-- [RciManager](./src/rci-manager/rci.manager.ts): The main class to interact with the API in a uniform way.
+- [SessionManager](./src/session-manager/session-manager.ts):
+  Implements [password-based authentication](../../docs/AUTH.md).
+- [RciManager](./src/rci-manager/rci.manager.ts): The main class to interact with the API in a
+  uniform way.
 
 Both classes require an [`HTTP transport` instance](./src/transport/http.transport.ts) to
 send HTTP requests to the device. The `@rci-tools/core` module providers
@@ -42,13 +44,16 @@ interface SessionManager<ResponseType extends BaseHttpResponse = BaseHttpRespons
 
 Use `isAuthenticated`/`login`/`logout` methods for the auth session management.
 Two remaining methods are:
-- `getRealmHeader`: allows to get the device name before authenticating (e.g., to show it on the login screen)
+
+- `getRealmHeader`: allows to get the device name before authenticating (e.g., to show it on the
+  login screen)
 - `toggleErrorLogging`: enables/disables logging of HTTP errors to the console
 
 ### `RciManager`
 
 The `RciManager` class is used to interact with the RCI API.
 It has a few advantages over just using `fetch/xhr/axios/...`:
+
 - queries from multiple method calls can be batched into a single HTTP request
 - there is a simple priority system:
   priority queries block the non-priority ones until they are finished
@@ -68,7 +73,6 @@ interface RciManager<
 }
 ```
 
-
 The `RciManager` relies heavily on the [root API endpoint (`/rci/`)](../../docs/RCI_API.md#31-root-api-resource).
 Interactions with both [setting](../../docs/RCI_API.md#21-settings) and
 [action](../../docs/RCI_API.md#22-actions) resources can be expressed
@@ -87,39 +91,42 @@ Before being sent to the device, `RciQuery` objects are converted to
 an object where the `path` becomes a property path and `data` becomes the value at that path.
 
 For example, a query like:
+
 ```typescript
-{
+const query = {
   path: 'show.version'
-}
+};
 ```
 
-is converted to:
-```typescript
+is converted to (`data` defaults to an empty object):
+
+```json
 {
-  'show': {
-    'version': {} // `data` defaults to an empty object
+  "show": {
+    "version": {}
   }
 }
 ```
 
 Similarly, a query with both path and data:
+
 ```typescript
-{
+const query = {
   path: 'interface',
   data: {
     name: 'Bridge0',
     description: 'My network'
   }
-}
+};
 ```
 
 becomes:
 
-```typescript
+```json
 {
-  'interface': {
-    name: 'Bridge0',
-    description: 'My network'
+  "interface": {
+    "name": "Bridge0",
+    "description": "My network"
   }
 }
 ```
@@ -134,22 +141,23 @@ There is a certain flexibility in how the same object can be represented
 as an `RciQuery`, for example both
 
 ```typescript
-{path: 'ip.telnet.session', data: {timeout: 123456}}
+const query = {path: 'ip.telnet.session', data: {timeout: 123456}};
 ```
 
 and
 
 ```typescript
-{path: 'ip', data: {telnet: {session: {timeout: 123456}}}}
+const query = {path: 'ip', data: {telnet: {session: {timeout: 123456}}}};
 ```
 
 will be converted to the same object inside the HTTP request payload:
-```typescript
+
+```json
 {
-  'ip': {
-    'telnet': {
-      'session': {
-        'timeout': 123456
+  "ip": {
+    "telnet": {
+      "session": {
+        "timeout": 123456
       }
     }
   }
@@ -164,19 +172,117 @@ The `RciManager` provides two methods for sending API queries:
 
 - **`execute(query)`**: Sends the HTTP request when you subscribe to the returned Observable.
   You have full control over the subscription lifecycle. This may be useful when you need to:
-  - Manually control when the HTTP request is made
-  - Chain multiple queries with precise timing
+    - Manually control when the HTTP request is made
+    - Chain multiple queries with precise timing
 
-- **`queue(query, options?)`**: Adds the query to an internal queue that batches multiple queries together.
-  The `RciManager` handles the subscription internally and manages when HTTP requests are actually sent.
+- **`queue(query, options?)`**: Adds the query to an internal queue that batches multiple queries
+  together.
+  The `RciManager` handles the subscription internally and manages when HTTP requests are actually
+  sent.
   The queue automatically:
-  - Batches multiple queries into a single HTTP request
-  - Removes duplicate queries from the batch
-  - Waits for a configurable timeout before sending (to allow more queries to be added)
-  - Handles priority queries via a separate priority queue, blocking the default one
+    - Batches multiple queries into a single HTTP request
+    - Removes duplicate queries from the batch
+    - Waits for a configurable timeout before sending (to allow more queries to be added)
+    - Handles priority queries via a separate priority queue, blocking the default one
 
 Both methods return a [rxjs Observable](https://rxjs.dev/guide/observable)
 that you must subscribe to in order to receive the result. Below are a few usage examples.
+
+#### Batch Scheduling
+
+By default, `queue()` batches queries together in 20ms windows before sending a single HTTP request.
+This behavior is controlled by a **scheduler**. You can customize batching
+through `RciManagerOptions.batchScheduler` or swap the scheduler at runtime with
+`replaceBatchScheduler()`.
+
+**Note:** When `batchScheduler` is provided, `batchTimeout` is **ignored**. To combine timer
+fallback with
+custom rules, compose them explicitly (see examples below).
+
+##### Built-in schedulers
+
+- `TimerScheduler(timeoutMs)` — flushes after a fixed timeout (default behavior).
+- `RuleScheduler(rules)` — flushes when any rule predicate returns `true` for the current batch
+  snapshot.
+- `raceSchedulers(...)` — races multiple schedulers; the first to emit wins.
+
+##### `BatchSnapshot`
+
+Schedulers receive a `BatchSnapshot<QueryPath>` on each task add:
+
+```ts
+interface BatchSnapshot<QueryPath extends string = string> {
+  readonly taskCount: number;
+  readonly queryCount: number;
+  readonly createdAt: number;
+  readonly elapsedMs: number;
+  readonly queryPaths: readonly QueryPath[];
+}
+```
+
+##### Examples
+
+**Default timer (20ms):**
+
+```ts
+const manager = new RciManager(host, transport);
+```
+
+**Custom timer:**
+
+```ts
+const manager = new RciManager(host, transport, {batchTimeout: 50});
+```
+
+**Hybrid: timer + content-aware rules:**
+
+```ts
+import {RciManager, raceSchedulers, TimerScheduler, RuleScheduler} from '@rci-tools/core';
+
+const manager = new RciManager(
+  host,
+  transport,
+  {
+    batchScheduler: raceSchedulers(
+      new TimerScheduler(20),
+      new RuleScheduler([
+        (batch) => batch.queryCount >= 10,
+        (batch) => batch.queryPaths.some((path) => path === 'show.interface.stat'),
+      ]),
+    ),
+  });
+```
+
+**Runtime scheduler replacement:**
+
+```ts
+const replacement$ = manager.replaceBatchScheduler(
+  new RuleScheduler([(batch) => batch.queryPaths.some((path) => path === 'show.version')]),
+  {waitForIdleMs: 10_000},
+);
+
+replacement$.subscribe({
+  complete: () => console.log('Scheduler replaced'),
+  error: (err) => console.error('Scheduler replacement failed:', err),
+});
+```
+
+**Custom scheduler:**
+
+```ts
+import type {BatchScheduler, BatchSnapshot} from '@rci-tools/core';
+
+const customScheduler: BatchScheduler = {
+  schedule(batch$) {
+    // simple flush after 3 tasks
+    return batch$.pipe(
+      filter((snapshot) => snapshot.taskCount >= 3),
+      map(() => undefined),
+      take(1),
+    );
+  },
+};
+```
 
 #### Usage Examples
 
@@ -200,7 +306,7 @@ auth$
   .subscribe(async (isLoggedIn) => {
     if (!isLoggedIn) {
       console.error('Authentication failed');
-      
+
       return Promise.resolve(null);
     }
 
@@ -230,7 +336,7 @@ auth$
     };
 
     const actionResult = await rciManager.queue(showVersion).toPromise(); // an object conataing device version info
-    
+
     console.log(changeSettingResult, readSettingResult, actionResult);
   });
 ```
@@ -334,14 +440,16 @@ The main difference between the two methods is how the background process is sta
 
 - **`initBackgroundProcess(query, options?)`**: returns an `RciBackgroundProcess` object
   that must be started manually. This method is useful when you need full control over
-  the background process lifecycle (you also can abort the ongoing process before it finishes).  
+  the background process lifecycle (you also can abort the ongoing process before it finishes).
 
 - **`queueBackgroundProcess(query, options?)`**: Queues a background process. Queries with the same
   `path` are grouped into a single queue, ensuring that the same command with different arguments
   doesn't run in parallel. This is a workaround for certain API restrictions if the `RciManager`
-  is used in a browser, since the browser usually uses a single HTTP session to handle all API requests.
+  is used in a browser, since the browser usually uses a single HTTP session to handle all API
+  requests.
 
 Both methods return a `RciBackgroundProcess` object with:
+
 - `start(): boolean`: Manually starts the process. Returns `false` if already running.
 - `attachToRunning(): boolean`: Attaches to an already-running background process (e.g. one started
   via `RciManager.execute()`). Skips the initial POST and polls via GET immediately.
@@ -349,7 +457,8 @@ Both methods return a `RciBackgroundProcess` object with:
 - `abort(): boolean`: Manually aborts the process. Returns `false` if not running.
 - `state$`: Emits state changes (`RCI_BACKGROUND_PROCESS_STATE`)
 - `data$`: Emits polled data updates as the background process runs
-- `result$`: Emits the final payload once, right before the process completes. Does NOT emit on abort or timeout.
+- `result$`: Emits the final payload once, right before the process completes. Does NOT emit on
+  abort or timeout.
 - `done$`: Emits when the process finishes, with a reason (`RCI_BACKGROUND_PROCESS_FINISH_REASON`)
 
 ```typescript

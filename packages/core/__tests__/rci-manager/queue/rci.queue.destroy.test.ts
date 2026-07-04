@@ -1,8 +1,7 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {of, timer} from 'rxjs';
-import {map} from 'rxjs/operators';
+import {of} from 'rxjs';
 import {RciQueue} from '../../../src/rci-manager/queue';
-import type {BatchScheduler, BaseHttpResponse, HttpTransport} from '../../../src';
+import type {BaseHttpResponse, HttpTransport} from '../../../src';
 
 function makeTransport(): HttpTransport<BaseHttpResponse> {
   return {
@@ -25,35 +24,41 @@ describe('RciQueue.destroy', () => {
     vi.useRealTimers();
   });
 
-  it('calls injected scheduler destroy on queue destroy', () => {
+  it('completes state$ on destroy', () => {
     const transport = makeTransport();
-    const scheduler: BatchScheduler = {
-      scheduleBatch: vi.fn(() => timer(0).pipe(map(() => undefined))),
-      reset: vi.fn(),
-      destroy: vi.fn(),
-    };
-    const queue = new RciQueue('http://device/rci/', transport, {batchTimeout: 10}, scheduler);
-
-    queue.destroy();
-
-    expect(scheduler.destroy).toHaveBeenCalledTimes(1);
-  });
-
-  it('completes state$ and supports double destroy', () => {
-    const transport = makeTransport();
-    const scheduler: BatchScheduler = {
-      scheduleBatch: vi.fn(() => timer(0).pipe(map(() => undefined))),
-      reset: vi.fn(),
-      destroy: vi.fn(),
-    };
-    const queue = new RciQueue('http://device/rci/', transport, {batchTimeout: 0}, scheduler);
+    const queue = new RciQueue('http://device/rci/', transport, {batchTimeout: 10});
     const complete = vi.fn();
 
     queue.state$.subscribe({complete});
+
     queue.destroy();
 
     expect(complete).toHaveBeenCalledTimes(1);
+  });
+
+  it('is idempotent — double destroy does not throw and completes only once', () => {
+    const transport = makeTransport();
+    const queue = new RciQueue('http://device/rci/', transport, {batchTimeout: 0});
+    const complete = vi.fn();
+
+    queue.state$.subscribe({complete});
+
+    queue.destroy();
     expect(() => queue.destroy()).not.toThrow();
+    expect(complete).toHaveBeenCalledTimes(1);
+  });
+
+  it('destroy during BATCHING_TASKS unsubscribes scheduling window, preventing delayed flush', () => {
+    const transport = makeTransport();
+    const queue = new RciQueue('http://device/rci/', transport, {batchTimeout: 100});
+
+    queue.addTask({path: 'show.version'}).subscribe();
+
+    queue.destroy();
+
+    vi.advanceTimersByTime(100);
+
+    expect(transport.sendQueryArray).not.toHaveBeenCalled();
   });
 
   it('uses batchTimeout timing when scheduler is not injected', () => {

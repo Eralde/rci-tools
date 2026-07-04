@@ -5,7 +5,7 @@ import {RciQueue} from '../../../src/rci-manager/queue';
 import {
   QueueNotIdleError,
   TimerScheduler,
-  type BatchInfo,
+  type BatchSnapshot,
   type BatchScheduler,
   type BaseHttpResponse,
   type HttpTransport
@@ -89,19 +89,17 @@ describe('RciQueue', () => {
     });
   });
 
-  describe('BatchInfo emissions', () => {
-    it('emits stable createdAt, increasing elapsedMs, and immutable task snapshots', () => {
+  describe('BatchSnapshot emissions', () => {
+    it('emits stable createdAt, increasing elapsedMs, taskCount, queryCount, and queryPaths', () => {
       const transport = makeTransport();
-      const snapshots: BatchInfo[] = [];
+      const snapshots: BatchSnapshot[] = [];
       const scheduler: BatchScheduler = {
-        scheduleBatch: (batch$) => {
-          batch$.subscribe((info) => {
-            snapshots.push(info);
+        schedule: (batch$) => {
+          batch$.subscribe((snapshot) => {
+            snapshots.push(snapshot);
           });
           return NEVER;
         },
-        reset: vi.fn(),
-        destroy: vi.fn(),
       };
       const queue = new RciQueue('http://device/rci/', transport, {batchTimeout: 100}, scheduler);
 
@@ -115,9 +113,82 @@ describe('RciQueue', () => {
       expect(snapshots[1]?.createdAt).toBe(1_000);
       expect(snapshots[0]?.elapsedMs).toBe(0);
       expect(snapshots[1]?.elapsedMs).toBe(10);
-      expect(snapshots[0]?.tasks).toHaveLength(1);
-      expect(snapshots[1]?.tasks).toHaveLength(2);
-      expect(snapshots[0]?.tasks).not.toBe(snapshots[1]?.tasks);
+      expect(snapshots[0]?.taskCount).toBe(1);
+      expect(snapshots[1]?.taskCount).toBe(2);
+      expect(snapshots[0]?.queryCount).toBe(1);
+      expect(snapshots[1]?.queryCount).toBe(2);
+      expect(snapshots[0]?.queryPaths).toEqual(['show.version']);
+      expect(snapshots[1]?.queryPaths).toEqual(['show.version', 'show.system']);
+      expect(snapshots[0]?.queryPaths).not.toBe(snapshots[1]?.queryPaths);
+    });
+
+    it('preserves queryPath order and duplicates across tasks', () => {
+      const transport = makeTransport();
+      const snapshots: BatchSnapshot[] = [];
+      const scheduler: BatchScheduler = {
+        schedule: (batch$) => {
+          batch$.subscribe((snapshot) => {
+            snapshots.push(snapshot);
+          });
+          return NEVER;
+        },
+      };
+      const queue = new RciQueue('http://device/rci/', transport, {batchTimeout: 100}, scheduler);
+
+      vi.setSystemTime(2_000);
+      queue.addTask([{path: 'show.version'}, {path: 'show.system'}]).subscribe();
+      vi.setSystemTime(2_005);
+      queue.addTask({path: 'show.version'}).subscribe();
+
+      expect(snapshots).toHaveLength(2);
+      expect(snapshots[0]?.queryPaths).toEqual(['show.version', 'show.system']);
+      expect(snapshots[1]?.queryPaths).toEqual(['show.version', 'show.system', 'show.version']);
+      expect(snapshots[1]?.taskCount).toBe(2);
+      expect(snapshots[1]?.queryCount).toBe(3);
+    });
+
+    it('queryCount counts flattened queries from multi-query tasks', () => {
+      const transport = makeTransport();
+      const snapshots: BatchSnapshot[] = [];
+      const scheduler: BatchScheduler = {
+        schedule: (batch$) => {
+          batch$.subscribe((snapshot) => {
+            snapshots.push(snapshot);
+          });
+          return NEVER;
+        },
+      };
+      const queue = new RciQueue('http://device/rci/', transport, {batchTimeout: 100}, scheduler);
+
+      vi.setSystemTime(3_000);
+      queue.addTask([{path: 'a'}, {path: 'b'}, {path: 'c'}]).subscribe();
+
+      expect(snapshots).toHaveLength(1);
+      expect(snapshots[0]?.taskCount).toBe(1);
+      expect(snapshots[0]?.queryCount).toBe(3);
+      expect(snapshots[0]?.queryPaths).toEqual(['a', 'b', 'c']);
+    });
+
+    it('taskCount increments per addTask call', () => {
+      const transport = makeTransport();
+      const snapshots: BatchSnapshot[] = [];
+      const scheduler: BatchScheduler = {
+        schedule: (batch$) => {
+          batch$.subscribe((snapshot) => {
+            snapshots.push(snapshot);
+          });
+          return NEVER;
+        },
+      };
+      const queue = new RciQueue('http://device/rci/', transport, {batchTimeout: 100}, scheduler);
+
+      vi.setSystemTime(4_000);
+      queue.addTask({path: 'first'}).subscribe();
+      queue.addTask({path: 'second'}).subscribe();
+      queue.addTask({path: 'third'}).subscribe();
+
+      expect(snapshots).toHaveLength(3);
+      expect(snapshots.map((s) => s.taskCount)).toEqual([1, 2, 3]);
     });
   });
 

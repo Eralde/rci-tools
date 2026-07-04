@@ -1,8 +1,6 @@
 import type {Observable} from 'rxjs';
-import type {BatchInfo} from './batch-info';
+import type {BatchSnapshot} from './batch-snapshot';
 
-export interface BatchScheduler {
-  scheduleBatch(batch$: Observable<BatchInfo>): Observable<void>;
-  reset(): void;
-  destroy(): void;
+export interface BatchScheduler<QueryPath extends string = string> {
+  schedule(batch$: Observable<BatchSnapshot<QueryPath>>): Observable<void>;
 }

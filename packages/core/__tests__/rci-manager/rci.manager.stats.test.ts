@@ -37,6 +37,7 @@ describe('RciManager stats', () => {
     expect(stats.queueName).toBe('batch');
     expect(stats.taskCount).toBeGreaterThanOrEqual(1);
     expect(stats.success).toBe(true);
+    expect(stats.queryPaths).toEqual(['show.version', 'show.version']);
   });
 
   it('does not emit stats when disabled', () => {
@@ -61,5 +62,20 @@ describe('RciManager stats', () => {
     manager.destroy();
 
     expect(complete).toHaveBeenCalledTimes(1);
+  });
+
+  it('emits ordered queryPaths for completed batch when stats are enabled', async () => {
+    const transport = makeTransport();
+    const manager = new RciManager('http://device', transport);
+    manager.toggleStats(true);
+
+    const statsPromise = firstValueFrom(manager.stats$.pipe(take(1)));
+
+    manager.queue({path: 'show.version'}).subscribe();
+    manager.queue({path: 'show.system'}).subscribe();
+    vi.advanceTimersByTime(20);
+
+    const stats = await statsPromise;
+    expect(stats.queryPaths).toEqual(['show.version', 'show.version', 'show.system', 'show.system']);
   });
 });

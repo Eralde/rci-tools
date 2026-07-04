@@ -1,7 +1,7 @@
 import {describe, expect, it, vi} from 'vitest';
 import {of} from 'rxjs';
 import {RciQueue} from '../../../src/rci-manager/queue';
-import {ConfigurableScheduler, type BaseHttpResponse, type HttpTransport} from '../../../src';
+import {RuleScheduler, type BaseHttpResponse, type HttpTransport} from '../../../src';
 
 function makeTransport(): HttpTransport<BaseHttpResponse> {
   return {
@@ -15,13 +15,11 @@ function makeTransport(): HttpTransport<BaseHttpResponse> {
   };
 }
 
-describe('ConfigurableScheduler integration', () => {
+describe('RuleScheduler integration', () => {
   it('flushes queue immediately when a rule matches the current batch', () => {
     const transport = makeTransport();
-    const scheduler = new ConfigurableScheduler([
-      (batchInfo) => batchInfo.tasks.some((task) => {
-        return task.queries.some((query) => query.path === 'show.interface.stat');
-      }),
+    const scheduler = new RuleScheduler([
+      (snapshot) => snapshot.queryPaths.some((path) => path === 'show.interface.stat'),
     ]);
     const queue = new RciQueue('http://device/rci/', transport, {batchTimeout: 20}, scheduler);
 
@@ -30,12 +28,12 @@ describe('ConfigurableScheduler integration', () => {
 
     queue.addTask({path: 'show.interface.stat'}).subscribe();
     expect(transport.sendQueryArray).toHaveBeenCalledTimes(1);
-    expect((transport.sendQueryArray as any).mock.calls[0][1]).toHaveLength(1);
+    expect((transport.sendQueryArray as any).mock.calls[0][1]).toHaveLength(2);
   });
 
   it('does not flush if no rule matches', () => {
     const transport = makeTransport();
-    const scheduler = new ConfigurableScheduler([
+    const scheduler = new RuleScheduler([
       () => false,
     ]);
     const queue = new RciQueue('http://device/rci/', transport, {batchTimeout: 0}, scheduler);
@@ -44,5 +42,19 @@ describe('ConfigurableScheduler integration', () => {
     queue.addTask({path: 'show.system'}).subscribe();
 
     expect(transport.sendQueryArray).not.toHaveBeenCalled();
+  });
+
+  it('trigger task stays in flushed batch', () => {
+    const transport = makeTransport();
+    const scheduler = new RuleScheduler([
+      (snapshot) => snapshot.queryPaths.some((path) => path === 'show.interface.stat'),
+    ]);
+    const queue = new RciQueue('http://device/rci/', transport, {batchTimeout: 0}, scheduler);
+
+    queue.addTask({path: 'show.version'}).subscribe();
+    queue.addTask({path: 'show.interface.stat'}).subscribe();
+
+    expect(transport.sendQueryArray).toHaveBeenCalledTimes(1);
+    expect((transport.sendQueryArray as any).mock.calls[0][1]).toHaveLength(2);
   });
 });

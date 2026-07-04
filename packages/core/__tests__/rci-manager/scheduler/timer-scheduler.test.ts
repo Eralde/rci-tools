@@ -1,6 +1,6 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {Subject, firstValueFrom} from 'rxjs';
-import {TimerScheduler, type BatchInfo} from '../../../src';
+import {TimerScheduler, type BatchSnapshot} from '../../../src';
 
 describe('TimerScheduler', () => {
   beforeEach(() => {
@@ -13,40 +13,33 @@ describe('TimerScheduler', () => {
 
   it('emits once after timeout and completes', async () => {
     const scheduler = new TimerScheduler(25);
-    const batch$ = new Subject<BatchInfo>();
-    const done = firstValueFrom(scheduler.scheduleBatch(batch$));
+    const batch$ = new Subject<BatchSnapshot>();
+    const done = firstValueFrom(scheduler.schedule(batch$));
 
     vi.advanceTimersByTime(25);
 
     await expect(done).resolves.toBeUndefined();
   });
 
-  it('reset cancels pending emission', async () => {
+  it('unsubscribe before timeout prevents emission', () => {
     const scheduler = new TimerScheduler(25);
-    const batch$ = new Subject<BatchInfo>();
+    const batch$ = new Subject<BatchSnapshot>();
     const next = vi.fn();
 
-    scheduler.scheduleBatch(batch$).subscribe({next});
-    vi.advanceTimersByTime(10);
-    scheduler.reset();
-    vi.advanceTimersByTime(100);
+    const sub = scheduler.schedule(batch$).subscribe({next});
+    sub.unsubscribe();
+    vi.advanceTimersByTime(25);
 
     expect(next).not.toHaveBeenCalled();
   });
 
-  it('destroy is safe and idempotent', () => {
-    const scheduler = new TimerScheduler(25);
-    expect(() => scheduler.destroy()).not.toThrow();
-    expect(() => scheduler.destroy()).not.toThrow();
-  });
-
-  it('ignores batch stream contents', async () => {
+  it('input batch contents are ignored', async () => {
     const scheduler = new TimerScheduler(20);
-    const batch$ = new Subject<BatchInfo>();
-    const done = firstValueFrom(scheduler.scheduleBatch(batch$));
+    const batch$ = new Subject<BatchSnapshot>();
+    const done = firstValueFrom(scheduler.schedule(batch$));
 
-    batch$.next({tasks: [{queries: [{path: 'a.b'}]}] as any, createdAt: Date.now(), elapsedMs: 0});
-    batch$.next({tasks: [{queries: [{path: 'x.y'}]}] as any, createdAt: Date.now(), elapsedMs: 1});
+    batch$.next({taskCount: 1, queryCount: 1, createdAt: 1000, elapsedMs: 0, queryPaths: ['a.b']});
+    batch$.next({taskCount: 2, queryCount: 3, createdAt: 1000, elapsedMs: 5, queryPaths: ['x.y', 'z.w']});
 
     vi.advanceTimersByTime(20);
 
