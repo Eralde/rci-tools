@@ -1,7 +1,6 @@
 import type {Observable} from 'rxjs';
 import {filter, map, take} from 'rxjs/operators';
-import type {BatchScheduler} from './batch-scheduler';
-import type {BatchSnapshot} from './batch-snapshot';
+import {BatchScheduler, BatchSnapshot} from './scheduler.types';
 
 export type BatchRule<QueryPath extends string = string> = (snapshot: BatchSnapshot<QueryPath>) => boolean;
 

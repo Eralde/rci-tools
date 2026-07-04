@@ -74,9 +74,9 @@ export class RciManager<
 
   public replaceBatchScheduler(
     scheduler: BatchScheduler<QueryPath>,
-    options: {waitForIdleMs?: number} = {},
+    options: {waitIdleFor?: number} = {},
   ): Observable<void> {
-    const waitForIdleMs = options.waitForIdleMs ?? 30_000;
+    const waitForIdleMs = options.waitIdleFor ?? 30_000;
     let sharedSwap$: Observable<void> | null = null;
 
     return defer(() => {

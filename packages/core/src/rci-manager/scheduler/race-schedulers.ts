@@ -1,7 +1,6 @@
 import type {Observable} from 'rxjs';
 import {race} from 'rxjs';
-import type {BatchScheduler} from './batch-scheduler';
-import type {BatchSnapshot} from './batch-snapshot';
+import {BatchScheduler, BatchSnapshot} from './scheduler.types';
 
 class CompositeRaceScheduler<QueryPath extends string = string> implements BatchScheduler<QueryPath> {
   constructor(
