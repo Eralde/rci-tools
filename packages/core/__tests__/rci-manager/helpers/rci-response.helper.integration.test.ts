@@ -56,4 +56,5 @@ describe('RciResponseHelper (integration)', () => {
     expect(errorEntry, `[${key}] expected error with code ${errorCode} to be present`).toBeDefined();
     expect(errorEntry!.code, `[${key}] expected error code to match`).toBe(errorCode);
   });
+
 });
