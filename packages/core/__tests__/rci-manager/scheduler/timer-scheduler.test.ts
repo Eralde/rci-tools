@@ -1,6 +1,6 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {Subject, firstValueFrom} from 'rxjs';
-import {TimerScheduler, type BatchSnapshot} from '../../../src';
+import {type BatchSnapshot, TimerScheduler} from '../../../src';
 
 describe('TimerScheduler', () => {
   beforeEach(() => {

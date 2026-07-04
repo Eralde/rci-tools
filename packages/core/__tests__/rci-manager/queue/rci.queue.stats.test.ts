@@ -24,7 +24,7 @@ describe('RciQueue stats collection', () => {
       transport,
       {
         batchTimeout: 0,
-        queueName: 'batch'
+        queueName: 'batch',
       },
       undefined,
       collector,
@@ -57,7 +57,7 @@ describe('RciQueue stats collection', () => {
       transport,
       {
         batchTimeout: 100,
-        queueName: 'batch'
+        queueName: 'batch',
       },
       undefined,
       collector,
@@ -86,7 +86,7 @@ describe('RciQueue stats collection', () => {
       transport,
       {
         batchTimeout: 100,
-        queueName: 'batch'
+        queueName: 'batch',
       },
       undefined,
       collector,
@@ -120,7 +120,7 @@ describe('RciQueue stats collection', () => {
       transport,
       {
         batchTimeout: 0,
-        queueName: 'batch'
+        queueName: 'batch',
       },
       undefined,
       collector,
@@ -150,7 +150,7 @@ describe('RciQueue stats collection', () => {
       transport,
       {
         batchTimeout: 0,
-        queueName: 'batch'
+        queueName: 'batch',
       },
       undefined,
       collector,

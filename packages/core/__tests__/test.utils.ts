@@ -17,7 +17,7 @@ export const expectObjectContainingPath = (path: string): any => {
     const key = keys[i];
 
     result = expect.objectContaining({
-      [key]: result
+      [key]: result,
     });
   }
 

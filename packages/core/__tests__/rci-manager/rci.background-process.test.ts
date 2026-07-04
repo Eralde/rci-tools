@@ -1,10 +1,10 @@
-import {describe, it, expect, beforeAll} from 'vitest';
+import {beforeAll, describe, expect, it} from 'vitest';
 import {firstValueFrom, take} from 'rxjs';
 import {
-  RciBackgroundProcess,
-  RCI_BACKGROUND_PROCESS_STATE,
-  RCI_BACKGROUND_PROCESS_FINISH_REASON,
   FetchTransport,
+  RCI_BACKGROUND_PROCESS_FINISH_REASON,
+  RCI_BACKGROUND_PROCESS_STATE,
+  RciBackgroundProcess,
   SessionManager,
 } from '../../src';
 

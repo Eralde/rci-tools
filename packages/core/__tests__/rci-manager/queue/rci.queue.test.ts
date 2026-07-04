@@ -1,13 +1,8 @@
-import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {NEVER, firstValueFrom} from 'rxjs';
 import {take, toArray} from 'rxjs/operators';
 import {RciQueue} from '../../../src/rci-manager/queue';
-import {
-  QueueNotIdleError,
-  TimerScheduler,
-  type BatchSnapshot,
-  type BatchScheduler,
-} from '../../../src';
+import {type BatchScheduler, type BatchSnapshot, QueueNotIdleError, TimerScheduler} from '../../../src';
 import {makeTransport} from '../../test.utils';
 
 describe('RciQueue', () => {

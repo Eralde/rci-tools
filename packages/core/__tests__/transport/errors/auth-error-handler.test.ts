@@ -1,7 +1,7 @@
 import {describe, expect, it, vi} from 'vitest';
 import {firstValueFrom, of, throwError} from 'rxjs';
 import {catchError, toArray} from 'rxjs/operators';
-import {AuthErrorHandler} from '../../../src/transport/errors/auth-error-handler';
+import {AuthErrorHandler} from '../../../src';
 
 describe('AuthErrorHandler', () => {
   describe('is401Error', () => {

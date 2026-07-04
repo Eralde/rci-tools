@@ -1,11 +1,7 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {NEVER, firstValueFrom, timer} from 'rxjs';
 import {map} from 'rxjs/operators';
-import {
-  RciManager,
-  SchedulerReplacementInProgressError,
-  type BatchScheduler
-} from '../../src';
+import {type BatchScheduler, RciManager, SchedulerReplacementInProgressError} from '../../src';
 import {makeTransport} from '../test.utils';
 
 describe('RciManager scheduler wiring', () => {
