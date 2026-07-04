@@ -10,14 +10,14 @@
     "fmt": "dprint fmt \"./src/**/*.ts\""
   },
   "dependencies": {
-    "inquirer": "^12.9.0",
-    "lodash": "^4.17.21",
     "@rci-tools/adapter-axios": "workspace:*",
     "@rci-tools/core": "workspace:*",
+    "inquirer": "^12.11.1",
+    "lodash": "^4.18.1",
     "rxjs": "^7.8.2"
   },
   "devDependencies": {
-    "@types/lodash": "^4.17.20",
+    "@types/lodash": "^4.17.24",
     "@types/node": "22.18.0",
     "tsx": "^3.14.0"
   }
