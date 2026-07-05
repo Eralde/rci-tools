@@ -83,10 +83,12 @@ interface RciManager<
 Additional members:
 
 - `stats$`: emits a `QueryStats` object for each completed batch when stats collection is enabled.
+  See [Query stats](./docs/QUEUE.md#query-stats).
 - `toggleStats(enabled)`: enables or disables stats collection.
 - `replaceBatchScheduler(scheduler, options?)`: replaces the batch scheduler at runtime,
   waiting for the current batch to become idle. `options.waitIdleFor` defaults to `30000` ms.
   Throws `SchedulerReplacementInProgressError` if another replacement is already in progress.
+  See [Batch Scheduling](./docs/SCHEDULING.md).
 - `destroy()`: tears down internal queues, background process queues, and the stats collector.
 
 The `RciManager` relies heavily on the [root API endpoint (`/rci/`)](../../docs/RCI_API.md#31-root-api-resource).
@@ -217,98 +219,13 @@ that you must subscribe to in order to receive the result. Below are a few usage
 
 #### Batch Scheduling
 
-By default, `queue()` batches queries together in 20ms windows before sending a single HTTP request.
-This behavior is controlled by a **scheduler**. You can customize batching
-through `RciManagerOptions.batchScheduler` or swap the scheduler at runtime with
-`replaceBatchScheduler()`.
+By default, `queue()` batches queries together in 20ms windows before sending a single HTTP
+request. This is controlled by a **scheduler** — configure it via `RciManagerOptions.batchScheduler`
+or swap it at runtime with `replaceBatchScheduler()`.
 
-**Note:** When `batchScheduler` is provided, `batchTimeout` is **ignored**. To combine timer
-fallback with custom rules, compose them explicitly (see examples below).
-
-##### Built-in schedulers
-
-- `TimerScheduler(timeoutMs)` — flushes after a fixed timeout (default behavior).
-- `RuleScheduler(rules)` — flushes when any rule predicate returns `true` for the current batch
-  snapshot.
-- `raceSchedulers(...)` — races multiple schedulers; the first to emit wins.
-
-##### `BatchSnapshot`
-
-Schedulers receive a `BatchSnapshot<QueryPath>` on each task add:
-
-```ts
-interface BatchSnapshot<QueryPath extends string = string> {
-  readonly taskCount: number;
-  readonly queryCount: number;
-  readonly createdAt: number;
-  readonly elapsedMs: number;
-  readonly queryPaths: readonly QueryPath[];
-}
-```
-
-##### Examples
-
-**Default timer (20ms):**
-
-```ts
-const manager = new RciManager(host, transport);
-```
-
-**Custom timer:**
-
-```ts
-const manager = new RciManager(host, transport, {batchTimeout: 50});
-```
-
-**Hybrid: timer + content-aware rules:**
-
-```ts
-import {RciManager, raceSchedulers, TimerScheduler, RuleScheduler, when, pathIncluded} from '@rci-tools/core';
-
-const manager = new RciManager(
-  host,
-  transport,
-  {
-    batchScheduler: raceSchedulers(
-      new TimerScheduler(20),
-      new RuleScheduler([
-        when((batch) => batch.queryCount >= 10),
-        pathIncluded('show.interface.stat'),
-      ]),
-    ),
-  });
-```
-
-**Runtime scheduler replacement:**
-
-```ts
-const replacement$ = manager.replaceBatchScheduler(
-  new RuleScheduler([pathIncluded('show.version')]),
-  {waitIdleFor: 10_000},
-);
-
-replacement$.subscribe({
-  complete: () => console.log('Scheduler replaced'),
-  error: (err) => console.error('Scheduler replacement failed:', err),
-});
-```
-
-**Custom scheduler:**
-
-```ts
-import type {BatchScheduler, BatchSnapshot} from '@rci-tools/core';
-
-const customScheduler: BatchScheduler = {
-  schedule(batch$) {
-    // simple flush after 3 tasks
-    return batch$.pipe(
-      filter((snapshot) => snapshot.taskCount >= 3),
-      map(() => undefined),
-      take(1),
-    );
-  },
-};
-```
+See [Batch Scheduling](./docs/SCHEDULING.md) for built-in schedulers (`TimerScheduler`,
+`RuleScheduler`, `raceSchedulers`), the `BatchSnapshot` interface, custom scheduler examples, and
+runtime replacement.
 
 #### Usage Examples
 
@@ -448,6 +365,14 @@ all$
     console.log(allResults);
   });
 ```
+
+#### Using `RciQueue` standalone
+
+`RciManager` wraps two `RciQueue` instances internally (a batching queue and a priority queue).
+If you only need the batching behavior, you can use `RciQueue` directly — without `RciManager`.
+
+See [Standalone `RciQueue`](./docs/QUEUE.md) for the full API, constructor options, differences
+from `RciManager`, and examples including reproducing the priority system with two queues.
 
 #### Background Processes
 
@@ -623,19 +548,7 @@ from running the same command with different arguments simultaneously.
 
 #### Query stats
 
-When stats collection is enabled via `toggleStats(true)`, `stats$` emits a `QueryStats`
-object for every completed batch:
-
-```typescript
-interface QueryStats<QueryPath extends string = string> {
-  queueName: string;
-  taskCount: number;
-  queryCount: number;
-  queryPaths: readonly QueryPath[];
-  sentAt: number;
-  durationMs: number;
-  success: boolean;
-  error?: unknown;
-}
-```
+When enabled via `toggleStats(true)`, `stats$` emits a `QueryStats` object for each completed
+batch. See [Query stats](./docs/QUEUE.md#query-stats) for the full `QueryStats` interface and
+usage with standalone `RciQueue`.
 

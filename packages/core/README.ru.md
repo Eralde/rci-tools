@@ -86,10 +86,12 @@ interface RciManager<
 Дополнительные члены класса:
 
 - `stats$`: выдаёт объект `QueryStats` для каждого завершённого батча, если сбор статистики включён.
+  См. [Статистика запросов](./docs/QUEUE.ru.md#статистика-запросов).
 - `toggleStats(enabled)`: включает или отключает сбор статистики.
 - `replaceBatchScheduler(scheduler, options?)`: заменяет планировщик батчей во время выполнения,
   дожидаясь, пока текущий батч освободится. `options.waitIdleFor` по умолчанию `30000` мс.
   Выбрасывает `SchedulerReplacementInProgressError`, если другая замена уже выполняется.
+  См. [Планировщик](./docs/SCHEDULING.ru.md).
 - `destroy()`: освобождает внутренние очереди, очереди фоновых процессов и сборщик статистики.
 
 `RciManager` активно использует [корневой ресурс API (
@@ -219,101 +221,14 @@ const query = {path: 'ip', data: {telnet: {session: {timeout: 123456}}}};
 
 #### Пакетное планирование (Batch Scheduling)
 
-По умолчанию `queue()` объединяет запросы в батчи с окном 20мс перед отправкой одного HTTP-запроса.
-Это поведение управляется **планировщиком (scheduler)**. Вы можете настроить пакетную обработку
-через `RciManagerOptions.batchScheduler` или заменить планировщик во время выполнения с помощью
+По умолчанию `queue()` объединяет запросы в батчи с окном 20мс перед отправкой одного
+HTTP-запроса. Это поведение управляется **планировщиком (scheduler)** — настройте его через
+`RciManagerOptions.batchScheduler` или замените во время выполнения с помощью
 `replaceBatchScheduler()`.
 
-**Примечание:** Если передан `batchScheduler`, то `batchTimeout` **игнорируется**. Чтобы совместить
-таймер по умолчанию с пользовательскими правилами, скомпонуйте их явно (см. примеры ниже).
-
-##### Встроенные планировщики
-
-- `TimerScheduler(timeoutMs)` — отправляет батч после фиксированной задержки (поведение по
-  умолчанию).
-- `RuleScheduler(rules)` — отправляет батч, когда любое правило-предикат возвращает `true` для
-  текущего снимка батча.
-- `raceSchedulers(...)` — запускает несколько планировщиков параллельно; побеждает первый
-  отправивший сигнал.
-
-##### `BatchSnapshot`
-
-Планировщики получают `BatchSnapshot<QueryPath>` при добавлении каждой задачи:
-
-```ts
-interface BatchSnapshot<QueryPath extends string = string> {
-  readonly taskCount: number;
-  readonly queryCount: number;
-  readonly createdAt: number;
-  readonly elapsedMs: number;
-  readonly queryPaths: readonly QueryPath[];
-}
-```
-
-##### Примеры
-
-**Таймер по умолчанию (20мс):**
-
-```ts
-const manager = new RciManager(host, transport);
-```
-
-**Свой таймер:**
-
-```ts
-const manager = new RciManager(host, transport, {batchTimeout: 50});
-```
-
-**Гибрид: таймер + правила на основе содержимого:**
-
-```ts
-import {RciManager, raceSchedulers, TimerScheduler, RuleScheduler, when, pathIncluded} from '@rci-tools/core';
-
-const manager = new RciManager(
-  host,
-  transport,
-  {
-    batchScheduler: raceSchedulers(
-      new TimerScheduler(20),
-      new RuleScheduler([
-        when((batch) => batch.queryCount >= 10),
-        pathIncluded('show.interface.stat'),
-      ]),
-    ),
-  },
-);
-```
-
-**Замена планировщика во время выполнения:**
-
-```ts
-const replacement$ = manager.replaceBatchScheduler(
-  new RuleScheduler([pathIncluded('show.version')]),
-  {waitIdleFor: 10_000},
-);
-
-replacement$.subscribe({
-  complete: () => console.log('Планировщик заменён'),
-  error: (err) => console.error('Ошибка замены планировщика:', err),
-});
-```
-
-**Пользовательский планировщик:**
-
-```ts
-import type {BatchScheduler, BatchSnapshot} from '@rci-tools/core';
-
-const customScheduler: BatchScheduler = {
-  schedule(batch$) {
-    // простая отправка после 3 задач
-    return batch$.pipe(
-      filter((snapshot) => snapshot.taskCount >= 3),
-      map(() => undefined),
-      take(1),
-    );
-  },
-};
-```
+Подробнее: [Пакетное планирование](./docs/SCHEDULING.ru.md) — встроенные планировщики
+(`TimerScheduler`, `RuleScheduler`, `raceSchedulers`), интерфейс `BatchSnapshot`, примеры
+пользовательских планировщиков и замена во время выполнения.
 
 #### Примеры использования
 
@@ -453,6 +368,14 @@ all$
     console.log(allResults);
   });
 ```
+
+#### Использование `RciQueue` отдельно
+
+`RciManager` внутри содержит два экземпляра `RciQueue` (батчинг-очередь и приоритетную очередь).
+Если вам нужен только батчинг, вы можете использовать `RciQueue` напрямую — без `RciManager`.
+
+Подробнее: [`RciQueue` отдельно](./docs/QUEUE.ru.md) — полный API, опции конструктора, отличия
+от `RciManager` и примеры, включая воспроизведение приоритетной системы с двумя очередями.
 
 #### Фоновые процессы
 
@@ -637,18 +560,6 @@ console.log('Все фоновые процессы завершены:', finalR
 
 #### Статистика запросов
 
-Когда сбор статистики включён через `toggleStats(true)`, `stats$` выдаёт объект
-`QueryStats` для каждого завершённого батча:
-
-```typescript
-interface QueryStats<QueryPath extends string = string> {
-  queueName: string;
-  taskCount: number;
-  queryCount: number;
-  queryPaths: readonly QueryPath[];
-  sentAt: number;
-  durationMs: number;
-  success: boolean;
-  error?: unknown;
-}
-```
+Когда сбор статистики включён через `toggleStats(true)`, `stats$` выдаёт объект `QueryStats`
+для каждого завершённого батча. См. [Статистика запросов](./docs/QUEUE.ru.md#статистика-запросов)
+— полный интерфейс `QueryStats` и использование с отдельным `RciQueue`.
