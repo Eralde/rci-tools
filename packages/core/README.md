@@ -66,12 +66,28 @@ interface RciManager<
   QueryPath extends string = string, // valid 'path' values for regular RCI queries
   BackgroundQueryPath extends string = string // valid 'path' values for background process RCI queries
 > {
+  readonly stats$: Observable<QueryStats<QueryPath>>;
+
+  toggleStats(enabled: boolean): void;
+  replaceBatchScheduler(scheduler: BatchScheduler<QueryPath>, options?: {waitIdleFor?: number}): Observable<void>;
+
   execute(query: RciTask<QueryPath>): Observable<any>;
   queue(query: RciTask<QueryPath>, options?: QueueOptions): Observable<any>;
   initBackgroundProcess(query: RciQuery<BackgroundQueryPath>, options?: RciBackgroundProcessOptions): RciBackgroundProcess;
   queueBackgroundProcess(query: RciQuery<BackgroundQueryPath>, options?: RciBackgroundProcessOptions): RciBackgroundProcess;
+
+  destroy(): void;
 }
 ```
+
+Additional members:
+
+- `stats$`: emits a `QueryStats` object for each completed batch when stats collection is enabled.
+- `toggleStats(enabled)`: enables or disables stats collection.
+- `replaceBatchScheduler(scheduler, options?)`: replaces the batch scheduler at runtime,
+  waiting for the current batch to become idle. `options.waitIdleFor` defaults to `30000` ms.
+  Throws `SchedulerReplacementInProgressError` if another replacement is already in progress.
+- `destroy()`: tears down internal queues, background process queues, and the stats collector.
 
 The `RciManager` relies heavily on the [root API endpoint (`/rci/`)](../../docs/RCI_API.md#31-root-api-resource).
 Interactions with both [setting](../../docs/RCI_API.md#21-settings) and
@@ -84,6 +100,17 @@ export interface RciQuery<PathType extends string = string> { // `PathType` can 
   path: PathType;
   data?: Record<string, any> | string | boolean | number; // defaults to {}
   extractData?: boolean; // defaults to true
+}
+
+export type RciTask<PathType extends string = string> = RciQuery<PathType> | RciQuery<PathType>[];
+```
+
+`queue()` accepts an optional `QueueOptions` object:
+
+```typescript
+interface QueueOptions {
+  isPriorityTask?: boolean;  // send through the priority queue. Default: false
+  saveConfiguration?: boolean; // append a `system configuration save` query. Default: false
 }
 ```
 
@@ -237,7 +264,7 @@ const manager = new RciManager(host, transport, {batchTimeout: 50});
 **Hybrid: timer + content-aware rules:**
 
 ```ts
-import {RciManager, raceSchedulers, TimerScheduler, RuleScheduler} from '@rci-tools/core';
+import {RciManager, raceSchedulers, TimerScheduler, RuleScheduler, when, pathIncluded} from '@rci-tools/core';
 
 const manager = new RciManager(
   host,
@@ -246,8 +273,8 @@ const manager = new RciManager(
     batchScheduler: raceSchedulers(
       new TimerScheduler(20),
       new RuleScheduler([
-        (batch) => batch.queryCount >= 10,
-        (batch) => batch.queryPaths.some((path) => path === 'show.interface.stat'),
+        when((batch) => batch.queryCount >= 10),
+        pathIncluded('show.interface.stat'),
       ]),
     ),
   });
@@ -257,8 +284,8 @@ const manager = new RciManager(
 
 ```ts
 const replacement$ = manager.replaceBatchScheduler(
-  new RuleScheduler([(batch) => batch.queryPaths.some((path) => path === 'show.version')]),
-  {waitForIdleMs: 10_000},
+  new RuleScheduler([pathIncluded('show.version')]),
+  {waitIdleFor: 10_000},
 );
 
 replacement$.subscribe({
@@ -357,7 +384,7 @@ const queries: RciQuery[] = [
 
 const batch1$ = rciManager.queue(queries); // Both queries will be sent in a single HTTP request
 
-bastch1$
+batch1$
   .pipe(
     exhaustMap((results) => {
       queries.forEach((query, index) => {
@@ -471,6 +498,8 @@ interface RciBackgroundProcess {
   start(): boolean;
   attachToRunning(): boolean;
   abort(): boolean;
+  getState(): RCI_BACKGROUND_PROCESS_STATE;
+  destroy(): void;
 }
 ```
 
@@ -592,4 +621,22 @@ console.log('All background processes finished:', finalResults);
 In this example, the two `tools.ping` queries will be queued together (executed sequentially),
 and the two `components.list` queries will also be queued together, preventing conflicts
 from running the same command with different arguments simultaneously.
+
+#### Query stats
+
+When stats collection is enabled via `toggleStats(true)`, `stats$` emits a `QueryStats`
+object for every completed batch:
+
+```typescript
+interface QueryStats<QueryPath extends string = string> {
+  queueName: string;
+  taskCount: number;
+  queryCount: number;
+  queryPaths: readonly QueryPath[];
+  sentAt: number;
+  durationMs: number;
+  success: boolean;
+  error?: unknown;
+}
+```
 

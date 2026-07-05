@@ -65,12 +65,32 @@ interface RciManager<
   QueryPath extends string = string, // допустимые значения 'path' для обычных RCI-запросов
   BackgroundQueryPath extends string = string // допустимые значения 'path' для фоновых процессов
 > {
+  readonly stats$: Observable<QueryStats<QueryPath>>;
+
+  toggleStats(enabled: boolean): void;
+
+  replaceBatchScheduler(scheduler: BatchScheduler<QueryPath>, options?: {
+    waitIdleFor?: number
+  }): Observable<void>;
+
   execute(query: RciTask<QueryPath>): Observable<any>;
   queue(query: RciTask<QueryPath>, options?: QueueOptions): Observable<any>;
+
   initBackgroundProcess(query: RciQuery<BackgroundQueryPath>, options?: RciBackgroundProcessOptions): RciBackgroundProcess;
   queueBackgroundProcess(query: RciQuery<BackgroundQueryPath>, options?: RciBackgroundProcessOptions): RciBackgroundProcess;
+
+  destroy(): void;
 }
 ```
+
+Дополнительные члены класса:
+
+- `stats$`: выдаёт объект `QueryStats` для каждого завершённого батча, если сбор статистики включён.
+- `toggleStats(enabled)`: включает или отключает сбор статистики.
+- `replaceBatchScheduler(scheduler, options?)`: заменяет планировщик батчей во время выполнения,
+  дожидаясь, пока текущий батч освободится. `options.waitIdleFor` по умолчанию `30000` мс.
+  Выбрасывает `SchedulerReplacementInProgressError`, если другая замена уже выполняется.
+- `destroy()`: освобождает внутренние очереди, очереди фоновых процессов и сборщик статистики.
 
 `RciManager` активно использует [корневой ресурс API (
 `/rci/`)](../../docs/RCI_API.ru.md#31-корневой-ресурс-api).
@@ -84,6 +104,17 @@ export interface RciQuery<PathType extends string = string> { // `PathType` мо
   path: PathType;
   data?: Record<string, any> | string | boolean | number; // по умолчанию {}
   extractData?: boolean; // по умолчанию true
+}
+
+export type RciTask<PathType extends string = string> = RciQuery<PathType> | RciQuery<PathType>[];
+```
+
+Метод `queue()` принимает необязательный объект `QueueOptions`:
+
+```typescript
+interface QueueOptions {
+  isPriorityTask?: boolean;  // отправить через приоритетную очередь. По умолчанию: false
+  saveConfiguration?: boolean; // добавить запрос system/configuration/save. По умолчанию: false
 }
 ```
 
@@ -236,7 +267,7 @@ const manager = new RciManager(host, transport, {batchTimeout: 50});
 **Гибрид: таймер + правила на основе содержимого:**
 
 ```ts
-import {RciManager, raceSchedulers, TimerScheduler, RuleScheduler} from '@rci-tools/core';
+import {RciManager, raceSchedulers, TimerScheduler, RuleScheduler, when, pathIncluded} from '@rci-tools/core';
 
 const manager = new RciManager(
   host,
@@ -245,8 +276,8 @@ const manager = new RciManager(
     batchScheduler: raceSchedulers(
       new TimerScheduler(20),
       new RuleScheduler([
-        (batch) => batch.queryCount >= 10,
-        (batch) => batch.queryPaths.some((path) => path === 'show.interface.stat'),
+        when((batch) => batch.queryCount >= 10),
+        pathIncluded('show.interface.stat'),
       ]),
     ),
   },
@@ -257,8 +288,8 @@ const manager = new RciManager(
 
 ```ts
 const replacement$ = manager.replaceBatchScheduler(
-  new RuleScheduler([(batch) => batch.queryPaths.some((path) => path === 'show.version')]),
-  {waitForIdleMs: 10_000},
+  new RuleScheduler([pathIncluded('show.version')]),
+  {waitIdleFor: 10_000},
 );
 
 replacement$.subscribe({
@@ -475,6 +506,8 @@ interface RciBackgroundProcess {
   start(): boolean;
   attachToRunning(): boolean;
   abort(): boolean;
+  getState(): RCI_BACKGROUND_PROCESS_STATE;
+  destroy(): void;
 }
 ```
 
@@ -601,3 +634,21 @@ console.log('Все фоновые процессы завершены:', finalR
 что, когда несколько экземпляров одного и того же фонового процесса запущены
 параллельно из одной HTTP-сессии, невозможно понять, статус какого из процессов
 возвращается в ответ на GET-запрос.
+
+#### Статистика запросов
+
+Когда сбор статистики включён через `toggleStats(true)`, `stats$` выдаёт объект
+`QueryStats` для каждого завершённого батча:
+
+```typescript
+interface QueryStats<QueryPath extends string = string> {
+  queueName: string;
+  taskCount: number;
+  queryCount: number;
+  queryPaths: readonly QueryPath[];
+  sentAt: number;
+  durationMs: number;
+  success: boolean;
+  error?: unknown;
+}
+```
