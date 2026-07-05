@@ -226,7 +226,7 @@ HTTP-запроса. Это поведение управляется **план
 `RciManagerOptions.batchScheduler` или замените во время выполнения с помощью
 `replaceBatchScheduler()`.
 
-Подробнее: [Пакетное планирование](./docs/SCHEDULING.ru.md) — встроенные планировщики
+Подробнее: см., встроенные [планировщики](./docs/SCHEDULING.ru.md)
 (`TimerScheduler`, `RuleScheduler`, `raceSchedulers`), интерфейс `BatchSnapshot`, примеры
 пользовательских планировщиков и замена во время выполнения.
 
