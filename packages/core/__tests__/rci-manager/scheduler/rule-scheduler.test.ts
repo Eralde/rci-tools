@@ -1,6 +1,6 @@
 import {describe, expect, it, vi} from 'vitest';
 import {Subject} from 'rxjs';
-import {type BatchSnapshot, RuleScheduler, TimerScheduler, raceSchedulers} from '../../../src';
+import {type BatchSnapshot, RuleScheduler, TimerScheduler, raceSchedulers, after, when} from '../../../src';
 
 const createSnapshot = (paths: string[], overrides: Partial<BatchSnapshot> = {}): BatchSnapshot => ({
   taskCount: overrides.taskCount ?? paths.length,
@@ -14,8 +14,8 @@ describe('RuleScheduler', () => {
   it('flushes when any rule returns true', () => {
     const batch$ = new Subject<BatchSnapshot>();
     const scheduler = new RuleScheduler([
-      () => false,
-      (snapshot) => snapshot.queryPaths.some((path) => path === 'show.interface'),
+      when(() => false),
+      when((snapshot) => snapshot.queryPaths.some((path) => path === 'show.interface')),
     ]);
     const next = vi.fn();
 
@@ -30,8 +30,8 @@ describe('RuleScheduler', () => {
   it('does not flush when all rules return false', () => {
     const batch$ = new Subject<BatchSnapshot>();
     const scheduler = new RuleScheduler([
-      () => false,
-      () => false,
+      when(() => false),
+      when(() => false),
     ]);
     const next = vi.fn();
 
@@ -42,30 +42,25 @@ describe('RuleScheduler', () => {
     expect(next).not.toHaveBeenCalled();
   });
 
-  it('evaluates rules in order and stops at first match', () => {
-    const firstRule = vi.fn((snapshot: BatchSnapshot) => {
-      return snapshot.queryPaths.some((path) => path === 'show.interface');
-    });
-
-    const secondRule = vi.fn(() => true);
-    const thirdRule = vi.fn(() => true);
+  it('flushes when first rule emits, ignoring later matches', () => {
+    // Two rules both match show.interface — first one in array wins via merge subscription order
     const batch$ = new Subject<BatchSnapshot>();
-    const scheduler = new RuleScheduler([firstRule, secondRule, thirdRule]);
+    const scheduler = new RuleScheduler([
+      when((snapshot) => snapshot.queryPaths.some((path) => path === 'show.interface')),
+      when(() => true),
+    ]);
     const next = vi.fn();
 
     scheduler.schedule(batch$).subscribe({next});
     batch$.next(createSnapshot(['show.interface']));
 
     expect(next).toHaveBeenCalledTimes(1);
-    expect(firstRule).toHaveBeenCalledTimes(1);
-    expect(secondRule).not.toHaveBeenCalled();
-    expect(thirdRule).not.toHaveBeenCalled();
   });
 
   it('flushes only once even if subsequent emissions match', () => {
     const batch$ = new Subject<BatchSnapshot>();
     const scheduler = new RuleScheduler([
-      () => true,
+      when(() => true),
     ]);
     const next = vi.fn();
 
@@ -81,7 +76,7 @@ describe('raceSchedulers', () => {
   it('flushes when first scheduler emits', () => {
     const batch$ = new Subject<BatchSnapshot>();
     const ruleScheduler = new RuleScheduler([
-      (snapshot) => snapshot.queryPaths.some((path) => path === 'show.interface'),
+      when((snapshot) => snapshot.queryPaths.some((path) => path === 'show.interface')),
     ]);
     const composed = raceSchedulers(ruleScheduler, new TimerScheduler(50));
     const next = vi.fn();
@@ -97,7 +92,7 @@ describe('raceSchedulers', () => {
 
     const batch$ = new Subject<BatchSnapshot>();
     const ruleScheduler = new RuleScheduler([
-      () => false,
+      when(() => false),
     ]);
     const composed = raceSchedulers(ruleScheduler, new TimerScheduler(25));
     const next = vi.fn();

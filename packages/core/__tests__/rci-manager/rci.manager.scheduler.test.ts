@@ -1,7 +1,16 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {NEVER, firstValueFrom, timer} from 'rxjs';
+import {NEVER, Subject, firstValueFrom, timer} from 'rxjs';
 import {map} from 'rxjs/operators';
-import {type BatchScheduler, RciManager, SchedulerReplacementInProgressError} from '../../src';
+import {
+  type BatchScheduler,
+  type BatchSnapshot,
+  RciManager,
+  RuleScheduler,
+  SchedulerReplacementInProgressError,
+  after,
+  pathIncluded,
+  queryCountAtLeast,
+} from '../../src';
 import {RCI_QUEUE_DEFAULT_BATCH_TIMEOUT} from '../../src/rci-manager/queue';
 import {makeTransport} from '../test.utils';
 
@@ -205,5 +214,77 @@ describe('RciManager scheduler wiring', () => {
     vi.advanceTimersByTime(50);
     expect(completeA).not.toHaveBeenCalled();
     expect(completeB).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('RuleScheduler', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function makeSnapshot(overrides: Partial<BatchSnapshot> = {}): BatchSnapshot {
+    return {
+      taskCount: 0,
+      queryCount: 0,
+      createdAt: Date.now(),
+      elapsedMs: 0,
+      queryPaths: [],
+      ...overrides,
+    };
+  }
+
+  it('count-based rule flushes after queryCount threshold is met', async () => {
+    const scheduler = new RuleScheduler([queryCountAtLeast(3)]);
+    const batch$ = new Subject<BatchSnapshot>();
+
+    const schedulePromise = firstValueFrom(scheduler.schedule(batch$));
+
+    batch$.next(makeSnapshot({queryCount: 1}));
+    batch$.next(makeSnapshot({queryCount: 2}));
+    // Still shouldn't resolve yet
+
+    batch$.next(makeSnapshot({queryCount: 3}));
+    await schedulePromise; // should resolve when count >= 3
+  });
+
+  it('path-based rule flushes when matching path appears', async () => {
+    const scheduler = new RuleScheduler([pathIncluded('show.interface')]);
+    const batch$ = new Subject<BatchSnapshot>();
+
+    const schedulePromise = firstValueFrom(scheduler.schedule(batch$));
+
+    batch$.next(makeSnapshot({queryPaths: ['show.version']}));
+    batch$.next(makeSnapshot({queryPaths: ['show.system']}));
+
+    batch$.next(makeSnapshot({queryPaths: ['show.interface']}));
+    await schedulePromise;
+  });
+
+  it('time-based rule flushes after timer even without new snapshots', async () => {
+    const scheduler = new RuleScheduler([after(100)]);
+    const batch$ = new Subject<BatchSnapshot>();
+
+    const schedulePromise = firstValueFrom(scheduler.schedule(batch$));
+
+    vi.advanceTimersByTime(100);
+    await schedulePromise;
+  });
+
+  it('combines multiple rules — shortest path wins', async () => {
+    const scheduler = new RuleScheduler([
+      queryCountAtLeast(10), // won't fire
+      after(50), // fires at 50ms
+      pathIncluded('show.interface'), // won't appear
+    ]);
+    const batch$ = new Subject<BatchSnapshot>();
+
+    const schedulePromise = firstValueFrom(scheduler.schedule(batch$));
+
+    vi.advanceTimersByTime(50);
+    await schedulePromise;
   });
 });
