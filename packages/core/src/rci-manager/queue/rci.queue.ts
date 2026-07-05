@@ -1,5 +1,5 @@
-import {BehaviorSubject, EMPTY, Observable, Subject, Subscription, of, race} from 'rxjs';
-import {buffer, catchError, exhaustMap, filter, map, switchMap, take, takeUntil, timeout} from 'rxjs/operators';
+import {BehaviorSubject, EMPTY, Observable, Subject, Subscription, defer, of, race} from 'rxjs';
+import {buffer, catchError, exhaustMap, filter, map, switchMap, take, timeout} from 'rxjs/operators';
 import {RciPayloadHelper} from '../payload';
 import type {BaseHttpResponse, HttpTransport} from '../../transport';
 import type {GenericObject, ObjectOrArray} from '../../type.utils';
@@ -10,6 +10,10 @@ import {QueryStatsCollector} from '../stats';
 import {RCI_QUEUE_STATE, RciQueueOptions, RciQueueState, Task} from './rci.queue.types';
 import {RCI_QUEUE_BUSY_STATES, RCI_QUEUE_DEFAULT_OPTIONS, SAVE_CONFIGURATION_QUERY} from './rci.queue.constants';
 import {QueueNotIdleError} from './queue-not-idle.error';
+
+type BlockerRaceResult =
+  | {type: 'task'; data: ObjectOrArray}
+  | {type: 'blocked'};
 
 export class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends string = string> {
   private readonly stateSub$ = new BehaviorSubject<RciQueueState>(RCI_QUEUE_STATE.READY);
@@ -69,53 +73,45 @@ export class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends s
     this.batchSubscription = this.initializeBatchSubscription();
   }
 
-  public static createImpossibleApiResponse(): ObjectOrArray {
-    return [[]]; // `[[]]` is a valid JSON, but this particular JSON is never returned by the RCI API
-  }
-
-  public static isImpossibleApiResponse(obj: ObjectOrArray): boolean {
-    return Array.isArray(obj)
-      && Array.isArray(obj?.[0])
-      && obj?.[0].length === 0;
-  }
-
+  public addTask(query: RciQuery, saveConfiguration?: boolean): Observable<GenericObject | undefined>;
+  public addTask(query: RciQuery[], saveConfiguration?: boolean): Observable<GenericObject[]>;
+  public addTask(query: RciTask, saveConfiguration?: boolean): Observable<GenericObject | GenericObject[] | undefined>;
   public addTask(query: RciTask, saveConfiguration: boolean = false): Observable<any> {
+    return defer(() => this.addTaskWhenSubscribed(query, saveConfiguration));
+  }
+
+  private addTaskWhenSubscribed(query: RciTask, saveConfiguration: boolean): Observable<any> {
     const task$ = this.processTask(query, saveConfiguration);
 
     if (!this.blockerQueue) {
       return task$;
     }
 
-    const retry$ = new Subject<ObjectOrArray>();
+    const blocked$ = this.blockerQueue.isBusy$
+      .pipe(
+        filter(Boolean),
+        take(1),
+        map((): BlockerRaceResult => ({type: 'blocked'})),
+      );
 
-    this.blockerQueue.isBusy$
-      .pipe(takeUntil(task$))
-      .subscribe(() => retry$.next(RciQueue.createImpossibleApiResponse()));
-
-    // If the 'blocker queue' becomes busy while the current task is being processed
-    return race(task$, retry$)
+    return race(
+      task$.pipe(map((data): BlockerRaceResult => ({type: 'task', data}))),
+      blocked$,
+    )
       .pipe(
         exhaustMap((winner) => {
-          // ... then we set this queue state to PENDING,
-          if (RciQueue.isImpossibleApiResponse(winner)) {
-            this.setState(RCI_QUEUE_STATE.PENDING);
-            retry$.complete();
-
-            if (!this.blockerQueue) {
-              return this.addTask(query, saveConfiguration);
-            }
-
-            // ... and wait until the blocker queue is free,
-            // to process the current task again
-            return this.blockerQueue.state$
-              .pipe(
-                filter((state) => state === RCI_QUEUE_STATE.READY),
-                take(1),
-                exhaustMap(() => this.addTask(query, saveConfiguration)),
-              );
+          if (winner.type === 'task') {
+            return of(winner.data);
           }
 
-          return of(winner);
+          this.setState(RCI_QUEUE_STATE.PENDING);
+
+          return this.blockerQueue!.state$
+            .pipe(
+              filter((state) => state === RCI_QUEUE_STATE.READY),
+              take(1),
+              exhaustMap(() => this.addTask(query, saveConfiguration)),
+            );
         }),
       );
   }
@@ -270,9 +266,9 @@ export class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends s
   private prepareTask(query: RciTask, saveConfiguration: boolean): Task {
     const subject = new Subject<ObjectOrArray>();
     const isSingleQuery = !Array.isArray(query);
-    const queriesList = isSingleQuery
-      ? [query] as RciQuery[]
-      : query as RciQuery[];
+    const queriesList: RciQuery[] = isSingleQuery
+      ? [query as RciQuery]
+      : [...query as RciQuery[]];
 
     if (saveConfiguration) {
       queriesList.push({path: SAVE_CONFIGURATION_QUERY, data: {}});

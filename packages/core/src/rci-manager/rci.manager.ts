@@ -6,6 +6,7 @@ import {RCI_QUEUE_DEFAULT_BATCH_TIMEOUT, RCI_QUEUE_STATE, RciQueue} from './queu
 import {BatchScheduler, TimerScheduler} from './scheduler';
 import {RciBackgroundProcess, RciBackgroundProcessOptions, RciBackgroundTaskQueue} from './background-process';
 import {RciPayloadHelper} from './payload';
+import type {GenericObject} from '../type.utils';
 import type {QueueOptions, RciManagerOptions} from './rci.manager.types';
 import {DEFAULT_QUEUE_OPTIONS, RCI_QUERY_TIMEOUT} from './rci.manager.constants';
 import {QueryStats, QueryStatsCollector} from './stats';
@@ -114,7 +115,9 @@ export class RciManager<
     });
   }
 
-  public execute(query: RciTask<QueryPath>): Observable<any> {
+  public execute(query: RciQuery<QueryPath>): Observable<GenericObject | undefined>;
+  public execute(query: Array<RciQuery<QueryPath>>): Observable<Array<GenericObject | undefined>>;
+  public execute(query: RciTask<QueryPath>): Observable<GenericObject | Array<GenericObject | undefined> | undefined> {
     const isSingleQuery = !Array.isArray(query);
     const queryList: Array<RciQuery<QueryPath>> = isSingleQuery
       ? [query]
@@ -134,16 +137,18 @@ export class RciManager<
           const allResponses = RciPayloadHelper.inflateResponse(batchedResponse, queryMap);
 
           return isSingleQuery
-            ? allResponses[0]!
+            ? allResponses[0]
             : allResponses;
         }),
       );
   }
 
+  public queue(query: RciQuery<QueryPath>, options?: QueueOptions): Observable<GenericObject | undefined>;
+  public queue(query: Array<RciQuery<QueryPath>>, options?: QueueOptions): Observable<GenericObject[]>;
   public queue(
     query: RciTask<QueryPath>,
     options: QueueOptions = DEFAULT_QUEUE_OPTIONS,
-  ): Observable<any> {
+  ): Observable<GenericObject | GenericObject[] | undefined> {
     if (options.isPriorityTask) {
       return this.priorityQueue.addTask(query, options.saveConfiguration);
     } else {
@@ -186,6 +191,9 @@ export class RciManager<
   public destroy(): void {
     this.batchQueue.destroy();
     this.priorityQueue.destroy();
+
+    Object.values(this.backgroundQueues).forEach((queue) => queue.destroy());
+
     this.statsCollector.destroy();
   }
 }

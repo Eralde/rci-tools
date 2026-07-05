@@ -1,22 +1,29 @@
-import {from, map, Observable, OperatorFunction, throwError} from 'rxjs';
+import {Observable, OperatorFunction, from, map, throwError} from 'rxjs';
 import {catchError} from 'rxjs/operators';
 import axios, {type AxiosInstance, AxiosResponse, AxiosResponseHeaders} from 'axios';
 import {CookieJar} from 'tough-cookie';
 import {HttpCookieAgent, HttpsCookieAgent} from 'http-cookie-agent/http';
 import type {GenericObject, HttpTransport} from '@rci-tools/core';
 
-const NETWORK_ERRORS = ['ECONNREFUSED', 'EHOSTDOWN', 'ETIMEDOUT', 'ENOTFOUND', 'ECONNRESET', 'ENETUNREACH'];
+const NETWORK_ERROR_CODES = new Set([
+  'ECONNREFUSED',
+  'EHOSTDOWN',
+  'ETIMEDOUT',
+  'ENOTFOUND',
+  'ECONNRESET',
+  'ENETUNREACH',
+]);
 
 const getNetworkErrorHandler = (
-  predicate: (response: unknown) => boolean,
+  predicate: (error: unknown) => boolean,
 ): OperatorFunction<AxiosResponse, AxiosResponse> => {
   return (source$: Observable<AxiosResponse>): Observable<AxiosResponse> => {
     return source$
       .pipe(
-        catchError((error: any) => {
+        catchError((error: unknown) => {
           if (predicate(error)) {
             return throwError(() => ({
-              ...error,
+              ...(error as Record<string, unknown>),
               response: {status: 503, statusText: 'Service Unavailable'},
             }));
           }
@@ -28,14 +35,13 @@ const getNetworkErrorHandler = (
 };
 
 export class AxiosTransport implements HttpTransport<AxiosResponse> {
-  protected jar: CookieJar;
-  protected client: AxiosInstance;
+  protected readonly jar: CookieJar;
+  protected readonly client: AxiosInstance;
+  protected readonly handleNetworkError: OperatorFunction<AxiosResponse, AxiosResponse>;
 
-  protected handleNetworkError: OperatorFunction<AxiosResponse, AxiosResponse>;
-
-  constructor() {
+  constructor(client?: AxiosInstance) {
     this.jar = new CookieJar();
-    this.client = axios.create({
+    this.client = client ?? axios.create({
       httpAgent: new HttpCookieAgent({cookies: {jar: this.jar}}),
       httpsAgent: new HttpsCookieAgent({cookies: {jar: this.jar}}),
     });
@@ -51,48 +57,35 @@ export class AxiosTransport implements HttpTransport<AxiosResponse> {
     // noop; cookies are handled by the CookieJar
   }
 
-  public isNetworkError(error: any): boolean {
-    if (!error) {
-      return false;
-    }
-
-    const message = error?.message ?? '';
-
-    return NETWORK_ERRORS.includes(message);
+  public isNetworkError(error: unknown): boolean {
+    return axios.isAxiosError(error) && NETWORK_ERROR_CODES.has(error.code ?? '');
   }
 
   public getHeader(response: AxiosResponse, name: string): string {
-    const header = (response.headers as AxiosResponseHeaders)?.get(name) as string;
+    const header = (response.headers as AxiosResponseHeaders)?.get(name) as string | undefined;
 
     return header ?? '';
   }
 
   public get(url: string): Observable<AxiosResponse> {
     return from(this.client.get(url, {withCredentials: true}))
-      .pipe(
-        this.handleNetworkError,
-      );
+      .pipe(this.handleNetworkError);
   }
 
   public post(url: string, data: unknown): Observable<AxiosResponse> {
     return from(this.client.post(url, data, {withCredentials: true}))
-      .pipe(
-        this.handleNetworkError,
-      );
+      .pipe(this.handleNetworkError);
   }
 
   public delete(url: string): Observable<AxiosResponse> {
     return from(this.client.delete(url, {withCredentials: true}))
-      .pipe(
-        this.handleNetworkError,
-      );
+      .pipe(this.handleNetworkError);
   }
 
   public sendQueryArray(url: string, queryArray: GenericObject[]): Observable<GenericObject[]> {
     return this.post(url, queryArray)
       .pipe(
         map((httpResponse: AxiosResponse) => httpResponse.data),
-        catchError((error) => throwError(() => error)),
       );
   }
 }

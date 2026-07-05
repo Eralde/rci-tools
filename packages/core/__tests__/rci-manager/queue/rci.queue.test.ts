@@ -195,4 +195,35 @@ describe('RciQueue', () => {
       }).not.toThrow();
     });
   });
+
+  describe('addTask subscription behavior', () => {
+    it('does not enqueue a blocked task until returned observable is subscribed', () => {
+      const transport = makeTransport();
+      const blockerQueue = new RciQueue('http://device/rci/', transport, {batchTimeout: 100});
+      const queue = new RciQueue('http://device/rci/', transport, {batchTimeout: 100, blockerQueue});
+      const states: string[] = [];
+
+      queue.state$.subscribe((state) => states.push(state));
+
+      queue.addTask({path: 'show.version'});
+
+      expect(states).toEqual(['READY']);
+      expect(transport.sendQueryArray).not.toHaveBeenCalled();
+    });
+
+    it('does not mutate caller query array when saveConfiguration is true', () => {
+      const transport = makeTransport();
+      const queue = new RciQueue('http://device/rci/', transport, {batchTimeout: 0});
+      const queries = [{path: 'show.version'}];
+
+      queue.addTask(queries, true).subscribe();
+      vi.advanceTimersByTime(0);
+
+      expect(queries).toEqual([{path: 'show.version'}]);
+      expect(transport.sendQueryArray).toHaveBeenCalledWith('http://device/rci/', [
+        {show: {version: {}}},
+        {system: {configuration: {save: {}}}},
+      ]);
+    });
+  });
 });

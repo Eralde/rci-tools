@@ -26,7 +26,7 @@ describe('RciManager stats', () => {
     expect(stats.queueName).toBe('batch');
     expect(stats.taskCount).toBeGreaterThanOrEqual(1);
     expect(stats.success).toBe(true);
-    expect(stats.queryPaths).toEqual(['show.version', 'show.version']);
+    expect(stats.queryPaths).toEqual(['show.version']);
   });
 
   it('does not emit stats when disabled', () => {
@@ -65,6 +65,6 @@ describe('RciManager stats', () => {
     vi.advanceTimersByTime(20);
 
     const stats = await statsPromise;
-    expect(stats.queryPaths).toEqual(['show.version', 'show.version', 'show.system', 'show.system']);
+    expect(stats.queryPaths).toEqual(['show.version', 'show.system']);
   });
 });

@@ -3,16 +3,13 @@
   "compilerOptions": {
     "outDir": "./dist",
     "baseUrl": ".",
-    "rootDir": ".",
     "moduleResolution": "bundler",
-    "module": "esnext"
+    "module": "esnext",
+    "paths": {
+      "@rci-tools/core": ["../core/src"]
+    }
   },
   "include": [
     "src/**/*"
-  ],
-  "references": [
-    {
-      "path": "../core"
-    }
   ]
 }

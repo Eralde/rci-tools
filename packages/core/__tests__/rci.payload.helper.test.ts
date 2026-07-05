@@ -1,7 +1,7 @@
 import {describe, expect, it} from 'vitest';
 import {last, uniqBy} from 'lodash-es';
 import {type CompactPayload, QUERY_SORT, RciPayloadHelper} from '../src/rci-manager/payload';
-import type {RciQuery} from '../src';
+import type {GenericObject, RciQuery} from '../src';
 import {expectObjectContainingPath} from './test.utils';
 
 describe('RciPayloadHelper', () => {
@@ -185,7 +185,7 @@ describe('RciPayloadHelper', () => {
     ];
 
     // Simulate a response for each unique query (the "response" is just the query itself for this test)
-    const getResponseForQuery = (query: RciQuery) => query;
+    const getResponseForQuery = (query: GenericObject): GenericObject => query;
 
     const sortMaskValues = [
       QUERY_SORT.NONE,
@@ -207,5 +207,42 @@ describe('RciPayloadHelper', () => {
       const expected = list.map(q => RciPayloadHelper['toQueryObject'](q));
       expect(inflated).toEqual(expected);
     }
+  });
+
+  it('keeps compact/inflate/split behavior stable after internal simplification', () => {
+    const tasks = [
+      {
+        isSingleQuery: false,
+        subject: null as any,
+        queries: [
+          {path: SHOW_VERSION},
+          {path: SYSTEM_DESCRIPTION, data: 'foobar'},
+        ],
+      },
+      {
+        isSingleQuery: true,
+        subject: null as any,
+        queries: [
+          {path: SHOW_VERSION},
+        ],
+      },
+    ];
+
+    const responseArray = [
+      {show: {version: {value: '4.2.2'}}},
+      {system: {description: {name: 'device'}}},
+    ];
+
+    const {queryArray, queryMap} = RciPayloadHelper.batchTasks(tasks as any);
+    const chunked = RciPayloadHelper.splitResponsesPerTask(responseArray, tasks as any, queryMap);
+
+    expect(queryArray).toEqual([
+      {show: {version: {}}},
+      {system: {description: 'foobar'}},
+    ]);
+    expect(chunked).toEqual([
+      [{value: '4.2.2'}, {name: 'device'}],
+      [{value: '4.2.2'}],
+    ]);
   });
 });
