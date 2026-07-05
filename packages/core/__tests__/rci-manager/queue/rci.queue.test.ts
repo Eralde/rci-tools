@@ -83,7 +83,7 @@ describe('RciQueue', () => {
           return NEVER;
         },
       };
-      const queue = new RciQueue('http://device/rci/', transport, {batchTimeout: 100}, scheduler);
+      const queue = new RciQueue('http://device/rci/', transport, {batchTimeout: 100, scheduler});
 
       vi.setSystemTime(1_000);
       queue.addTask({path: 'show.version'}).subscribe();
@@ -115,7 +115,7 @@ describe('RciQueue', () => {
           return NEVER;
         },
       };
-      const queue = new RciQueue('http://device/rci/', transport, {batchTimeout: 100}, scheduler);
+      const queue = new RciQueue('http://device/rci/', transport, {batchTimeout: 100, scheduler});
 
       vi.setSystemTime(2_000);
       queue.addTask([{path: 'show.version'}, {path: 'show.system'}]).subscribe();
@@ -140,7 +140,7 @@ describe('RciQueue', () => {
           return NEVER;
         },
       };
-      const queue = new RciQueue('http://device/rci/', transport, {batchTimeout: 100}, scheduler);
+      const queue = new RciQueue('http://device/rci/', transport, {batchTimeout: 100, scheduler});
 
       vi.setSystemTime(3_000);
       queue.addTask([{path: 'a'}, {path: 'b'}, {path: 'c'}]).subscribe();
@@ -162,7 +162,7 @@ describe('RciQueue', () => {
           return NEVER;
         },
       };
-      const queue = new RciQueue('http://device/rci/', transport, {batchTimeout: 100}, scheduler);
+      const queue = new RciQueue('http://device/rci/', transport, {batchTimeout: 100, scheduler});
 
       vi.setSystemTime(4_000);
       queue.addTask({path: 'first'}).subscribe();

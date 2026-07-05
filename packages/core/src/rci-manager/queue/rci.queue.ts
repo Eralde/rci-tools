@@ -57,8 +57,6 @@ export class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends s
     private rciPath: string,
     private httpTransport: HttpTransport<ResponseType>,
     private options: Partial<RciQueueOptions<ResponseType, QueryPath>> = {},
-    scheduler?: BatchScheduler<QueryPath>,
-    statsCollector?: QueryStatsCollector | null,
   ) {
     const _options: RciQueueOptions<ResponseType, QueryPath> = {
       ...RCI_QUEUE_DEFAULT_OPTIONS,
@@ -67,8 +65,8 @@ export class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends s
 
     this.blockerQueue = _options.blockerQueue;
     this.queueName = _options.queueName ?? 'unknown';
-    this.scheduler = scheduler ?? new TimerScheduler<QueryPath>(Math.max(_options.batchTimeout, 0));
-    this.statsCollector = statsCollector ?? null;
+    this.scheduler = _options.scheduler ?? new TimerScheduler<QueryPath>(Math.max(_options.batchTimeout, 0));
+    this.statsCollector = _options.statsCollector ?? null;
 
     this.batchSubscription = this.initializeBatchSubscription();
   }

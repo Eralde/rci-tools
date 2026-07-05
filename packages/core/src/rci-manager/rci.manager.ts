@@ -3,7 +3,7 @@ import {filter, finalize, map, shareReplay, take, tap, timeout} from 'rxjs/opera
 import {BaseHttpResponse, HttpTransport} from '../transport';
 import {RciQuery, RciTask} from './query';
 import {RCI_QUEUE_DEFAULT_BATCH_TIMEOUT, RCI_QUEUE_STATE, RciQueue} from './queue';
-import {BatchScheduler, TimerScheduler} from './scheduler';
+import {BatchScheduler} from './scheduler';
 import {RciBackgroundProcess, RciBackgroundProcessOptions, RciBackgroundTaskQueue} from './background-process';
 import {RciPayloadHelper} from './payload';
 import type {GenericObject} from '../type.utils';
@@ -46,9 +46,8 @@ export class RciManager<
       {
         batchTimeout: 0,
         queueName: 'priority',
+        statsCollector: this.statsCollector,
       },
-      new TimerScheduler<QueryPath>(0),
-      this.statsCollector,
     );
 
     this.batchQueue = new RciQueue<BaseHttpResponse, QueryPath>(
@@ -59,9 +58,9 @@ export class RciManager<
         // the batch queue will be blocked any time the priority queue is used to execute something
         blockerQueue: this.priorityQueue,
         queueName: 'batch',
+        scheduler: this.options.batchScheduler,
+        statsCollector: this.statsCollector,
       },
-      this.options.batchScheduler ?? new TimerScheduler<QueryPath>(Math.max(batchTimeout, 0)),
-      this.statsCollector,
     );
   }
 
@@ -93,23 +92,25 @@ export class RciManager<
         const token = Symbol('scheduler-swap');
         this.currentSchedulerSwapToken = token;
 
-        return this.batchQueue.state$.pipe(
-          filter((state) => state === RCI_QUEUE_STATE.READY),
-          take(1),
-          timeout(waitForIdleMs),
-          tap(() => {
-            this.batchQueue.setScheduler(scheduler);
-          }),
-          map(() => undefined),
-          finalize(() => {
-            if (this.currentSchedulerSwapToken === token) {
-              this.currentSchedulerSwapToken = null;
-            }
-          }),
+        return this.batchQueue.state$
+          .pipe(
+            filter((state) => state === RCI_QUEUE_STATE.READY),
+            take(1),
+            timeout(waitForIdleMs),
+            tap(() => {
+              this.batchQueue.setScheduler(scheduler);
+            }),
+            map(() => undefined),
+            finalize(() => {
+              if (this.currentSchedulerSwapToken === token) {
+                this.currentSchedulerSwapToken = null;
+              }
+            }),
+          );
+      })
+        .pipe(
+          shareReplay({bufferSize: 1, refCount: false}),
         );
-      }).pipe(
-        shareReplay({bufferSize: 1, refCount: false}),
-      );
 
       return sharedSwap$;
     });

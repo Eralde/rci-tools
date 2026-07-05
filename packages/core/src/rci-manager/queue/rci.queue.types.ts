@@ -2,12 +2,16 @@ import {Subject} from 'rxjs';
 import type {BaseHttpResponse} from '../../transport';
 import type {ObjectOrArray, Values} from '../../type.utils';
 import {RciQuery} from '../query';
+import type {BatchScheduler} from '../scheduler';
+import type {QueryStatsCollector} from '../stats';
 import {RciQueue} from './rci.queue';
 
 export interface RciQueueOptions<ResponseType extends BaseHttpResponse, QueryPath extends string = string> {
   batchTimeout: number;
   blockerQueue: RciQueue<ResponseType, QueryPath> | null;
   queueName?: string;
+  scheduler?: BatchScheduler<QueryPath> | undefined;
+  statsCollector?: QueryStatsCollector | null | undefined;
 }
 
 export const RCI_QUEUE_STATE = {

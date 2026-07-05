@@ -10,7 +10,7 @@ describe('RuleScheduler integration', () => {
       when((snapshot) => snapshot.queryPaths.some((path) => path === 'show.interface.stat')),
     ]);
 
-    const queue = new RciQueue('http://device/rci/', transport, {batchTimeout: 20}, scheduler);
+    const queue = new RciQueue('http://device/rci/', transport, {batchTimeout: 20, scheduler});
 
     queue.addTask({path: 'show.version'}).subscribe();
     expect(transport.sendQueryArray).not.toHaveBeenCalled();
@@ -26,7 +26,7 @@ describe('RuleScheduler integration', () => {
       when(() => false),
     ]);
 
-    const queue = new RciQueue('http://device/rci/', transport, {batchTimeout: 0}, scheduler);
+    const queue = new RciQueue('http://device/rci/', transport, {batchTimeout: 0, scheduler});
 
     queue.addTask({path: 'show.version'}).subscribe();
     queue.addTask({path: 'show.system'}).subscribe();
@@ -39,7 +39,7 @@ describe('RuleScheduler integration', () => {
     const scheduler = new RuleScheduler([
       when((snapshot) => snapshot.queryPaths.some((path) => path === 'show.interface.stat')),
     ]);
-    const queue = new RciQueue('http://device/rci/', transport, {batchTimeout: 0}, scheduler);
+    const queue = new RciQueue('http://device/rci/', transport, {batchTimeout: 0, scheduler});
 
     queue.addTask({path: 'show.version'}).subscribe();
     queue.addTask({path: 'show.interface.stat'}).subscribe();

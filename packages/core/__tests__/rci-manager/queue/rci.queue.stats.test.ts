@@ -25,9 +25,8 @@ describe('RciQueue stats collection', () => {
       {
         batchTimeout: 0,
         queueName: 'batch',
+        statsCollector: collector,
       },
-      undefined,
-      collector,
     );
 
     const statsPromise = firstValueFrom(collector.stats$.pipe(take(1)));
@@ -58,9 +57,8 @@ describe('RciQueue stats collection', () => {
       {
         batchTimeout: 100,
         queueName: 'batch',
+        statsCollector: collector,
       },
-      undefined,
-      collector,
     );
 
     const statsPromise = firstValueFrom(collector.stats$.pipe(take(1)));
@@ -87,9 +85,8 @@ describe('RciQueue stats collection', () => {
       {
         batchTimeout: 100,
         queueName: 'batch',
+        statsCollector: collector,
       },
-      undefined,
-      collector,
     );
 
     const statsPromise = firstValueFrom(collector.stats$.pipe(take(1)));
@@ -121,9 +118,8 @@ describe('RciQueue stats collection', () => {
       {
         batchTimeout: 0,
         queueName: 'batch',
+        statsCollector: collector,
       },
-      undefined,
-      collector,
     );
 
     const statsPromise = firstValueFrom(collector.stats$.pipe(take(1)));
@@ -151,9 +147,8 @@ describe('RciQueue stats collection', () => {
       {
         batchTimeout: 0,
         queueName: 'batch',
+        statsCollector: collector,
       },
-      undefined,
-      collector,
     );
 
     const resultPromise = firstValueFrom(queue.addTask({path: 'show.version'}));

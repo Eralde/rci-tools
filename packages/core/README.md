@@ -223,8 +223,7 @@ through `RciManagerOptions.batchScheduler` or swap the scheduler at runtime with
 `replaceBatchScheduler()`.
 
 **Note:** When `batchScheduler` is provided, `batchTimeout` is **ignored**. To combine timer
-fallback with
-custom rules, compose them explicitly (see examples below).
+fallback with custom rules, compose them explicitly (see examples below).
 
 ##### Built-in schedulers
 

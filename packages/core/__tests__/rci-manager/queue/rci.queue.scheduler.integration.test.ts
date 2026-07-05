@@ -84,7 +84,7 @@ describe('RciQueue scheduler integration', () => {
       },
     };
 
-    const queue = new RciQueue('http://device/rci/', transport, {batchTimeout: 100}, scheduler);
+    const queue = new RciQueue('http://device/rci/', transport, {batchTimeout: 100, scheduler});
 
     vi.setSystemTime(10_000);
     queue.addTask({path: 'a'}).subscribe();
