@@ -10,7 +10,11 @@ export type BatchRule<QueryPath extends string = string> = (
 export class RuleScheduler<QueryPath extends string = string> implements BatchScheduler<QueryPath> {
   constructor(
     private readonly rules: readonly BatchRule<QueryPath>[],
-  ) {}
+  ) {
+    if (rules.length === 0) {
+      throw new Error('RuleScheduler requires at least one rule.');
+    }
+  }
 
   public schedule(batch$: Observable<BatchSnapshot<QueryPath>>): Observable<void> {
     return merge(...this.rules.map((rule) => rule(batch$)))
@@ -22,6 +26,11 @@ export class RuleScheduler<QueryPath extends string = string> implements BatchSc
 }
 
 // --- Rule builders ---
+//
+// Note: rule builders default `QueryPath = string`. When passing them to
+// `RuleScheduler<MyUnion>`, annotate the generic, e.g.:
+//   queryCountAtLeast<MyUnion>(3)
+// otherwise the default `string` type will conflict with the narrower union.
 
 export const when = <QueryPath extends string = string>(
   predicate: (snapshot: BatchSnapshot<QueryPath>) => boolean,

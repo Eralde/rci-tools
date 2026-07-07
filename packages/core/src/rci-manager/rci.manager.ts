@@ -2,13 +2,13 @@ import {Observable, defer, throwError} from 'rxjs';
 import {filter, finalize, map, shareReplay, take, tap, timeout} from 'rxjs/operators';
 import {BaseHttpResponse, HttpTransport} from '../transport';
 import {RciQuery, RciTask} from './query';
-import {RCI_QUEUE_DEFAULT_BATCH_TIMEOUT, RCI_QUEUE_STATE, RciQueue} from './queue';
+import {RCI_QUEUE_DEFAULT_BATCH_TIMEOUT, RCI_QUEUE_STATE, RciQueue, clampNonNegativeTimeout} from './queue';
 import {BatchScheduler} from './scheduler';
 import {RciBackgroundProcess, RciBackgroundProcessOptions, RciBackgroundTaskQueue} from './background-process';
 import {RciPayloadHelper} from './payload';
 import type {GenericObject} from '../type.utils';
 import type {QueueOptions, RciManagerOptions} from './rci.manager.types';
-import {DEFAULT_QUEUE_OPTIONS, RCI_QUERY_TIMEOUT} from './rci.manager.constants';
+import {DEFAULT_QUEUE_OPTIONS, RCI_QUERY_TIMEOUT, RCI_SCHEDULER_SWAP_DEFAULT_TIMEOUT_MS} from './rci.manager.constants';
 import {QueryStats, QueryStatsCollector} from './stats';
 
 export class SchedulerReplacementInProgressError extends Error {
@@ -54,7 +54,7 @@ export class RciManager<
       this.rciPath,
       this.httpTransport,
       {
-        batchTimeout: Math.max(batchTimeout, 0),
+        batchTimeout: clampNonNegativeTimeout(batchTimeout),
         // the batch queue will be blocked any time the priority queue is used to execute something
         blockerQueue: this.priorityQueue,
         queueName: 'batch',
@@ -76,7 +76,11 @@ export class RciManager<
     scheduler: BatchScheduler<QueryPath>,
     options: {waitIdleFor?: number} = {},
   ): Observable<void> {
-    const waitForIdleMs = options.waitIdleFor ?? 30_000;
+    const waitForIdleMs = options.waitIdleFor ?? RCI_SCHEDULER_SWAP_DEFAULT_TIMEOUT_MS;
+    // Each call to replaceBatchScheduler returns a cold observable. The inner defer
+    // performs the real swap once, then shareReplay multicasts that single execution
+    // to every subscriber of *that* returned observable. It does NOT deduplicate
+    // across multiple separate calls to replaceBatchScheduler().
     let sharedSwap$: Observable<void> | null = null;
 
     return defer(() => {

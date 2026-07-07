@@ -1,10 +1,10 @@
 export interface QueryStats<QueryPath extends string = string> {
-  queueName: string;
-  taskCount: number;
-  queryCount: number;
-  queryPaths: readonly QueryPath[];
-  sentAt: number;
-  durationMs: number;
-  success: boolean;
-  error?: unknown;
+  readonly queueName: string;
+  readonly taskCount: number;
+  readonly queryCount: number;
+  readonly queryPaths: readonly QueryPath[];
+  readonly sentAt: number;
+  readonly durationMs: number;
+  readonly success: boolean;
+  readonly error?: unknown;
 }

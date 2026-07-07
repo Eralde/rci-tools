@@ -1,5 +1,6 @@
 import type {Observable} from 'rxjs';
 import {race} from 'rxjs';
+import {take} from 'rxjs/operators';
 import {BatchScheduler, BatchSnapshot} from './scheduler.types';
 
 class CompositeRaceScheduler<QueryPath extends string = string> implements BatchScheduler<QueryPath> {
@@ -8,7 +9,8 @@ class CompositeRaceScheduler<QueryPath extends string = string> implements Batch
   ) {}
 
   public schedule(batch$: Observable<BatchSnapshot<QueryPath>>): Observable<void> {
-    return race(...this.schedulers.map((scheduler) => scheduler.schedule(batch$)));
+    return race(...this.schedulers.map((scheduler) => scheduler.schedule(batch$)))
+      .pipe(take(1));
   }
 }
 
