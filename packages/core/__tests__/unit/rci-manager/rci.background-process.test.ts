@@ -5,7 +5,7 @@ import {
   RCI_BACKGROUND_PROCESS_STATE,
   RciBackgroundProcess,
   RciBackgroundTaskQueue,
-} from '../../src';
+} from '../../../src';
 import {makeTransport} from '../test.utils';
 
 class TestBackgroundProcess extends RciBackgroundProcess<string> {

@@ -4,14 +4,14 @@ import {map} from 'rxjs/operators';
 import {
   type BatchScheduler,
   type BatchSnapshot,
+  RCI_QUEUE_DEFAULT_BATCH_TIMEOUT,
   RciManager,
   RuleScheduler,
   SchedulerReplacementInProgressError,
   after,
   pathIncluded,
   queryCountAtLeast,
-} from '../../src';
-import {RCI_QUEUE_DEFAULT_BATCH_TIMEOUT} from '../../src/rci-manager/queue';
+} from '../../../src';
 import {makeTransport} from '../test.utils';
 
 const FAKE_HOST = 'http://device';
@@ -214,6 +214,37 @@ describe('RciManager scheduler wiring', () => {
     vi.advanceTimersByTime(50);
     expect(completeA).not.toHaveBeenCalled();
     expect(completeB).toHaveBeenCalledTimes(1);
+  });
+
+  it('destroy during pending swap completes without hanging', () => {
+    const transport = makeTransport();
+    const neverFlushScheduler: BatchScheduler = {
+      schedule: () => NEVER,
+    };
+    const manager = new RciManager(
+      FAKE_HOST,
+      transport,
+      {
+        batchScheduler: neverFlushScheduler,
+        batchTimeout: 100,
+      },
+    );
+
+    manager.queue({path: 'show.version'}).subscribe();
+
+    const swapComplete = vi.fn();
+    const swapError = vi.fn();
+    const swap$ = manager.replaceBatchScheduler(
+      {schedule: () => timer(0).pipe(map(() => undefined))},
+      {waitIdleFor: 10_000},
+    );
+
+    swap$.subscribe({complete: swapComplete, error: swapError});
+
+    manager.destroy();
+
+    expect(swapError).not.toHaveBeenCalled();
+    expect(swapComplete).toHaveBeenCalledTimes(1);
   });
 });
 

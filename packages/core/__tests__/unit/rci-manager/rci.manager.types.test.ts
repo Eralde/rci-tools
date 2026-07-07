@@ -1,6 +1,6 @@
 import {describe, expectTypeOf, it} from 'vitest';
 import type {Observable} from 'rxjs';
-import {RciManager, type BaseHttpResponse, type GenericObject} from '../../src';
+import {RciManager, type BaseHttpResponse, type GenericObject} from '../../../src';
 import {makeTransport} from '../test.utils';
 
 describe('RciManager public types', () => {

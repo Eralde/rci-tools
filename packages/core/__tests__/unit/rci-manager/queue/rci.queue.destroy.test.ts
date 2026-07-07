@@ -1,5 +1,6 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {RciQueue} from '../../../src/rci-manager/queue';
+import {NEVER} from 'rxjs';
+import {RciQueue} from '../../../../src';
 import {makeTransport} from '../../test.utils';
 
 describe('RciQueue.destroy', () => {
@@ -39,7 +40,7 @@ describe('RciQueue.destroy', () => {
     const transport = makeTransport();
     const queue = new RciQueue('http://device/rci/', transport, {batchTimeout: 100});
 
-    queue.addTask({path: 'show.version'}).subscribe();
+    queue.addTask({path: 'show.version'}).subscribe({error: () => {/* expected on destroy */}});
 
     queue.destroy();
 
@@ -48,15 +49,28 @@ describe('RciQueue.destroy', () => {
     expect(transport.sendQueryArray).not.toHaveBeenCalled();
   });
 
-  it('uses batchTimeout timing when scheduler is not injected', () => {
-    const transport = makeTransport();
-    const queue = new RciQueue('http://device/rci/', transport, {batchTimeout: 20});
+  it('destroy during AWAITING_RESPONSE errors pending task subjects', () => {
+    const transport = {
+      ...makeTransport(),
+      sendQueryArray: vi.fn().mockReturnValue(NEVER),
+    };
+    const queue = new RciQueue('http://device/rci/', transport, {batchTimeout: 0});
 
-    queue.addTask({path: 'show.version'}).subscribe();
-    vi.advanceTimersByTime(19);
-    expect(transport.sendQueryArray).not.toHaveBeenCalled();
+    const next = vi.fn();
+    const error = vi.fn();
+    const complete = vi.fn();
 
-    vi.advanceTimersByTime(1);
+    queue.addTask({path: 'show.version'}).subscribe({next, error, complete});
+
+    vi.advanceTimersByTime(0);
+
     expect(transport.sendQueryArray).toHaveBeenCalledTimes(1);
+    expect(next).not.toHaveBeenCalled();
+
+    queue.destroy();
+
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(complete).not.toHaveBeenCalled();
+    expect(next).not.toHaveBeenCalled();
   });
 });

@@ -1,7 +1,7 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {firstValueFrom, forkJoin} from 'rxjs';
-import {FetchTransport, RciManager, RciQuery} from '../src';
-import {expectArrayContainingPath} from './test.utils';
+import {FetchTransport, RciManager, RciQuery} from '../../src';
+import {expectArrayContainingPath} from '../unit/test.utils';
 
 const IP_ADDRESS = process.env.RCI_DEVICE_IP;
 

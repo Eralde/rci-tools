@@ -1,7 +1,6 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {firstValueFrom, take, throwError} from 'rxjs';
-import {RciQueue} from '../../../src/rci-manager/queue';
-import {QueryStatsCollector} from '../../../src';
+import {QueryStatsCollector, RciQueue} from '../../../../src';
 import {makeTransport} from '../../test.utils';
 
 describe('RciQueue stats collection', () => {

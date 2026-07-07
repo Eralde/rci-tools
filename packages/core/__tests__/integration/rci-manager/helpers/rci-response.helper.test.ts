@@ -1,6 +1,6 @@
 import {beforeAll, describe, expect, it} from 'vitest';
 import {firstValueFrom} from 'rxjs';
-import {FetchTransport, RciResponseHelper} from '../../../src';
+import {FetchTransport, RciResponseHelper} from '../../../../src';
 
 const IP_ADDRESS = process.env.RCI_DEVICE_IP;
 

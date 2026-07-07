@@ -1,6 +1,6 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {firstValueFrom, take} from 'rxjs';
-import {RciManager} from '../../src/';
+import {RciManager} from '../../../src/';
 import {makeTransport} from '../test.utils';
 
 describe('RciManager stats', () => {

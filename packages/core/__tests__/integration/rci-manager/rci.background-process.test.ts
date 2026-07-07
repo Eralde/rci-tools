@@ -6,7 +6,7 @@ import {
   RCI_BACKGROUND_PROCESS_STATE,
   RciBackgroundProcess,
   SessionManager,
-} from '../../src';
+} from '../../../src';
 
 const IP_ADDRESS = process.env.RCI_DEVICE_IP;
 

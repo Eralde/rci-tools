@@ -1,7 +1,6 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {Subject, of} from 'rxjs';
-import {RciQueue} from '../../../src/rci-manager/queue';
-import type {BatchScheduler, BatchSnapshot} from '../../../src';
+import {type BatchScheduler, type BatchSnapshot, RciQueue} from '../../../../src';
 import {makeTransport} from '../../test.utils';
 
 describe('RciQueue scheduler integration', () => {
@@ -100,5 +99,40 @@ describe('RciQueue scheduler integration', () => {
     expect(snapshots[1]!.createdAt).toBe(20_000);
     expect(snapshots[1]!.taskCount).toBe(1);
     expect(snapshots[1]!.elapsedMs).toBe(0);
+  });
+
+  it('setScheduler replaces the active scheduler for subsequent batches', () => {
+    const transport = makeTransport();
+    const sentBatches: any[][] = [];
+
+    transport.sendQueryArray = vi.fn().mockImplementation((_url, queryArray: any[]) => {
+      sentBatches.push(queryArray);
+      return of(queryArray.map(() => ({})));
+    });
+
+    const oldFlush$ = new Subject<void>();
+    const queue = new RciQueue('http://device/rci/', transport, {
+      batchTimeout: 0,
+      scheduler: {schedule: () => oldFlush$.asObservable()},
+    });
+
+    queue.addTask({path: 'show.version'}).subscribe();
+    oldFlush$.next();
+
+    expect(transport.sendQueryArray).toHaveBeenCalledTimes(1);
+    expect(sentBatches[0]).toHaveLength(1);
+
+    const newFlush$ = new Subject<void>();
+    queue.setScheduler({schedule: () => newFlush$.asObservable()});
+
+    queue.addTask({path: 'show.system'}).subscribe();
+    queue.addTask({path: 'show.interface'}).subscribe();
+
+    oldFlush$.next();
+    expect(transport.sendQueryArray).toHaveBeenCalledTimes(1);
+
+    newFlush$.next();
+    expect(transport.sendQueryArray).toHaveBeenCalledTimes(2);
+    expect(sentBatches[1]).toHaveLength(2);
   });
 });

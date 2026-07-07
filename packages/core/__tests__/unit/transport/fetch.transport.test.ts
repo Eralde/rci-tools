@@ -1,6 +1,6 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {firstValueFrom} from 'rxjs';
-import {FetchTransport} from '../../src';
+import {FetchTransport} from '../../../src';
 
 function makeResponse(status: number, body: string = '{}') {
   return new Response(body, {status});
