@@ -148,6 +148,10 @@ export class RciManager<
       );
   }
 
+  public queue(
+    query: RciQuery<QueryPath> | Array<RciQuery<QueryPath>>,
+    options?: QueueOptions,
+  ): Observable<GenericObject | GenericObject[] | undefined>;
   public queue(query: RciQuery<QueryPath>, options?: QueueOptions): Observable<GenericObject | undefined>;
   public queue(query: Array<RciQuery<QueryPath>>, options?: QueueOptions): Observable<GenericObject[]>;
   public queue(
