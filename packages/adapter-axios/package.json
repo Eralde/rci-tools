@@ -1,6 +1,6 @@
 {
   "name": "@rci-tools/adapter-axios",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Wrapper over axios that implements HttpTransport for @rci-tools/core",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
