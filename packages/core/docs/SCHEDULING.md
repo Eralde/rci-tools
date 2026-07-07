@@ -33,6 +33,10 @@ interface BatchSnapshot<QueryPath extends string = string> {
 }
 ```
 
+> **Important:** Snapshots are emitted only when a new task is added to the current batch.
+> Time-based rules such as `when(s => s.elapsedMs >= 500)` will not fire while the queue is
+> idle — combine them with `after(ms)` or `TimerScheduler` if you need a timeout.
+
 ## Examples
 
 **Default timer (20ms):**
