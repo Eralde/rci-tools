@@ -56,9 +56,8 @@ export class RciPayloadHelper {
     }
 
     const queryArray = sortedByKey.map(({query}) => RciPayloadHelper.toQueryObject(query));
-    const keyIndexes: Record<string, number> = sortedByKey.reduce(
-      (acc, {key}, index) => ({...acc, [key]: index}),
-      {},
+    const keyIndexes: Record<string, number> = Object.fromEntries(
+      sortedByKey.map(({key}, index) => [key, index]),
     );
 
     const queryMap: QueryMap = mapValues(partialQueryMap, (item: Omit<QueryMapItem, 'keyIndex'>) => {
@@ -102,30 +101,23 @@ export class RciPayloadHelper {
     queryMap: QueryMap,
   ): GenericObject[][] {
     const allResults = RciPayloadHelper.inflateResponse(batchedResponse, queryMap);
+    const chunks: GenericObject[][] = [];
 
-    const data: {startIdx: number; chunks: GenericObject[][]} = tasks.reduce(
-      (acc, {queries}) => {
-        const {startIdx, chunks} = acc;
-        const endIdx = startIdx + queries.length;
+    let startIdx = 0;
 
-        const chunk = allResults
-          .slice(startIdx, endIdx)
-          .map((response, index) => {
-            return this.prepareResponseData(response!, queries[index]!);
-          });
+    for (const {queries} of tasks) {
+      const endIdx = startIdx + queries.length;
+      const chunk = allResults
+        .slice(startIdx, endIdx)
+        .map((response, index) => {
+          return this.prepareResponseData(response!, queries[index]!);
+        });
 
-        return {
-          startIdx: endIdx,
-          chunks: [...chunks, chunk],
-        };
-      },
-      {
-        startIdx: 0,
-        chunks: [] as GenericObject[][],
-      },
-    );
+      chunks.push(chunk);
+      startIdx = endIdx;
+    }
 
-    return data.chunks;
+    return chunks;
   }
 
   protected static toQueryObject(query: RciQuery): GenericObject {

@@ -7,7 +7,8 @@
 `@rci-tools/core` &mdash; это `npm`-пакет для взаимодействия с [RCI API](../../docs/RCI_API.ru.md).
 Два основных класса, экспортируемых этим пакетом:
 
-- [SessionManager](./src/session-manager/session-manager.ts): реализует [аутентификацию по паролю](../../docs/AUTH.md);
+- [SessionManager](./src/session-manager/session-manager.ts):
+  реализует [аутентификацию по паролю](../../docs/AUTH.md);
 - [RciManager](./src/rci-manager/rci.manager.ts): основной класс для работы с API в едином стиле;
 
 Оба класса требуют экземпляр [`HTTP транспорта`](./src/transport/http.transport.ts)
@@ -42,13 +43,16 @@ interface SessionManager<ResponseType extends BaseHttpResponse = BaseHttpRespons
 
 Используйте методы `isAuthenticated`/`login`/`logout` для управления сессией.
 Оставшиеся два метода предназначены для вспомогательных задач:
-- `getRealmHeader`: позволяет получить имя устройства до аутентификации (например, чтобы показать его на экране входа)
+
+- `getRealmHeader`: позволяет получить имя устройства до аутентификации (например, чтобы показать
+  его на экране входа)
 - `toggleErrorLogging`: включает/отключает логирование HTTP-ошибок в консоль
 
 ### `RciManager`
 
 Класс `RciManager` используется для взаимодействия с RCI API.
 Он имеет несколько преимуществ по сравнению с использованием непосредственно `fetch/xhr/axios/...`:
+
 - несколько запросов через `RciManager` могут быть объединены в один HTTP-запрос к устройству
 - реализована простая система приоритетов:
   приоритетные запросы блокируют обычные, пока не завершатся
@@ -61,16 +65,40 @@ interface RciManager<
   QueryPath extends string = string, // допустимые значения 'path' для обычных RCI-запросов
   BackgroundQueryPath extends string = string // допустимые значения 'path' для фоновых процессов
 > {
+  readonly stats$: Observable<QueryStats<QueryPath>>;
+
+  toggleStats(enabled: boolean): void;
+
+  replaceBatchScheduler(scheduler: BatchScheduler<QueryPath>, options?: {
+    waitIdleFor?: number
+  }): Observable<void>;
+
   execute(query: RciTask<QueryPath>): Observable<any>;
   queue(query: RciTask<QueryPath>, options?: QueueOptions): Observable<any>;
+
   initBackgroundProcess(query: RciQuery<BackgroundQueryPath>, options?: RciBackgroundProcessOptions): RciBackgroundProcess;
   queueBackgroundProcess(query: RciQuery<BackgroundQueryPath>, options?: RciBackgroundProcessOptions): RciBackgroundProcess;
+
+  destroy(): void;
 }
 ```
 
-`RciManager` активно использует [корневой ресурс API (`/rci/`)](../../docs/RCI_API.ru.md#31-корневой-ресурс-api).
+Дополнительные члены класса:
+
+- `stats$`: выдаёт объект `QueryStats` для каждого завершённого батча, если сбор статистики включён.
+  См. [Статистика запросов](./docs/QUEUE.ru.md#статистика-запросов).
+- `toggleStats(enabled)`: включает или отключает сбор статистики.
+- `replaceBatchScheduler(scheduler, options?)`: заменяет планировщик батчей во время выполнения,
+  дожидаясь, пока текущий батч освободится. `options.waitIdleFor` по умолчанию `30000` мс.
+  Выбрасывает `SchedulerReplacementInProgressError`, если другая замена уже выполняется.
+  См. [Планировщик](./docs/SCHEDULING.ru.md).
+- `destroy()`: освобождает внутренние очереди, очереди фоновых процессов и сборщик статистики.
+
+`RciManager` активно использует [корневой ресурс API (
+`/rci/`)](../../docs/RCI_API.ru.md#31-корневой-ресурс-api).
 Взаимодействие как с [настройками](../../docs/RCI_API.ru.md#21-настройки),
-так и с [действиями](../../docs/RCI_API.ru.md#22-действия) в нем реализовано через объекты `RciQuery`,
+так и с [действиями](../../docs/RCI_API.ru.md#22-действия) в нем реализовано через объекты
+`RciQuery`,
 отправляемые на корневой ресурс. Интерфейс `RciQuery` выглядит следующим образом:
 
 ```typescript
@@ -79,45 +107,59 @@ export interface RciQuery<PathType extends string = string> { // `PathType` мо
   data?: Record<string, any> | string | boolean | number; // по умолчанию {}
   extractData?: boolean; // по умолчанию true
 }
+
+export type RciTask<PathType extends string = string> = RciQuery<PathType> | RciQuery<PathType>[];
+```
+
+Метод `queue()` принимает необязательный объект `QueueOptions`:
+
+```typescript
+interface QueueOptions {
+  isPriorityTask?: boolean;  // отправить через приоритетную очередь. По умолчанию: false
+  saveConfiguration?: boolean; // добавить запрос system/configuration/save. По умолчанию: false
+}
 ```
 
 Перед отправкой на устройство объекты `RciQuery` преобразуются в объект,
 где `path` становится "путём" ко вложенному свойству, а `data` — значением по этому пути.
 
 Например, запрос:
+
 ```typescript
-{
+const query = {
   path: 'show.version'
-}
+};
 ```
 
-преобразуется в:
-```typescript
+преобразуется в (`data` по умолчанию — пустой объект):
+
+```json
 {
-  'show': {
-    'version': {} // `data` по умолчанию — пустой объект
+  "show": {
+    "version": {}
   }
 }
 ```
 
 Аналогично, запрос с `path` и `data`:
+
 ```typescript
-{
+const query = {
   path: 'interface',
   data: {
     name: 'Bridge0',
     description: 'My network'
   }
-}
+};
 ```
 
 превращается в:
 
-```typescript
+```json
 {
-  'interface': {
-    name: 'Bridge0',
-    description: 'My network'
+  "interface": {
+    "name": "Bridge0",
+    "description": "My network"
   }
 }
 ```
@@ -131,22 +173,23 @@ export interface RciQuery<PathType extends string = string> { // `PathType` мо
 может быть представлен как `RciQuery`. Например, оба запроса
 
 ```typescript
-{path: 'ip.telnet.session', data: {timeout: 123456}}
+const query = {path: 'ip.telnet.session', data: {timeout: 123456}};
 ```
 
 и
 
 ```typescript
-{path: 'ip', data: {telnet: {session: {timeout: 123456}}}}
+const query = {path: 'ip', data: {telnet: {session: {timeout: 123456}}}};
 ```
 
 будут преобразованы в один и тот же объект:
-```typescript
+
+```json
 {
-  'ip': {
-    'telnet': {
-      'session': {
-        'timeout': 123456
+  "ip": {
+    "telnet": {
+      "session": {
+        "timeout": 123456
       }
     }
   }
@@ -161,19 +204,31 @@ export interface RciQuery<PathType extends string = string> { // `PathType` мо
 
 - **`execute(query)`**: Отправляет HTTP-запрос при подписке на возвращаемый Observable.
   Вы полностью контролируете жизненный цикл подписки. Это может быть полезно, если нужно:
-  - вручную управлять моментом отправки HTTP-запроса
-  - последовательно отправить несколько запросов с точным контролем времени
+    - вручную управлять моментом отправки HTTP-запроса
+    - последовательно отправить несколько запросов с точным контролем времени
 
 - **`queue(query, options?)`**: Добавляет запрос во внутреннюю очередь,
   которая объединяет несколько запросов в один HTTP-запрос. `RciManager` сам управляет
   подпиской и моментом отправки HTTP-запросов. Очередь автоматически:
-  - объединяет несколько запросов в один HTTP-запрос
-  - удаляет дублирующиеся запросы из батча (batch)
-  - ждёт определённое время перед отправкой HTTP-запроса, собирая данные из разных вызовов `queue`
-  - обрабатывает приоритетные запросы через отдельную очередь, блокируя обычную
+    - объединяет несколько запросов в один HTTP-запрос
+    - удаляет дублирующиеся запросы из батча (batch)
+    - ждёт определённое время перед отправкой HTTP-запроса, собирая данные из разных вызовов `queue`
+    - обрабатывает приоритетные запросы через отдельную очередь, блокируя обычную
 
 Оба метода возвращают [rxjs Observable](https://rxjs.dev/guide/observable),
-на который нужно подписаться, чтобы получить результат. Ниже приведено несколько примеров использования.
+на который нужно подписаться, чтобы получить результат. Ниже приведено несколько примеров
+использования.
+
+#### Пакетное планирование (Batch Scheduling)
+
+По умолчанию `queue()` объединяет запросы в батчи с окном 20мс перед отправкой одного
+HTTP-запроса. Это поведение управляется **планировщиком (scheduler)** — настройте его через
+`RciManagerOptions.batchScheduler` или замените во время выполнения с помощью
+`replaceBatchScheduler()`.
+
+Подробнее: см., встроенные [планировщики](./docs/SCHEDULING.ru.md)
+(`TimerScheduler`, `RuleScheduler`, `raceSchedulers`), интерфейс `BatchSnapshot`, примеры
+пользовательских планировщиков и замена во время выполнения.
 
 #### Примеры использования
 
@@ -197,7 +252,7 @@ auth$
   .subscribe(async (isLoggedIn) => {
     if (!isLoggedIn) {
       console.error('Ошибка аутентификации');
-      
+
       return Promise.resolve(null);
     }
 
@@ -227,7 +282,7 @@ auth$
     };
 
     const actionResult = await rciManager.queue(showVersion).toPromise(); // объект с информацией о версии устройства
-    
+
     console.log(changeSettingResult, readSettingResult, actionResult);
   });
 ```
@@ -314,6 +369,14 @@ all$
   });
 ```
 
+#### Использование `RciQueue` отдельно
+
+`RciManager` внутри содержит два экземпляра `RciQueue` (батчинг-очередь и приоритетную очередь).
+Если вам нужен только батчинг, вы можете использовать `RciQueue` напрямую — без `RciManager`.
+
+Подробнее: [`RciQueue` отдельно](./docs/QUEUE.ru.md) — полный API, опции конструктора, отличия
+от `RciManager` и примеры, включая воспроизведение приоритетной системы с двумя очередями.
+
 #### Фоновые процессы
 
 Для [фоновых процессов](../../docs/RCI_API.ru.md#23-фоновые-процессы) `RciManager`
@@ -331,7 +394,8 @@ interface RciBackgroundProcessOptions {
 
 - **`initBackgroundProcess(query, options?)`**: возвращает объект `RciBackgroundProcess`,
   который нужно запускать вручную. Этот метод полезен, если вам нужен полный контроль
-  над жизненным циклом фонового процесса (вы также можете вручную прервать процесс до его завершения).
+  над жизненным циклом фонового процесса (вы также можете вручную прервать процесс до его
+  завершения).
 
 - **`queueBackgroundProcess(query, options?)`**: Ставит фоновый процесс в очередь.
   Запросы с одинаковым значением `path` группируются в одну очередь, что гарантирует,
@@ -340,6 +404,7 @@ interface RciBackgroundProcessOptions {
   одна HTTP-сессия для всех запросов.
 
 Оба метода возвращают объект `RciBackgroundProcess` со следующими свойствами:
+
 - `start(): boolean`: Запускает процесс вручную. Возвращает `false`, если процесс уже запущен.
 - `attachToRunning(): boolean`: Подключается к уже запущенному фоновому процессу
   (например, запущенному через `RciManager.execute()`). Пропускает начальный POST-запрос
@@ -348,9 +413,11 @@ interface RciBackgroundProcessOptions {
 - `abort(): boolean`: Прерывает процесс вручную. Возвращает `false`, если процесс не запущен.
 - `state$`: Observable, который выдаёт изменения состояния процесса (`RCI_BACKGROUND_PROCESS_STATE`)
 - `data$`: Observable, который выдаёт обновления данных по мере выполнения фонового процесса
-- `result$`: Observable, который выдаёт финальный результат один раз, непосредственно перед завершением процесса.
+- `result$`: Observable, который выдаёт финальный результат один раз, непосредственно перед
+  завершением процесса.
   Не выдаёт значения при прерывании или таймауте.
-- `done$`: Observable, который выдаёт значение по завершении процесса (`RCI_BACKGROUND_PROCESS_FINISH_REASON`)
+- `done$`: Observable, который выдаёт значение по завершении процесса (
+  `RCI_BACKGROUND_PROCESS_FINISH_REASON`)
 
 ```typescript
 interface RciBackgroundProcess {
@@ -362,6 +429,8 @@ interface RciBackgroundProcess {
   start(): boolean;
   attachToRunning(): boolean;
   abort(): boolean;
+  getState(): RCI_BACKGROUND_PROCESS_STATE;
+  destroy(): void;
 }
 ```
 
@@ -488,3 +557,9 @@ console.log('Все фоновые процессы завершены:', finalR
 что, когда несколько экземпляров одного и того же фонового процесса запущены
 параллельно из одной HTTP-сессии, невозможно понять, статус какого из процессов
 возвращается в ответ на GET-запрос.
+
+#### Статистика запросов
+
+Когда сбор статистики включён через `toggleStats(true)`, `stats$` выдаёт объект `QueryStats`
+для каждого завершённого батча. См. [Статистика запросов](./docs/QUEUE.ru.md#статистика-запросов)
+— полный интерфейс `QueryStats` и использование с отдельным `RciQueue`.

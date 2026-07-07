@@ -1,12 +1,12 @@
 import {Observable} from 'rxjs';
 import type {GenericObject} from '../type.utils';
 
-export interface BaseHttpResponse {
+export interface BaseHttpResponse<Data = unknown> {
   status: number;
-  data: any;
+  data: Data;
 }
 
-export interface HttpTransport<ResponseType extends BaseHttpResponse> {
+export interface HttpTransport<ResponseType extends BaseHttpResponse = BaseHttpResponse> {
   get(url: string): Observable<ResponseType>;
   post(url: string, data: unknown): Observable<ResponseType>;
   delete(url: string): Observable<ResponseType>;

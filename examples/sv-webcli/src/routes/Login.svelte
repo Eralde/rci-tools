@@ -34,6 +34,12 @@ const handleSubmit = async (event: Event): Promise<void> => {
 
 onMount(async () => {
   deviceName = await firstValueFrom(rciService.getDeviceName());
+
+  const authenticated = await firstValueFrom(rciService.isAuthenticated());
+
+  if (authenticated) {
+    navigate(MAIN_URL);
+  }
 });
 </script>
 

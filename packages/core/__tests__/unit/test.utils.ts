@@ -1,4 +1,6 @@
-import {expect} from 'vitest';
+import {expect, vi} from 'vitest';
+import {of} from 'rxjs';
+import type {BaseHttpResponse, HttpTransport} from '../src';
 
 export const expectObjectContainingPath = (path: string): any => {
   const keys = path.split('.').filter(Boolean);
@@ -15,7 +17,7 @@ export const expectObjectContainingPath = (path: string): any => {
     const key = keys[i];
 
     result = expect.objectContaining({
-      [key]: result
+      [key]: result,
     });
   }
 
@@ -27,3 +29,15 @@ export const expectArrayContainingPath = (paths: string[]): any => {
 
   return expect.arrayContaining(matchers);
 };
+
+export function makeTransport(): HttpTransport<BaseHttpResponse> {
+  return {
+    get: vi.fn().mockReturnValue(of({status: 200, data: {}})),
+    post: vi.fn().mockReturnValue(of({status: 200, data: {}})),
+    delete: vi.fn(),
+    getHeader: vi.fn(),
+    onAuthRequest: vi.fn(),
+    clearAuthData: vi.fn(),
+    sendQueryArray: vi.fn().mockImplementation((_, queryArray) => of(queryArray.map(() => ({})))),
+  };
+}

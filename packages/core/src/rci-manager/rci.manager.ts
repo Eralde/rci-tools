@@ -1,50 +1,128 @@
-import {Observable} from 'rxjs';
-import {map, timeout} from 'rxjs/operators';
+import {Observable, defer, throwError} from 'rxjs';
+import {filter, finalize, map, shareReplay, take, tap, timeout} from 'rxjs/operators';
 import {BaseHttpResponse, HttpTransport} from '../transport';
 import {RciQuery, RciTask} from './query';
-import {RCI_QUEUE_DEFAULT_BATCH_TIMEOUT, RciQueue} from './queue';
+import {RCI_QUEUE_DEFAULT_BATCH_TIMEOUT, RCI_QUEUE_STATE, RciQueue, clampNonNegativeTimeout} from './queue';
+import {BatchScheduler} from './scheduler';
 import {RciBackgroundProcess, RciBackgroundProcessOptions, RciBackgroundTaskQueue} from './background-process';
 import {RciPayloadHelper} from './payload';
-import type {QueueOptions} from './rci.manager.types';
-import {DEFAULT_QUEUE_OPTIONS, RCI_QUERY_TIMEOUT} from './rci.manager.constants';
+import type {GenericObject} from '../type.utils';
+import type {QueueOptions, RciManagerOptions} from './rci.manager.types';
+import {DEFAULT_QUEUE_OPTIONS, RCI_QUERY_TIMEOUT, RCI_SCHEDULER_SWAP_DEFAULT_TIMEOUT_MS} from './rci.manager.constants';
+import {QueryStats, QueryStatsCollector} from './stats';
+
+export class SchedulerReplacementInProgressError extends Error {
+  constructor() {
+    super('A scheduler replacement is already in progress.');
+
+    this.name = 'SchedulerReplacementInProgressError';
+  }
+}
 
 export class RciManager<
   QueryPath extends string = string,
   BackgroundQueryPath extends string = string,
 > {
-  protected readonly batchQueue: RciQueue<BaseHttpResponse>;
-  protected readonly priorityQueue: RciQueue<BaseHttpResponse>;
+  protected readonly batchQueue: RciQueue<BaseHttpResponse, QueryPath>;
+  protected readonly priorityQueue: RciQueue<BaseHttpResponse, QueryPath>;
   protected readonly backgroundQueues: Record<string, RciBackgroundTaskQueue<BackgroundQueryPath>> = {};
+  protected readonly statsCollector = new QueryStatsCollector();
+  protected currentSchedulerSwapToken: symbol | null = null;
 
   protected readonly rciPath: string;
 
   constructor(
     private host: string,
     private httpTransport: HttpTransport<BaseHttpResponse>,
-    private batchTimeout = RCI_QUEUE_DEFAULT_BATCH_TIMEOUT,
+    private options: RciManagerOptions<QueryPath> = {},
   ) {
+    const batchTimeout = this.options.batchTimeout ?? RCI_QUEUE_DEFAULT_BATCH_TIMEOUT;
+
     this.rciPath = `${this.host}/rci/`;
 
-    this.priorityQueue = new RciQueue(
+    this.priorityQueue = new RciQueue<BaseHttpResponse, QueryPath>(
       this.rciPath,
       this.httpTransport,
       {
         batchTimeout: 0,
+        queueName: 'priority',
+        statsCollector: this.statsCollector,
       },
     );
 
-    this.batchQueue = new RciQueue(
+    this.batchQueue = new RciQueue<BaseHttpResponse, QueryPath>(
       this.rciPath,
       this.httpTransport,
       {
-        batchTimeout: Math.max(this.batchTimeout, 0),
+        batchTimeout: clampNonNegativeTimeout(batchTimeout),
         // the batch queue will be blocked any time the priority queue is used to execute something
         blockerQueue: this.priorityQueue,
+        queueName: 'batch',
+        scheduler: this.options.batchScheduler,
+        statsCollector: this.statsCollector,
       },
     );
   }
 
-  public execute(query: RciTask<QueryPath>): Observable<any> {
+  public get stats$(): Observable<QueryStats<QueryPath>> {
+    return this.statsCollector.stats$ as Observable<QueryStats<QueryPath>>;
+  }
+
+  public toggleStats(enabled: boolean): void {
+    this.statsCollector.toggle(enabled);
+  }
+
+  public replaceBatchScheduler(
+    scheduler: BatchScheduler<QueryPath>,
+    options: {waitIdleFor?: number} = {},
+  ): Observable<void> {
+    const waitForIdleMs = options.waitIdleFor ?? RCI_SCHEDULER_SWAP_DEFAULT_TIMEOUT_MS;
+    // Each call to replaceBatchScheduler returns a cold observable. The inner defer
+    // performs the real swap once, then shareReplay multicasts that single execution
+    // to every subscriber of *that* returned observable. It does NOT deduplicate
+    // across multiple separate calls to replaceBatchScheduler().
+    let sharedSwap$: Observable<void> | null = null;
+
+    return defer(() => {
+      if (sharedSwap$) {
+        return sharedSwap$;
+      }
+
+      sharedSwap$ = defer(() => {
+        if (this.currentSchedulerSwapToken) {
+          return throwError(() => new SchedulerReplacementInProgressError());
+        }
+
+        const token = Symbol('scheduler-swap');
+        this.currentSchedulerSwapToken = token;
+
+        return this.batchQueue.state$
+          .pipe(
+            filter((state) => state === RCI_QUEUE_STATE.READY),
+            take(1),
+            timeout(waitForIdleMs),
+            tap(() => {
+              this.batchQueue.setScheduler(scheduler);
+            }),
+            map(() => undefined),
+            finalize(() => {
+              if (this.currentSchedulerSwapToken === token) {
+                this.currentSchedulerSwapToken = null;
+              }
+            }),
+          );
+      })
+        .pipe(
+          shareReplay({bufferSize: 1, refCount: false}),
+        );
+
+      return sharedSwap$;
+    });
+  }
+
+  public execute(query: RciQuery<QueryPath>): Observable<GenericObject | undefined>;
+  public execute(query: Array<RciQuery<QueryPath>>): Observable<Array<GenericObject | undefined>>;
+  public execute(query: RciTask<QueryPath>): Observable<GenericObject | Array<GenericObject | undefined> | undefined> {
     const isSingleQuery = !Array.isArray(query);
     const queryList: Array<RciQuery<QueryPath>> = isSingleQuery
       ? [query]
@@ -64,16 +142,18 @@ export class RciManager<
           const allResponses = RciPayloadHelper.inflateResponse(batchedResponse, queryMap);
 
           return isSingleQuery
-            ? allResponses[0]!
+            ? allResponses[0]
             : allResponses;
         }),
       );
   }
 
+  public queue(query: RciQuery<QueryPath>, options?: QueueOptions): Observable<GenericObject | undefined>;
+  public queue(query: Array<RciQuery<QueryPath>>, options?: QueueOptions): Observable<GenericObject[]>;
   public queue(
     query: RciTask<QueryPath>,
     options: QueueOptions = DEFAULT_QUEUE_OPTIONS,
-  ): Observable<any> {
+  ): Observable<GenericObject | GenericObject[] | undefined> {
     if (options.isPriorityTask) {
       return this.priorityQueue.addTask(query, options.saveConfiguration);
     } else {
@@ -111,5 +191,14 @@ export class RciManager<
     }
 
     return this.backgroundQueues[key].push(data, options);
+  }
+
+  public destroy(): void {
+    this.batchQueue.destroy();
+    this.priorityQueue.destroy();
+
+    Object.values(this.backgroundQueues).forEach((queue) => queue.destroy());
+
+    this.statsCollector.destroy();
   }
 }

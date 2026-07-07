@@ -29,7 +29,7 @@ export class SessionManager<ResponseType extends BaseHttpResponse = BaseHttpResp
         catchError((error) => {
           this.logError(error);
 
-          return error?.response ? of(error.response) : of(error);
+          return of(this.errorToResponse(error));
         }),
         map((response) => {
           this.httpTransport.onAuthRequest(response);
@@ -42,7 +42,7 @@ export class SessionManager<ResponseType extends BaseHttpResponse = BaseHttpResp
   public getRealmHeader(): Observable<string> {
     return this.httpTransport.get(this.authUri)
       .pipe(
-        catchError((error) => of(error)),
+        catchError((error) => of(this.errorToResponse(error))),
         map((response) => {
           return String(this.httpTransport.getHeader(response, 'X-NDM-Realm') ?? '');
         }),
@@ -52,7 +52,7 @@ export class SessionManager<ResponseType extends BaseHttpResponse = BaseHttpResp
   public login(username: string, password: string): Observable<boolean> {
     return this.httpTransport.get(this.authUri)
       .pipe(
-        catchError((error) => error?.response ? of(error.response) : of(error)),
+        catchError((error) => of(this.errorToResponse(error))),
         switchMap((response): Observable<boolean> => {
           this.httpTransport.onAuthRequest(response);
 
@@ -78,7 +78,7 @@ export class SessionManager<ResponseType extends BaseHttpResponse = BaseHttpResp
   public logout(): Observable<unknown> {
     return this.httpTransport.delete(this.authUri)
       .pipe(
-        catchError((error) => of(error)),
+        catchError((error) => of(this.errorToResponse(error))),
         tap(() => {
           this.httpTransport.clearAuthData();
         }),
@@ -93,6 +93,19 @@ export class SessionManager<ResponseType extends BaseHttpResponse = BaseHttpResp
     if (this.isLoggingErrors) {
       console.warn(error);
     }
+  }
+
+  private errorToResponse(error: unknown): ResponseType {
+    if (
+      error
+      && typeof error === 'object'
+      && 'response' in error
+      && error.response
+    ) {
+      return error.response as ResponseType;
+    }
+
+    return error as ResponseType;
   }
 
   private getEncryptedPassword(props: PasswordData): Observable<string> {
@@ -126,9 +139,7 @@ export class SessionManager<ResponseType extends BaseHttpResponse = BaseHttpResp
         catchError((error) => {
           this.logError(error);
 
-          return error?.response
-            ? of(error.response)
-            : of({status: -1, error: 'Unknown error'});
+          return of(this.errorToResponse(error) ?? ({status: -1, data: {error: 'Unknown error'}} as ResponseType));
         }),
         exhaustMap(() => this.isAuthenticated()),
       );

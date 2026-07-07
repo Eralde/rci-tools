@@ -4,11 +4,13 @@
 
 ## Overview
 
-`@rci-tools/core` &mdash; is an `npm` package for interacting with the [RCI API](../../docs/RCI_API.md).
-Two main classes exported by this package are:
+`@rci-tools/core` &mdash; is an `npm` package for interacting with
+the [RCI API](../../docs/RCI_API.md). Two main classes exported by this package are:
 
-- [SessionManager](./src/session-manager/session-manager.ts): Implements [password-based authentication](../../docs/AUTH.md).
-- [RciManager](./src/rci-manager/rci.manager.ts): The main class to interact with the API in a uniform way.
+- [SessionManager](./src/session-manager/session-manager.ts):
+  Implements [password-based authentication](../../docs/AUTH.md).
+- [RciManager](./src/rci-manager/rci.manager.ts): The main class to interact with the API in a
+  uniform way.
 
 Both classes require an [`HTTP transport` instance](./src/transport/http.transport.ts) to
 send HTTP requests to the device. The `@rci-tools/core` module providers
@@ -42,13 +44,16 @@ interface SessionManager<ResponseType extends BaseHttpResponse = BaseHttpRespons
 
 Use `isAuthenticated`/`login`/`logout` methods for the auth session management.
 Two remaining methods are:
-- `getRealmHeader`: allows to get the device name before authenticating (e.g., to show it on the login screen)
+
+- `getRealmHeader`: allows to get the device name before authenticating (e.g., to show it on the
+  login screen)
 - `toggleErrorLogging`: enables/disables logging of HTTP errors to the console
 
 ### `RciManager`
 
 The `RciManager` class is used to interact with the RCI API.
 It has a few advantages over just using `fetch/xhr/axios/...`:
+
 - queries from multiple method calls can be batched into a single HTTP request
 - there is a simple priority system:
   priority queries block the non-priority ones until they are finished
@@ -61,13 +66,30 @@ interface RciManager<
   QueryPath extends string = string, // valid 'path' values for regular RCI queries
   BackgroundQueryPath extends string = string // valid 'path' values for background process RCI queries
 > {
+  readonly stats$: Observable<QueryStats<QueryPath>>;
+
+  toggleStats(enabled: boolean): void;
+  replaceBatchScheduler(scheduler: BatchScheduler<QueryPath>, options?: {waitIdleFor?: number}): Observable<void>;
+
   execute(query: RciTask<QueryPath>): Observable<any>;
   queue(query: RciTask<QueryPath>, options?: QueueOptions): Observable<any>;
   initBackgroundProcess(query: RciQuery<BackgroundQueryPath>, options?: RciBackgroundProcessOptions): RciBackgroundProcess;
   queueBackgroundProcess(query: RciQuery<BackgroundQueryPath>, options?: RciBackgroundProcessOptions): RciBackgroundProcess;
+
+  destroy(): void;
 }
 ```
 
+Additional members:
+
+- `stats$`: emits a `QueryStats` object for each completed batch when stats collection is enabled.
+  See [Query stats](./docs/QUEUE.md#query-stats).
+- `toggleStats(enabled)`: enables or disables stats collection.
+- `replaceBatchScheduler(scheduler, options?)`: replaces the batch scheduler at runtime,
+  waiting for the current batch to become idle. `options.waitIdleFor` defaults to `30000` ms.
+  Throws `SchedulerReplacementInProgressError` if another replacement is already in progress.
+  See [Batch Scheduling](./docs/SCHEDULING.md).
+- `destroy()`: tears down internal queues, background process queues, and the stats collector.
 
 The `RciManager` relies heavily on the [root API endpoint (`/rci/`)](../../docs/RCI_API.md#31-root-api-resource).
 Interactions with both [setting](../../docs/RCI_API.md#21-settings) and
@@ -81,45 +103,59 @@ export interface RciQuery<PathType extends string = string> { // `PathType` can 
   data?: Record<string, any> | string | boolean | number; // defaults to {}
   extractData?: boolean; // defaults to true
 }
+
+export type RciTask<PathType extends string = string> = RciQuery<PathType> | RciQuery<PathType>[];
+```
+
+`queue()` accepts an optional `QueueOptions` object:
+
+```typescript
+interface QueueOptions {
+  isPriorityTask?: boolean;  // send through the priority queue. Default: false
+  saveConfiguration?: boolean; // append a `system configuration save` query. Default: false
+}
 ```
 
 Before being sent to the device, `RciQuery` objects are converted to
 an object where the `path` becomes a property path and `data` becomes the value at that path.
 
 For example, a query like:
+
 ```typescript
-{
+const query = {
   path: 'show.version'
-}
+};
 ```
 
-is converted to:
-```typescript
+is converted to (`data` defaults to an empty object):
+
+```json
 {
-  'show': {
-    'version': {} // `data` defaults to an empty object
+  "show": {
+    "version": {}
   }
 }
 ```
 
 Similarly, a query with both path and data:
+
 ```typescript
-{
+const query = {
   path: 'interface',
   data: {
     name: 'Bridge0',
     description: 'My network'
   }
-}
+};
 ```
 
 becomes:
 
-```typescript
+```json
 {
-  'interface': {
-    name: 'Bridge0',
-    description: 'My network'
+  "interface": {
+    "name": "Bridge0",
+    "description": "My network"
   }
 }
 ```
@@ -134,22 +170,23 @@ There is a certain flexibility in how the same object can be represented
 as an `RciQuery`, for example both
 
 ```typescript
-{path: 'ip.telnet.session', data: {timeout: 123456}}
+const query = {path: 'ip.telnet.session', data: {timeout: 123456}};
 ```
 
 and
 
 ```typescript
-{path: 'ip', data: {telnet: {session: {timeout: 123456}}}}
+const query = {path: 'ip', data: {telnet: {session: {timeout: 123456}}}};
 ```
 
 will be converted to the same object inside the HTTP request payload:
-```typescript
+
+```json
 {
-  'ip': {
-    'telnet': {
-      'session': {
-        'timeout': 123456
+  "ip": {
+    "telnet": {
+      "session": {
+        "timeout": 123456
       }
     }
   }
@@ -164,19 +201,31 @@ The `RciManager` provides two methods for sending API queries:
 
 - **`execute(query)`**: Sends the HTTP request when you subscribe to the returned Observable.
   You have full control over the subscription lifecycle. This may be useful when you need to:
-  - Manually control when the HTTP request is made
-  - Chain multiple queries with precise timing
+    - Manually control when the HTTP request is made
+    - Chain multiple queries with precise timing
 
-- **`queue(query, options?)`**: Adds the query to an internal queue that batches multiple queries together.
-  The `RciManager` handles the subscription internally and manages when HTTP requests are actually sent.
+- **`queue(query, options?)`**: Adds the query to an internal queue that batches multiple queries
+  together.
+  The `RciManager` handles the subscription internally and manages when HTTP requests are actually
+  sent.
   The queue automatically:
-  - Batches multiple queries into a single HTTP request
-  - Removes duplicate queries from the batch
-  - Waits for a configurable timeout before sending (to allow more queries to be added)
-  - Handles priority queries via a separate priority queue, blocking the default one
+    - Batches multiple queries into a single HTTP request
+    - Removes duplicate queries from the batch
+    - Waits for a configurable timeout before sending (to allow more queries to be added)
+    - Handles priority queries via a separate priority queue, blocking the default one
 
 Both methods return a [rxjs Observable](https://rxjs.dev/guide/observable)
 that you must subscribe to in order to receive the result. Below are a few usage examples.
+
+#### Batch Scheduling
+
+By default, `queue()` batches queries together in 20ms windows before sending a single HTTP
+request. This is controlled by a **scheduler** — configure it via `RciManagerOptions.batchScheduler`
+or swap it at runtime with `replaceBatchScheduler()`.
+
+See [Batch Scheduling](./docs/SCHEDULING.md) for built-in schedulers (`TimerScheduler`,
+`RuleScheduler`, `raceSchedulers`), the `BatchSnapshot` interface, custom scheduler examples, and
+runtime replacement.
 
 #### Usage Examples
 
@@ -200,7 +249,7 @@ auth$
   .subscribe(async (isLoggedIn) => {
     if (!isLoggedIn) {
       console.error('Authentication failed');
-      
+
       return Promise.resolve(null);
     }
 
@@ -230,7 +279,7 @@ auth$
     };
 
     const actionResult = await rciManager.queue(showVersion).toPromise(); // an object conataing device version info
-    
+
     console.log(changeSettingResult, readSettingResult, actionResult);
   });
 ```
@@ -251,7 +300,7 @@ const queries: RciQuery[] = [
 
 const batch1$ = rciManager.queue(queries); // Both queries will be sent in a single HTTP request
 
-bastch1$
+batch1$
   .pipe(
     exhaustMap((results) => {
       queries.forEach((query, index) => {
@@ -317,6 +366,14 @@ all$
   });
 ```
 
+#### Using `RciQueue` standalone
+
+`RciManager` wraps two `RciQueue` instances internally (a batching queue and a priority queue).
+If you only need the batching behavior, you can use `RciQueue` directly — without `RciManager`.
+
+See [Standalone `RciQueue`](./docs/QUEUE.md) for the full API, constructor options, differences
+from `RciManager`, and examples including reproducing the priority system with two queues.
+
 #### Background Processes
 
 For [background processes](../../docs/RCI_API.md#23-background-processes),
@@ -334,14 +391,16 @@ The main difference between the two methods is how the background process is sta
 
 - **`initBackgroundProcess(query, options?)`**: returns an `RciBackgroundProcess` object
   that must be started manually. This method is useful when you need full control over
-  the background process lifecycle (you also can abort the ongoing process before it finishes).  
+  the background process lifecycle (you also can abort the ongoing process before it finishes).
 
 - **`queueBackgroundProcess(query, options?)`**: Queues a background process. Queries with the same
   `path` are grouped into a single queue, ensuring that the same command with different arguments
   doesn't run in parallel. This is a workaround for certain API restrictions if the `RciManager`
-  is used in a browser, since the browser usually uses a single HTTP session to handle all API requests.
+  is used in a browser, since the browser usually uses a single HTTP session to handle all API
+  requests.
 
 Both methods return a `RciBackgroundProcess` object with:
+
 - `start(): boolean`: Manually starts the process. Returns `false` if already running.
 - `attachToRunning(): boolean`: Attaches to an already-running background process (e.g. one started
   via `RciManager.execute()`). Skips the initial POST and polls via GET immediately.
@@ -349,7 +408,8 @@ Both methods return a `RciBackgroundProcess` object with:
 - `abort(): boolean`: Manually aborts the process. Returns `false` if not running.
 - `state$`: Emits state changes (`RCI_BACKGROUND_PROCESS_STATE`)
 - `data$`: Emits polled data updates as the background process runs
-- `result$`: Emits the final payload once, right before the process completes. Does NOT emit on abort or timeout.
+- `result$`: Emits the final payload once, right before the process completes. Does NOT emit on
+  abort or timeout.
 - `done$`: Emits when the process finishes, with a reason (`RCI_BACKGROUND_PROCESS_FINISH_REASON`)
 
 ```typescript
@@ -362,6 +422,8 @@ interface RciBackgroundProcess {
   start(): boolean;
   attachToRunning(): boolean;
   abort(): boolean;
+  getState(): RCI_BACKGROUND_PROCESS_STATE;
+  destroy(): void;
 }
 ```
 
@@ -483,4 +545,10 @@ console.log('All background processes finished:', finalResults);
 In this example, the two `tools.ping` queries will be queued together (executed sequentially),
 and the two `components.list` queries will also be queued together, preventing conflicts
 from running the same command with different arguments simultaneously.
+
+#### Query stats
+
+When enabled via `toggleStats(true)`, `stats$` emits a `QueryStats` object for each completed
+batch. See [Query stats](./docs/QUEUE.md#query-stats) for the full `QueryStats` interface and
+usage with standalone `RciQueue`.
 

@@ -1,6 +1,6 @@
-import {describe, it, expect, beforeAll} from 'vitest';
+import {beforeAll, describe, expect, it} from 'vitest';
 import {firstValueFrom} from 'rxjs';
-import {FetchTransport, RciResponseHelper} from '../../../src';
+import {FetchTransport, RciResponseHelper} from '../../../../src';
 
 const IP_ADDRESS = process.env.RCI_DEVICE_IP;
 
@@ -48,7 +48,8 @@ describe('RciResponseHelper (integration)', () => {
     const response = await firstValueFrom(transport.post(rciPath, payload));
 
     expect(RciResponseHelper.hasErrors(response.data), `[${key}] expected hasErrors to be true`).toBe(true);
-    expect(RciResponseHelper.hasCode(errorCode, response.data), `[${key}] expected hasCode to find ${errorCode}`).toBe(true);
+    expect(RciResponseHelper.hasCode(errorCode, response.data), `[${key}] expected hasCode to find ${errorCode}`)
+      .toBe(true);
 
     const errors = RciResponseHelper.getErrors(response.data);
     const errorEntry = Object.values(errors).find((e) => e.code === errorCode);
@@ -56,5 +57,4 @@ describe('RciResponseHelper (integration)', () => {
     expect(errorEntry, `[${key}] expected error with code ${errorCode} to be present`).toBeDefined();
     expect(errorEntry!.code, `[${key}] expected error code to match`).toBe(errorCode);
   });
-
 });

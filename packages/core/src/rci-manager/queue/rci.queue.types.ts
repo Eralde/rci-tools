@@ -1,12 +1,18 @@
 import {Subject} from 'rxjs';
 import type {BaseHttpResponse} from '../../transport';
-import type {ObjectOrArray, Values} from '../../type.utils';
+import type {GenericObject, ObjectOrArray, Values} from '../../type.utils';
 import {RciQuery} from '../query';
+import type {BatchScheduler} from '../scheduler';
+import type {QueryStatsCollector} from '../stats';
 import {RciQueue} from './rci.queue';
+import type {QueryMap} from '../payload';
 
-export interface RciQueueOptions<ResponseType extends BaseHttpResponse> {
+export interface RciQueueOptions<ResponseType extends BaseHttpResponse, QueryPath extends string = string> {
   batchTimeout: number;
-  blockerQueue: RciQueue<ResponseType> | null;
+  blockerQueue: RciQueue<ResponseType, QueryPath> | null;
+  queueName?: string;
+  scheduler?: BatchScheduler<QueryPath> | undefined;
+  statsCollector?: QueryStatsCollector | null | undefined;
 }
 
 export const RCI_QUEUE_STATE = {
@@ -26,8 +32,21 @@ export const RCI_QUEUE_STATE = {
 
 export type RciQueueState = Values<typeof RCI_QUEUE_STATE>;
 
-export interface Task {
+export interface Task<QueryPath extends string = string> {
   isSingleQuery: boolean;
-  queries: RciQuery[];
+  queries: RciQuery<QueryPath>[];
   subject: Subject<ObjectOrArray>;
+}
+
+export type BlockerRaceResult =
+  | {type: 'task'; data: ObjectOrArray}
+  | {type: 'blocked'};
+
+export interface BatchHttpResult<QueryPath extends string = string> {
+  batchedResponse: GenericObject[];
+  httpClientError: unknown;
+  queryMap: QueryMap;
+  tasks: Task<QueryPath>[];
+  sentAt: number;
+  statsQueryPaths: QueryPath[];
 }

@@ -4,6 +4,7 @@ import {
   Observable,
   ReplaySubject,
   Subject,
+  Subscription,
   delayWhen,
   filter,
   map,
@@ -47,6 +48,13 @@ export enum RCI_BACKGROUND_PROCESS_STATE {
   ERROR = 'ERROR',
 }
 
+const FINAL_STATE_BY_REASON: Record<RCI_BACKGROUND_PROCESS_FINISH_REASON, RCI_BACKGROUND_PROCESS_STATE> = {
+  [RCI_BACKGROUND_PROCESS_FINISH_REASON.DONE]: RCI_BACKGROUND_PROCESS_STATE.COMPLETED,
+  [RCI_BACKGROUND_PROCESS_FINISH_REASON.ABORTED]: RCI_BACKGROUND_PROCESS_STATE.ABORTED,
+  [RCI_BACKGROUND_PROCESS_FINISH_REASON.TIMED_OUT]: RCI_BACKGROUND_PROCESS_STATE.TIMED_OUT,
+  [RCI_BACKGROUND_PROCESS_FINISH_REASON.ERROR]: RCI_BACKGROUND_PROCESS_STATE.ERROR,
+};
+
 export class RciBackgroundProcess<CommandType extends string = string> {
   public readonly data$: Observable<GenericObject | null>;
   public readonly result$: Observable<GenericObject | null>;
@@ -61,6 +69,9 @@ export class RciBackgroundProcess<CommandType extends string = string> {
   private readonly resultSub$ = new Subject<GenericObject | null>();
   private readonly doneSub$ = new Subject<RCI_BACKGROUND_PROCESS_FINISH_REASON>();
   private readonly abortSub$ = new ReplaySubject<void>(1);
+
+  private readonly subscriptions = new Subscription();
+  private isDestroyed = false;
 
   private readonly rciPath: string;
   private readonly httpTransport: HttpTransport<BaseHttpResponse>;
@@ -87,38 +98,50 @@ export class RciBackgroundProcess<CommandType extends string = string> {
     this.done$ = this.doneSub$.asObservable();
     this.state$ = this.stateSub$.asObservable();
 
-    this.startTrigger$
-      .pipe(
-        filter(() =>
-          this.stateSub$.value === RCI_BACKGROUND_PROCESS_STATE.INIT
-          || this.stateSub$.value === RCI_BACKGROUND_PROCESS_STATE.QUEUED
-        ),
-        map(() => {
-          this.stateSub$.next(RCI_BACKGROUND_PROCESS_STATE.RUNNING);
+    this.subscriptions.add(
+      this.startTrigger$
+        .pipe(
+          filter(() => {
+            return this.stateSub$.value === RCI_BACKGROUND_PROCESS_STATE.INIT
+              || this.stateSub$.value === RCI_BACKGROUND_PROCESS_STATE.QUEUED;
+          }),
+          map(() => {
+            this.stateSub$.next(RCI_BACKGROUND_PROCESS_STATE.RUNNING);
 
-          return this;
+            return this;
+          }),
+        )
+        .subscribe(() => {
+          this.execute();
         }),
-      )
-      .subscribe(() => {
-        this.execute();
-      });
+    );
 
-    // subscribe to done$ to update state
-    this.done$.subscribe((reason: RCI_BACKGROUND_PROCESS_FINISH_REASON) => {
-      if (reason === RCI_BACKGROUND_PROCESS_FINISH_REASON.DONE) {
-        this.stateSub$.next(RCI_BACKGROUND_PROCESS_STATE.COMPLETED);
-      } else if (reason === RCI_BACKGROUND_PROCESS_FINISH_REASON.ABORTED) {
-        this.stateSub$.next(RCI_BACKGROUND_PROCESS_STATE.ABORTED);
-      } else if (reason === RCI_BACKGROUND_PROCESS_FINISH_REASON.TIMED_OUT) {
-        this.stateSub$.next(RCI_BACKGROUND_PROCESS_STATE.TIMED_OUT);
-      } else if (reason === RCI_BACKGROUND_PROCESS_FINISH_REASON.ERROR) {
-        this.stateSub$.next(RCI_BACKGROUND_PROCESS_STATE.ERROR);
-      }
-    });
+    this.subscriptions.add(
+      this.done$
+        .subscribe((reason: RCI_BACKGROUND_PROCESS_FINISH_REASON) => {
+          this.stateSub$.next(FINAL_STATE_BY_REASON[reason]);
+        }),
+    );
   }
 
   public getState(): RCI_BACKGROUND_PROCESS_STATE {
     return this.stateSub$.value;
+  }
+
+  public destroy(): void {
+    if (this.isDestroyed) {
+      return;
+    }
+
+    this.isDestroyed = true;
+
+    this.subscriptions.unsubscribe();
+    this.responseSub$.complete();
+    this.resultSub$.complete();
+    this.doneSub$.complete();
+    this.abortSub$.complete();
+    this.startTrigger$.complete();
+    this.stateSub$.complete();
   }
 
   public start(): boolean {
@@ -237,7 +260,7 @@ export class RciBackgroundProcess<CommandType extends string = string> {
     const url = `${this.rciPath}${path.replace(/\./g, '/')}`;
 
     const onDataUpdate: (data: GenericObject) => void = (data) => this.responseSub$.next(data);
-    const isFinished = (response: BaseHttpResponse) => !response?.data?.['continued'];
+    const isFinished = (response: BaseHttpResponse) => !((response.data as GenericObject)?.['continued']);
     const getQuery = () => this.httpTransport.get(url);
 
     const initialRequest$ = this.isAttached
@@ -255,7 +278,7 @@ export class RciBackgroundProcess<CommandType extends string = string> {
             .pipe(
               switchMap(() => getQuery()),
               map((getResponse) => {
-                onDataUpdate(getResponse.data);
+                onDataUpdate(getResponse.data as GenericObject);
 
                 return getResponse;
               }),
@@ -263,7 +286,7 @@ export class RciBackgroundProcess<CommandType extends string = string> {
               repeat(),
             );
 
-          onDataUpdate(response.data);
+          onDataUpdate(response.data as GenericObject);
 
           return queryPipe$
             .pipe(
