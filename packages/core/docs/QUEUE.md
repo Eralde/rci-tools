@@ -17,16 +17,17 @@ queries into a single HTTP request within a scheduling window &mdash.
 class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends string = string> {
   readonly state$: Observable<RciQueueState>;
   readonly isBusy$: Observable<boolean>;
+  readonly isBusy: boolean; // synchronous snapshot of isBusy$
 
   constructor(
     rciPath: string, // full URL of the root RCI endpoint, e.g. 'http://192.168.1.1/rci/'
     httpTransport: HttpTransport<ResponseType>,
     options?: Partial<RciQueueOptions<ResponseType, QueryPath>>,
-  );
+  )  { /* ... */ }
 
-  addTask(query: RciTask, saveConfiguration?: boolean): Observable<any>;
-  setScheduler(scheduler: BatchScheduler<QueryPath>): void;
-  destroy(): void;
+  public addTask(query: RciTask, saveConfiguration?: boolean): Observable<any> { /* ... */ }
+  public setScheduler(scheduler: BatchScheduler<QueryPath>): void { /* ... */ }
+  public destroy(): void { /* ... */ }
 }
 ```
 
@@ -97,6 +98,38 @@ const batchQueue = new RciQueue(rciPath, transport, {
 priorityQueue.addTask({path: 'show.system'}).subscribe();
 batchQueue.addTask({path: 'show.version'}).subscribe();
 ```
+
+### Blocker queue semantics (preemption)
+
+When `options.blockerQueue` is set, the blocker queue **preempts** this queue whenever the blocker
+becomes busy &mdash; regardless of what this queue is doing at that moment:
+
+| State of this queue | What preemption does                                                                                                                                   |
+|---------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `READY`             | Nothing yet; a later flush attempt re-checks the blocker and waits if it is still busy.                                                                |
+| `BATCHING_TASKS`    | The scheduling window is closed; collected tasks stay in the queue. State becomes `PENDING`.                                                           |
+| `AWAITING_RESPONSE` | The in-flight HTTP query is **abandoned**: its response will be ignored, and its tasks are put back at the head of the queue. State becomes `PENDING`. |
+| `PENDING`           | Already waiting; nothing changes.                                                                                                                      |
+
+While `PENDING`, new tasks are still accepted &mdash; they simply join the queue. As soon as the blocker
+queue becomes `READY`, **all** pending tasks (recalled and newly added alike) are sent immediately
+as a single batch, without waiting for a new scheduling window. Each caller still receives exactly
+one result, produced by the batch that actually completed.
+
+> **Non-idempotent commands can execute twice under preemption.** Abandoning an in-flight query
+> only discards the *response* &mdash; the request has already reached the device, which may execute it
+> anyway. The re-sent batch then executes the same queries again. This is the intended trade-off
+> for `show.*` polling (freshness after priority work beats deduplication), but it means a
+> preempted batch containing writes (including the `system.configuration.save` query appended by
+> `saveConfiguration: true`) may be applied twice.
+>
+> It is up to you how to handle this:
+>
+> - with `RciManager`, send writes through the priority queue
+>   (`queue(query, {isPriorityTask: true})`) -> the priority queue
+>   has no blocker and is never preempted;
+> - or use a standalone `RciQueue` without `blockerQueue` for write traffic,
+>   the two-queue system is entirely opt-in.
 
 ### Custom scheduling and stats
 
