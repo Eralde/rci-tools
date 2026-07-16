@@ -55,7 +55,9 @@ export class RciManager<
       this.httpTransport,
       {
         batchTimeout: clampNonNegativeTimeout(batchTimeout),
-        // the batch queue will be blocked any time the priority queue is used to execute something
+        // the priority queue preempts the batch queue whenever it is busy:
+        // an in-flight batch query is abandoned and re-sent afterward
+        // (see "Blocker queue semantics" in docs/QUEUE.md)
         blockerQueue: this.priorityQueue,
         queueName: 'batch',
         scheduler: this.options.batchScheduler,
