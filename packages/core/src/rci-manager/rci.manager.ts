@@ -78,11 +78,12 @@ export class RciManager<
     scheduler: BatchScheduler<QueryPath>,
     options: {waitIdleFor?: number} = {},
   ): Observable<void> {
-    const waitForIdleMs = options.waitIdleFor ?? RCI_SCHEDULER_SWAP_DEFAULT_TIMEOUT_MS;
-    // Each call to replaceBatchScheduler returns a cold observable. The inner defer
-    // performs the real swap once, then shareReplay multicasts that single execution
+    const waitIdleFor = options.waitIdleFor ?? RCI_SCHEDULER_SWAP_DEFAULT_TIMEOUT_MS;
+
+    // Each call to replaceBatchScheduler returns a cold observable. The inner `defer`
+    // performs the real swap once, then `shareReplay` multicasts that single execution
     // to every subscriber of *that* returned observable. It does NOT deduplicate
-    // across multiple separate calls to replaceBatchScheduler().
+    // across multiple separate calls to `replaceBatchScheduler()`.
     let sharedSwap$: Observable<void> | null = null;
 
     return defer(() => {
@@ -102,7 +103,7 @@ export class RciManager<
           .pipe(
             filter((state) => state === RCI_QUEUE_STATE.READY),
             take(1),
-            timeout(waitForIdleMs),
+            timeout(waitIdleFor),
             tap(() => {
               this.batchQueue.setScheduler(scheduler);
             }),

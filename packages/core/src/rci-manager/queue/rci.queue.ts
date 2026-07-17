@@ -37,8 +37,8 @@ export class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends s
     );
 
   /**
-   * Blocker queue semantics (see docs/QUEUE.md for the full contract):
-   * when `options.blockerQueue` becomes busy, this queue is preempted —
+   * Blocker queue semantics:
+   * when `options.blockerQueue` becomes busy, this queue is preempted -
    * an open batching window is closed, an in-flight HTTP query is abandoned
    * (its response will be IGNORED) and its tasks are put back at the head
    * of the pending list. The queue then stays PENDING until the blocker
@@ -46,7 +46,7 @@ export class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends s
    * as a single batch.
    *
    * NOTE: an abandoned in-flight query may still have been executed by the
-   * device — preemption discards the response, it cannot recall the request.
+   * device - preemption discards the response, it cannot recall the request.
    * The re-sent batch executes those queries again.
    */
   private readonly blockerQueue: RciQueue<ResponseType, QueryPath> | null;
@@ -384,7 +384,7 @@ export class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends s
   }
 
   // the blocker queue is READY again: re-send everything that was preempted
-  // (plus any tasks queued while waiting) as a single batch, immediately —
+  // (plus any tasks queued while waiting) as a single batch, immediately -
   // these tasks have already waited through at least one scheduling window
   private resume(): void {
     if (this.stateSub$.value !== RCI_QUEUE_STATE.PENDING) {
@@ -404,7 +404,7 @@ export class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends s
     this.inFlight = null;
 
     // the response, if it ever arrives, is discarded;
-    // the device may still have executed the query — see the class-level note
+    // the device may still have executed the query - see the class-level note
     subscription.unsubscribe();
 
     this.pendingTasks = [...tasks, ...this.pendingTasks];
