@@ -17,7 +17,7 @@
 class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends string = string> {
   readonly state$: Observable<RciQueueState>;
   readonly isBusy$: Observable<boolean>;
-  readonly isBusy: boolean; // синхронный снимок isBusy$
+  readonly isBusy: boolean; // текущее значение isBusy$
 
   constructor(
     rciPath: string, // полный URL корневого RCI-эндпоинта, напр. 'http://192.168.1.1/rci/'

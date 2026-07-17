@@ -17,7 +17,7 @@ queries into a single HTTP request within a scheduling window &mdash.
 class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends string = string> {
   readonly state$: Observable<RciQueueState>;
   readonly isBusy$: Observable<boolean>;
-  readonly isBusy: boolean; // synchronous snapshot of isBusy$
+  readonly isBusy: boolean; // current value of of isBusy$
 
   constructor(
     rciPath: string, // full URL of the root RCI endpoint, e.g. 'http://192.168.1.1/rci/'
