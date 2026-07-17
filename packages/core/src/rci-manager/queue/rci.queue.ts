@@ -1,4 +1,4 @@
-import {BehaviorSubject, Observable, ReplaySubject, Subject, Subscription, defer, of} from 'rxjs';
+import {BehaviorSubject, Observable, ReplaySubject, Subject, Subscription, defer, of, throwError} from 'rxjs';
 import {catchError, distinctUntilChanged, map, take, timeout} from 'rxjs/operators';
 import {RciPayloadHelper} from '../payload';
 import type {QueryMap} from '../payload';
@@ -18,6 +18,7 @@ import {
   clampNonNegativeTimeout,
 } from './rci.queue.constants';
 import {QueueNotIdleError} from './queue-not-idle.error';
+import {QueueDestroyedError} from './queue-destroyed.error';
 
 interface InFlightBatch<QueryPath extends string = string> {
   tasks: Task<QueryPath>[];
@@ -145,6 +146,10 @@ export class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends s
   }
 
   private enqueueTask(query: RciTask<QueryPath>, saveConfiguration: boolean): Observable<any> {
+    if (this.isDestroyed) {
+      return throwError(() => new QueueDestroyedError());
+    }
+
     const task = this.prepareTask(query, saveConfiguration);
     const isQueueReady = this.stateSub$.value === RCI_QUEUE_STATE.READY;
 
