@@ -1,6 +1,7 @@
-import {BehaviorSubject, EMPTY, Observable, Subject, Subscription, defer, of, race} from 'rxjs';
-import {buffer, catchError, exhaustMap, filter, map, switchMap, take, timeout} from 'rxjs/operators';
+import {BehaviorSubject, Observable, ReplaySubject, Subject, Subscription, defer, of, throwError} from 'rxjs';
+import {catchError, distinctUntilChanged, map, take, timeout} from 'rxjs/operators';
 import {RciPayloadHelper} from '../payload';
+import type {QueryMap} from '../payload';
 import type {BaseHttpResponse, HttpTransport} from '../../transport';
 import type {GenericObject, TaskResult} from '../../type.utils';
 import {RCI_QUERY_TIMEOUT} from '../rci.manager.constants';
@@ -9,7 +10,7 @@ import type {BatchScheduler, BatchSnapshot} from '../scheduler';
 import {TimerScheduler} from '../scheduler';
 import type {QueryStatsCollector} from '../stats';
 import type {RciQueueOptions, RciQueueState, Task} from './rci.queue.types';
-import {BatchHttpResult, BlockerRaceResult, RCI_QUEUE_STATE} from './rci.queue.types';
+import {RCI_QUEUE_STATE} from './rci.queue.types';
 import {
   RCI_QUEUE_BUSY_STATES,
   RCI_QUEUE_DEFAULT_BATCH_TIMEOUT,
@@ -17,6 +18,12 @@ import {
   clampNonNegativeTimeout,
 } from './rci.queue.constants';
 import {QueueNotIdleError} from './queue-not-idle.error';
+import {QueueDestroyedError} from './queue-destroyed.error';
+
+interface InFlightBatch<QueryPath extends string = string> {
+  tasks: Task<QueryPath>[];
+  subscription: Subscription;
+}
 
 export class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends string = string> {
   private readonly stateSub$ = new BehaviorSubject<RciQueueState>(RCI_QUEUE_STATE.READY);
@@ -30,27 +37,31 @@ export class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends s
       }),
     );
 
-  // a stream to emit batch tasks to;
-  // multiple tasks will be sent as a single HTTP query
-  private readonly tasks$ = new Subject<Task<QueryPath>>();
-
-  private readonly batchFinish$ = new Subject<void>();
-
-  // tasks batched for the next HTTP query
-  private readonly batch$: Observable<Task<QueryPath>[]> = this.tasks$.pipe(buffer(this.batchFinish$));
-
+  /**
+   * Blocker queue semantics:
+   * when `options.blockerQueue` becomes busy, this queue is preempted -
+   * an open batching window is closed, an in-flight HTTP query is abandoned
+   * (its response will be IGNORED) and its tasks are put back at the head
+   * of the pending list. The queue then stays PENDING until the blocker
+   * queue is READY again, at which point all pending tasks are (re-)sent
+   * as a single batch.
+   *
+   * NOTE: an abandoned in-flight query may still have been executed by the
+   * device - preemption discards the response, it cannot recall the request.
+   * The re-sent batch executes those queries again.
+   */
   private readonly blockerQueue: RciQueue<ResponseType, QueryPath> | null;
   private scheduler: BatchScheduler<QueryPath>;
   private readonly queueName: string;
   private readonly statsCollector: QueryStatsCollector | null;
-  private readonly pendingTaskSubjects = new Set<Subject<TaskResult>>();
 
-  private pendingTasksCount = 0;
-  private batchSubscription: Subscription | null = null;
+  // tasks waiting for the next HTTP query, in insertion order;
+  // tasks recalled from a preempted in-flight query go back to the head
+  private pendingTasks: Task<QueryPath>[] = [];
+  private inFlight: InFlightBatch<QueryPath> | null = null;
+
+  private blockerSubscription: Subscription | null = null;
   private batchCreatedAt = 0;
-  private currentTaskCount = 0;
-  private currentQueryCount = 0;
-  private currentQueryPaths: QueryPath[] = [];
   private currentBatchSub$: Subject<BatchSnapshot<QueryPath>> | null = null;
   private currentSchedulerSub: Subscription | null = null;
   private isDestroyed = false;
@@ -58,130 +69,44 @@ export class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends s
   constructor(
     private rciPath: string,
     private httpTransport: HttpTransport<ResponseType>,
-    private options: Partial<RciQueueOptions<ResponseType, QueryPath>> = {},
+    private initOptions: Partial<RciQueueOptions<ResponseType, QueryPath>> = {},
   ) {
-    const _options: RciQueueOptions<ResponseType, QueryPath> = {
-      ...this.options,
-      batchTimeout: this.options.batchTimeout ?? RCI_QUEUE_DEFAULT_BATCH_TIMEOUT,
-      blockerQueue: this.options.blockerQueue ?? null,
-    } as RciQueueOptions<ResponseType, QueryPath>;
+    const batchTimeout = clampNonNegativeTimeout(this.initOptions.batchTimeout ?? RCI_QUEUE_DEFAULT_BATCH_TIMEOUT);
 
-    this.blockerQueue = _options.blockerQueue;
-    this.queueName = _options.queueName ?? 'unknown';
-    this.scheduler = _options.scheduler
-      ?? new TimerScheduler<QueryPath>(clampNonNegativeTimeout(_options.batchTimeout));
-    this.statsCollector = _options.statsCollector ?? null;
+    this.blockerQueue = this.initOptions.blockerQueue ?? null;
+    this.queueName = this.initOptions.queueName ?? 'unknown';
+    this.scheduler = this.initOptions.scheduler ?? new TimerScheduler<QueryPath>(batchTimeout);
+    this.statsCollector = this.initOptions.statsCollector ?? null;
 
-    this.batchSubscription = this.initializeBatchSubscription();
+    if (this.blockerQueue) {
+      this.blockerSubscription = this.blockerQueue.isBusy$
+        .pipe(distinctUntilChanged())
+        .subscribe((isBlockerBusy) => {
+          if (isBlockerBusy) {
+            this.preempt();
+          } else {
+            this.resume();
+          }
+        });
+    }
+  }
+
+  public get isBusy(): boolean {
+    return RCI_QUEUE_BUSY_STATES.includes(this.stateSub$.value);
   }
 
   public addTask(query: RciQuery<QueryPath>, saveConfiguration?: boolean): Observable<GenericObject | undefined>;
-  public addTask(query: RciQuery<QueryPath>[], saveConfiguration?: boolean): Observable<Array<GenericObject | undefined>>;
+  public addTask(
+    query: RciQuery<QueryPath>[],
+    saveConfiguration?: boolean,
+  ): Observable<Array<GenericObject | undefined>>;
   public addTask(
     query: RciTask<QueryPath>,
     saveConfiguration?: boolean,
-  ): Observable<TaskResult>;
-  public addTask(query: RciTask<QueryPath>, saveConfiguration: boolean = false): Observable<TaskResult> {
-    return defer(() => this.addTaskWhenSubscribed(query, saveConfiguration));
-  }
-
-  private addTaskWhenSubscribed(query: RciTask<QueryPath>, saveConfiguration: boolean): Observable<TaskResult> {
-    const task$ = this.processTask(query, saveConfiguration);
-
-    if (!this.blockerQueue) {
-      return task$;
-    }
-
-    const blocked$ = this.blockerQueue.isBusy$
-      .pipe(
-        filter(Boolean),
-        take(1),
-        map((): BlockerRaceResult => ({type: 'blocked'})),
-      );
-
-    const race$ = race(
-      task$.pipe(map((data): BlockerRaceResult => ({type: 'task', data}))),
-      blocked$,
-    );
-
-    return race$
-      .pipe(
-        exhaustMap((winner) => {
-          if (winner.type === 'task') {
-            return of(winner.data);
-          }
-
-          this.setState(RCI_QUEUE_STATE.PENDING);
-
-          return this.blockerQueue!.state$
-            .pipe(
-              filter((state) => state === RCI_QUEUE_STATE.READY),
-              take(1),
-              exhaustMap(() => this.addTask(query, saveConfiguration)),
-            );
-        }),
-      );
-  }
-
-  private processTask(query: RciTask<QueryPath>, saveConfiguration: boolean = false): Observable<TaskResult> {
-    // Outer Observable is required to avoid adding a new task
-    // until returned Observable is actually subscribed to
-    return of(true)
-      .pipe(
-        exhaustMap(() => {
-          const task = this.prepareTask(query, saveConfiguration);
-
-          if (this.stateSub$.value === RCI_QUEUE_STATE.READY) {
-            this.startBatch();
-          }
-
-          this.pendingTasksCount++;
-
-          for (const q of task.queries) {
-            this.currentQueryPaths.push(q.path);
-          }
-
-          this.currentTaskCount += 1;
-          this.currentQueryCount += task.queries.length;
-
-          this.tasks$.next(task);
-
-          this.currentBatchSub$?.next({
-            taskCount: this.currentTaskCount,
-            queryCount: this.currentQueryCount,
-            createdAt: this.batchCreatedAt,
-            elapsedMs: Date.now() - this.batchCreatedAt,
-            queryPaths: [...this.currentQueryPaths],
-          });
-
-          return task.subject.asObservable();
-        }),
-      );
-  }
-
-  private setState(state: RciQueueState): void {
-    this.stateSub$.next(state);
-  }
-
-  public destroy(): void {
-    if (this.isDestroyed) {
-      return;
-    }
-
-    this.isDestroyed = true;
-
-    this.closeCurrentWindow();
-    this.batchSubscription?.unsubscribe();
-
-    this.batchSubscription = null;
-
-    for (const subject of this.pendingTaskSubjects) {
-      subject.error(new Error('Queue destroyed'));
-    }
-
-    this.stateSub$.complete();
-    this.tasks$.complete();
-    this.batchFinish$.complete();
+  ): Observable<GenericObject | GenericObject[] | undefined>;
+  public addTask(query: RciTask<QueryPath>, saveConfiguration: boolean = false): Observable<any> {
+    // defer() postpones all side effects until the returned Observable is subscribed to
+    return defer(() => this.enqueueTask(query, saveConfiguration));
   }
 
   public setScheduler(scheduler: BatchScheduler<QueryPath>): void {
@@ -192,98 +117,61 @@ export class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends s
     this.scheduler = scheduler;
   }
 
-  private provideDataToTasks(chunkedResponses: Array<Array<GenericObject | undefined>>, tasks: Task<QueryPath>[]): void {
-    tasks.forEach(({subject, isSingleQuery}, index) => {
-      const taskData = isSingleQuery
-        ? chunkedResponses[index]![0]
-        : chunkedResponses[index]!;
+  public destroy(): void {
+    if (this.isDestroyed) {
+      return;
+    }
 
-      subject.next(taskData);
-      subject.complete();
-      this.pendingTaskSubjects.delete(subject);
-    });
+    this.isDestroyed = true;
+
+    this.blockerSubscription?.unsubscribe();
+
+    this.blockerSubscription = null;
+
+    this.closeCurrentWindow();
+
+    if (this.inFlight) {
+      this.inFlight.subscription.unsubscribe();
+
+      this.pendingTasks = [...this.inFlight.tasks, ...this.pendingTasks];
+      this.inFlight = null;
+    }
+
+    const unresolvedTasks = this.pendingTasks;
+
+    this.pendingTasks = [];
+
+    for (const task of unresolvedTasks) {
+      task.subject.error(new Error('Queue destroyed'));
+    }
+
+    this.stateSub$.complete();
   }
 
-  private provideErrorDataToTasks(error: unknown, tasks: Task<QueryPath>[]): void {
-    tasks.forEach(({subject}) => {
-      subject.error(error);
-      this.pendingTaskSubjects.delete(subject);
-    });
-  }
+  private enqueueTask(query: RciTask<QueryPath>, saveConfiguration: boolean): Observable<any> {
+    if (this.isDestroyed) {
+      return throwError(() => new QueueDestroyedError());
+    }
 
-  private initializeBatchSubscription(): Subscription {
-    return this.batch$
-      .pipe(
-        switchMap((tasks) => {
-          this.setState(RCI_QUEUE_STATE.AWAITING_RESPONSE);
+    const task = this.prepareTask(query, saveConfiguration);
+    const isQueueReady = this.stateSub$.value === RCI_QUEUE_STATE.READY;
 
-          this.pendingTasksCount -= tasks.length;
+    this.pendingTasks.push(task);
 
-          const {
-            queryArray,
-            queryMap,
-          } = RciPayloadHelper.batchTasks(tasks);
+    if (isQueueReady) {
+      // startBatch() emits the first snapshot itself
+      this.startBatch();
+    } else {
+      this.emitBatchSnapshot();
+    }
 
-          const sentAt = Date.now();
-          const statsQueryPaths = tasks.flatMap((task) => {
-            return task.queries.map((q) => q.path);
-          });
-
-          return this.httpTransport.sendQueryArray(this.rciPath, queryArray)
-            .pipe(
-              timeout(RCI_QUERY_TIMEOUT),
-              map((batchedResponse): [GenericObject[], null] => [batchedResponse, null]),
-              catchError((httpClientError) => of([[], httpClientError] as [GenericObject[], unknown])),
-              map(([batchedResponse, httpClientError]): BatchHttpResult<QueryPath> => {
-                return {
-                  batchedResponse,
-                  httpClientError,
-                  queryMap,
-                  tasks,
-                  sentAt,
-                  statsQueryPaths,
-                };
-              }),
-            );
-        }),
-      )
-      .subscribe((result) => {
-        const {batchedResponse, httpClientError, queryMap, tasks, sentAt, statsQueryPaths} = result;
-
-        if (httpClientError) {
-          this.provideErrorDataToTasks(httpClientError, tasks);
-        } else {
-          const chunkedResponses = RciPayloadHelper.splitResponsesPerTask(batchedResponse, tasks, queryMap);
-
-          this.provideDataToTasks(chunkedResponses, tasks);
-        }
-
-        const durationMs = Date.now() - sentAt;
-        const queryCount = tasks.reduce((sum: number, task: Task<QueryPath>) => sum + task.queries.length, 0);
-
-        try {
-          this.statsCollector?.collect({
-            queueName: this.queueName,
-            taskCount: tasks.length,
-            queryCount,
-            queryPaths: statsQueryPaths,
-            sentAt,
-            durationMs,
-            success: !httpClientError,
-            error: httpClientError ?? undefined,
-          });
-        } catch (error) {
-          console.warn('Stats collection failed:', error);
-        }
-
-        this.onResponseProcessingFinish();
-      });
+    return task.subject.asObservable();
   }
 
   private prepareTask(query: RciTask<QueryPath>, saveConfiguration: boolean): Task<QueryPath> {
-    const subject = new Subject<TaskResult>();
-
-    this.pendingTaskSubjects.add(subject);
+    // A ReplaySubject so that a result produced synchronously
+    // (e.g. by a scheduler that fires on subscribe) still reaches the caller
+    const subject = new ReplaySubject<TaskResult>(1);
     const isSingleQuery = !Array.isArray(query);
     const queriesList: RciQuery<QueryPath>[] = isSingleQuery
       ? [query]
@@ -303,6 +191,14 @@ export class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends s
     return {queries, subject, isSingleQuery};
   }
 
+  private setState(state: RciQueueState): void {
+    this.stateSub$.next(state);
+  }
+
+  private isBlocked(): boolean {
+    return this.blockerQueue?.isBusy ?? false;
+  }
+
   private startBatch(): void {
     this.closeCurrentWindow();
     this.setState(RCI_QUEUE_STATE.BATCHING_TASKS);
@@ -316,16 +212,15 @@ export class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends s
         take(1),
         catchError((error) => {
           console.error('Scheduler error, forcing batch flush:', error);
-          this.batchFinish$.next();
-          this.closeCurrentWindow();
 
-          return EMPTY;
+          return of(undefined);
         }),
       )
       .subscribe(() => {
-        this.batchFinish$.next();
-        this.closeCurrentWindow();
+        this.onSchedulerFired();
       });
+
+    this.emitBatchSnapshot();
   }
 
   private closeCurrentWindow(): void {
@@ -336,16 +231,193 @@ export class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends s
     this.currentBatchSub$?.complete();
 
     this.currentBatchSub$ = null;
-    this.currentTaskCount = 0;
-    this.currentQueryCount = 0;
-    this.currentQueryPaths = [];
   }
 
-  private onResponseProcessingFinish(): void {
-    if (this.pendingTasksCount === 0) {
+  private emitBatchSnapshot(): void {
+    if (!this.currentBatchSub$) {
+      return;
+    }
+
+    const queryPaths = this.pendingTasks.flatMap((task) => {
+      return task.queries.map((query) => query.path);
+    });
+
+    this.currentBatchSub$.next({
+      taskCount: this.pendingTasks.length,
+      queryCount: queryPaths.length,
+      createdAt: this.batchCreatedAt,
+      elapsedMs: Date.now() - this.batchCreatedAt,
+      queryPaths,
+    });
+  }
+
+  private onSchedulerFired(): void {
+    this.closeCurrentWindow();
+
+    if (this.isBlocked()) {
+      this.setState(RCI_QUEUE_STATE.PENDING);
+
+      return;
+    }
+
+    this.sendPendingTasks();
+  }
+
+  private sendPendingTasks(): void {
+    if (this.pendingTasks.length === 0) {
       this.setState(RCI_QUEUE_STATE.READY);
+
+      return;
+    }
+
+    const tasks = this.pendingTasks;
+
+    this.pendingTasks = [];
+
+    this.setState(RCI_QUEUE_STATE.AWAITING_RESPONSE);
+
+    const {
+      queryArray,
+      queryMap,
+    } = RciPayloadHelper.batchTasks(tasks);
+
+    const sentAt = Date.now();
+
+    let isSettled = false;
+
+    const subscription = this.httpTransport.sendQueryArray(this.rciPath, queryArray)
+      .pipe(
+        timeout(RCI_QUERY_TIMEOUT),
+        map((batchedResponse): [GenericObject[], unknown] => [batchedResponse, null]),
+        catchError((httpClientError) => of([[], httpClientError] as [GenericObject[], unknown])),
+      )
+      .subscribe(([batchedResponse, httpClientError]) => {
+        isSettled = true;
+        this.inFlight = null;
+
+        this.handleBatchResponse(tasks, queryMap, sentAt, batchedResponse, httpClientError);
+      });
+
+    // the transport may respond synchronously, in which case the batch
+    // is already settled and must not be recorded as in-flight
+    if (!isSettled) {
+      this.inFlight = {tasks, subscription};
+    }
+  }
+
+  private handleBatchResponse(
+    tasks: Task<QueryPath>[],
+    queryMap: QueryMap,
+    sentAt: number,
+    batchedResponse: GenericObject[],
+    httpClientError: unknown,
+  ): void {
+    if (httpClientError) {
+      this.provideErrorDataToTasks(httpClientError, tasks);
     } else {
+      const chunkedResponses = RciPayloadHelper.splitResponsesPerTask(batchedResponse, tasks, queryMap);
+
+      this.provideDataToTasks(chunkedResponses, tasks);
+    }
+
+    const durationMs = Date.now() - sentAt;
+    const queryCount = tasks.reduce((sum: number, task: Task<QueryPath>) => sum + task.queries.length, 0);
+    const queryPaths = tasks.flatMap((task) => task.queries.map((query) => query.path));
+
+    try {
+      this.statsCollector?.collect({
+        queueName: this.queueName,
+        taskCount: tasks.length,
+        queryCount,
+        queryPaths,
+        sentAt,
+        durationMs,
+        success: !httpClientError,
+        error: httpClientError ?? undefined,
+      });
+    } catch (error) {
+      console.warn('Stats collection failed:', error);
+    }
+
+    this.onSendFinished();
+  }
+
+  private onSendFinished(): void {
+    if (this.isDestroyed) {
+      return;
+    }
+
+    if (this.pendingTasks.length === 0) {
+      this.setState(RCI_QUEUE_STATE.READY);
+    } else if (this.isBlocked()) {
+      this.setState(RCI_QUEUE_STATE.PENDING);
+    } else {
+      // tasks queued while the response was pending get a new batching window
       this.startBatch();
     }
+  }
+
+  private provideDataToTasks(
+    chunkedResponses: Array<Array<GenericObject | undefined>>,
+    tasks: Task<QueryPath>[],
+  ): void {
+    tasks.forEach(({subject, isSingleQuery}, index) => {
+      const taskData = isSingleQuery
+        ? chunkedResponses[index]![0]
+        : chunkedResponses[index]!;
+
+      subject.next(taskData);
+      subject.complete();
+    });
+  }
+
+  private provideErrorDataToTasks(error: unknown, tasks: Task<QueryPath>[]): void {
+    tasks.forEach(({subject}) => {
+      subject.error(error);
+    });
+  }
+
+  // the blocker queue became busy: stop whatever this queue is doing
+  // and wait (PENDING) until the blocker queue is READY again
+  private preempt(): void {
+    const state = this.stateSub$.value;
+
+    if (state === RCI_QUEUE_STATE.AWAITING_RESPONSE) {
+      this.recallInFlightTasks();
+      this.setState(RCI_QUEUE_STATE.PENDING);
+    } else if (state === RCI_QUEUE_STATE.BATCHING_TASKS) {
+      this.closeCurrentWindow();
+      this.setState(RCI_QUEUE_STATE.PENDING);
+    }
+
+    // READY: nothing to preempt (a later flush attempt re-checks the blocker);
+    // PENDING: already waiting for the blocker queue
+  }
+
+  // the blocker queue is READY again: re-send everything that was preempted
+  // (plus any tasks queued while waiting) as a single batch, immediately -
+  // these tasks have already waited through at least one scheduling window
+  private resume(): void {
+    if (this.stateSub$.value !== RCI_QUEUE_STATE.PENDING) {
+      return;
+    }
+
+    this.sendPendingTasks();
+  }
+
+  private recallInFlightTasks(): void {
+    if (!this.inFlight) {
+      return;
+    }
+
+    const {tasks, subscription} = this.inFlight;
+
+    this.inFlight = null;
+
+    // the response, if it ever arrives, is discarded;
+    // the device may still have executed the query - see the class-level note
+    subscription.unsubscribe();
+
+    this.pendingTasks = [...tasks, ...this.pendingTasks];
   }
 }
