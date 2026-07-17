@@ -55,7 +55,9 @@ export class RciManager<
       this.httpTransport,
       {
         batchTimeout: clampNonNegativeTimeout(batchTimeout),
-        // the batch queue will be blocked any time the priority queue is used to execute something
+        // the priority queue preempts the batch queue whenever it is busy:
+        // an in-flight batch query is abandoned and re-sent afterward
+        // (see "Blocker queue semantics" in docs/QUEUE.md)
         blockerQueue: this.priorityQueue,
         queueName: 'batch',
         scheduler: this.options.batchScheduler,
@@ -76,11 +78,12 @@ export class RciManager<
     scheduler: BatchScheduler<QueryPath>,
     options: {waitIdleFor?: number} = {},
   ): Observable<void> {
-    const waitForIdleMs = options.waitIdleFor ?? RCI_SCHEDULER_SWAP_DEFAULT_TIMEOUT_MS;
-    // Each call to replaceBatchScheduler returns a cold observable. The inner defer
-    // performs the real swap once, then shareReplay multicasts that single execution
+    const waitIdleFor = options.waitIdleFor ?? RCI_SCHEDULER_SWAP_DEFAULT_TIMEOUT_MS;
+
+    // Each call to replaceBatchScheduler returns a cold observable. The inner `defer`
+    // performs the real swap once, then `shareReplay` multicasts that single execution
     // to every subscriber of *that* returned observable. It does NOT deduplicate
-    // across multiple separate calls to replaceBatchScheduler().
+    // across multiple separate calls to `replaceBatchScheduler()`.
     let sharedSwap$: Observable<void> | null = null;
 
     return defer(() => {
@@ -100,7 +103,7 @@ export class RciManager<
           .pipe(
             filter((state) => state === RCI_QUEUE_STATE.READY),
             take(1),
-            timeout(waitForIdleMs),
+            timeout(waitIdleFor),
             tap(() => {
               this.batchQueue.setScheduler(scheduler);
             }),
