@@ -6,7 +6,7 @@ import {RCI_QUEUE_DEFAULT_BATCH_TIMEOUT, RCI_QUEUE_STATE, RciQueue, clampNonNega
 import {BatchScheduler} from './scheduler';
 import {RciBackgroundProcess, RciBackgroundProcessOptions, RciBackgroundTaskQueue} from './background-process';
 import {RciPayloadHelper} from './payload';
-import type {GenericObject} from '../type.utils';
+import type {GenericObject, TaskResult} from '../type.utils';
 import type {QueueOptions, RciManagerOptions} from './rci.manager.types';
 import {DEFAULT_QUEUE_OPTIONS, RCI_QUERY_TIMEOUT, RCI_SCHEDULER_SWAP_DEFAULT_TIMEOUT_MS} from './rci.manager.constants';
 import {QueryStats, QueryStatsCollector} from './stats';
@@ -140,24 +140,27 @@ export class RciManager<
         timeout(RCI_QUERY_TIMEOUT),
         map((batchedResponse) => {
           const allResponses = RciPayloadHelper.inflateResponse(batchedResponse, queryMap);
+          const extracted = allResponses.map((response, index) => {
+            return RciPayloadHelper.prepareResponseData(response, queryList[index]!);
+          });
 
           return isSingleQuery
-            ? allResponses[0]
-            : allResponses;
+            ? extracted[0]
+            : extracted;
         }),
       );
   }
 
+  public queue(query: RciQuery<QueryPath>, options?: QueueOptions): Observable<GenericObject | undefined>;
+  public queue(query: Array<RciQuery<QueryPath>>, options?: QueueOptions): Observable<Array<GenericObject | undefined>>;
   public queue(
     query: RciQuery<QueryPath> | Array<RciQuery<QueryPath>>,
     options?: QueueOptions,
-  ): Observable<GenericObject | GenericObject[] | undefined>;
-  public queue(query: RciQuery<QueryPath>, options?: QueueOptions): Observable<GenericObject | undefined>;
-  public queue(query: Array<RciQuery<QueryPath>>, options?: QueueOptions): Observable<GenericObject[]>;
+  ): Observable<TaskResult>;
   public queue(
     query: RciTask<QueryPath>,
     options: QueueOptions = DEFAULT_QUEUE_OPTIONS,
-  ): Observable<GenericObject | GenericObject[] | undefined> {
+  ): Observable<TaskResult> {
     if (options.isPriorityTask) {
       return this.priorityQueue.addTask(query, options.saveConfiguration);
     } else {

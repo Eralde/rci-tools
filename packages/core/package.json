@@ -34,6 +34,7 @@
     "fmt": "dprint fmt ./src/**/*.ts",
     "dev": "tsc --watch",
     "test": "tsx scripts/test-runner.ts",
+    "test:types": "tsc -p tsconfig.typetest.json",
     "typecheck": "tsc --noEmit",
     "measure": "tsx ./scripts/measurements/measure.ts"
   },

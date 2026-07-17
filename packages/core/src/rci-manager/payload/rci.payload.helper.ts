@@ -99,9 +99,9 @@ export class RciPayloadHelper {
     batchedResponse: GenericObject[],
     tasks: Task[],
     queryMap: QueryMap,
-  ): GenericObject[][] {
+  ): Array<Array<GenericObject | undefined>> {
     const allResults = RciPayloadHelper.inflateResponse(batchedResponse, queryMap);
-    const chunks: GenericObject[][] = [];
+    const chunks: Array<Array<GenericObject | undefined>> = [];
 
     let startIdx = 0;
 
@@ -110,7 +110,7 @@ export class RciPayloadHelper {
       const chunk = allResults
         .slice(startIdx, endIdx)
         .map((response, index) => {
-          return this.prepareResponseData(response!, queries[index]!);
+          return this.prepareResponseData(response, queries[index]!);
         });
 
       chunks.push(chunk);
@@ -126,12 +126,16 @@ export class RciPayloadHelper {
     return set({}, path, data);
   }
 
-  protected static prepareResponseData(response: GenericObject, query: RciQuery): GenericObject {
+  public static prepareResponseData(response: GenericObject | undefined, query: RciQuery): GenericObject | undefined {
     if (query.extractData === false) {
       return response;
     }
 
+    if (response === undefined) {
+      return undefined;
+    }
+
     // We can't know the type of the value inside the `response` object
-    return get(response, query.path) as GenericObject;
+    return get(response, query.path) as GenericObject | undefined;
   }
 }

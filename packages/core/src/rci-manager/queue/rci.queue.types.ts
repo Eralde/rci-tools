@@ -1,6 +1,6 @@
 import {Subject} from 'rxjs';
 import type {BaseHttpResponse} from '../../transport';
-import type {GenericObject, ObjectOrArray, Values} from '../../type.utils';
+import type {GenericObject, TaskResult, Values} from '../../type.utils';
 import {RciQuery} from '../query';
 import type {BatchScheduler} from '../scheduler';
 import type {QueryStatsCollector} from '../stats';
@@ -35,11 +35,11 @@ export type RciQueueState = Values<typeof RCI_QUEUE_STATE>;
 export interface Task<QueryPath extends string = string> {
   isSingleQuery: boolean;
   queries: RciQuery<QueryPath>[];
-  subject: Subject<ObjectOrArray>;
+  subject: Subject<TaskResult>;
 }
 
 export type BlockerRaceResult =
-  | {type: 'task'; data: ObjectOrArray}
+  | {type: 'task'; data: TaskResult}
   | {type: 'blocked'};
 
 export interface BatchHttpResult<QueryPath extends string = string> {

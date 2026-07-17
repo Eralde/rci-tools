@@ -2,7 +2,7 @@ import {BehaviorSubject, EMPTY, Observable, Subject, Subscription, defer, of, ra
 import {buffer, catchError, exhaustMap, filter, map, switchMap, take, timeout} from 'rxjs/operators';
 import {RciPayloadHelper} from '../payload';
 import type {BaseHttpResponse, HttpTransport} from '../../transport';
-import type {GenericObject, ObjectOrArray} from '../../type.utils';
+import type {GenericObject, TaskResult} from '../../type.utils';
 import {RCI_QUERY_TIMEOUT} from '../rci.manager.constants';
 import type {RciQuery, RciTask} from '../query';
 import type {BatchScheduler, BatchSnapshot} from '../scheduler';
@@ -43,7 +43,7 @@ export class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends s
   private scheduler: BatchScheduler<QueryPath>;
   private readonly queueName: string;
   private readonly statsCollector: QueryStatsCollector | null;
-  private readonly pendingTaskSubjects = new Set<Subject<ObjectOrArray>>();
+  private readonly pendingTaskSubjects = new Set<Subject<TaskResult>>();
 
   private pendingTasksCount = 0;
   private batchSubscription: Subscription | null = null;
@@ -76,16 +76,16 @@ export class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends s
   }
 
   public addTask(query: RciQuery<QueryPath>, saveConfiguration?: boolean): Observable<GenericObject | undefined>;
-  public addTask(query: RciQuery<QueryPath>[], saveConfiguration?: boolean): Observable<GenericObject[]>;
+  public addTask(query: RciQuery<QueryPath>[], saveConfiguration?: boolean): Observable<Array<GenericObject | undefined>>;
   public addTask(
     query: RciTask<QueryPath>,
     saveConfiguration?: boolean,
-  ): Observable<GenericObject | GenericObject[] | undefined>;
-  public addTask(query: RciTask<QueryPath>, saveConfiguration: boolean = false): Observable<any> {
+  ): Observable<TaskResult>;
+  public addTask(query: RciTask<QueryPath>, saveConfiguration: boolean = false): Observable<TaskResult> {
     return defer(() => this.addTaskWhenSubscribed(query, saveConfiguration));
   }
 
-  private addTaskWhenSubscribed(query: RciTask<QueryPath>, saveConfiguration: boolean): Observable<any> {
+  private addTaskWhenSubscribed(query: RciTask<QueryPath>, saveConfiguration: boolean): Observable<TaskResult> {
     const task$ = this.processTask(query, saveConfiguration);
 
     if (!this.blockerQueue) {
@@ -123,7 +123,7 @@ export class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends s
       );
   }
 
-  private processTask(query: RciTask<QueryPath>, saveConfiguration: boolean = false): Observable<any> {
+  private processTask(query: RciTask<QueryPath>, saveConfiguration: boolean = false): Observable<TaskResult> {
     // Outer Observable is required to avoid adding a new task
     // until returned Observable is actually subscribed to
     return of(true)
@@ -192,10 +192,10 @@ export class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends s
     this.scheduler = scheduler;
   }
 
-  private provideDataToTasks(chunkedResponses: GenericObject[][], tasks: Task<QueryPath>[]): void {
+  private provideDataToTasks(chunkedResponses: Array<Array<GenericObject | undefined>>, tasks: Task<QueryPath>[]): void {
     tasks.forEach(({subject, isSingleQuery}, index) => {
       const taskData = isSingleQuery
-        ? chunkedResponses[index]![0]!
+        ? chunkedResponses[index]![0]
         : chunkedResponses[index]!;
 
       subject.next(taskData);
@@ -281,7 +281,7 @@ export class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends s
   }
 
   private prepareTask(query: RciTask<QueryPath>, saveConfiguration: boolean): Task<QueryPath> {
-    const subject = new Subject<ObjectOrArray>();
+    const subject = new Subject<TaskResult>();
 
     this.pendingTaskSubjects.add(subject);
     const isSingleQuery = !Array.isArray(query);
