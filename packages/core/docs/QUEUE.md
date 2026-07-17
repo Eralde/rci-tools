@@ -119,16 +119,13 @@ one result, produced by the batch that actually completed.
 > **Non-idempotent commands can execute twice under preemption.** Abandoning an in-flight query
 > only discards the *response* &mdash; the request has already reached the device, which may execute it
 > anyway. The re-sent batch then executes the same queries again. This is the intended trade-off
-> for `show.*` polling (freshness after priority work beats deduplication), but it means a
-> preempted batch containing writes (including the `system.configuration.save` query appended by
-> `saveConfiguration: true`) may be applied twice.
+> for `show.*` polling (freshness after priority work beats deduplication), but generally it means
+> that queries that change device's state may be executed twice.
 >
 > It is up to you how to handle this:
 >
-> - with `RciManager`, send writes through the priority queue
->   (`queue(query, {isPriorityTask: true})`) -> the priority queue
->   has no blocker and is never preempted;
-> - or use a standalone `RciQueue` without `blockerQueue` for write traffic,
+> - use only on of two queues in `RciManager` (ignore `isPriorityTask` attribute in options.
+> - use a standalone `RciQueue` without `blockerQueue` for write traffic,
 >   the two-queue system is entirely opt-in.
 
 ### Custom scheduling and stats

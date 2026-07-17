@@ -26,14 +26,9 @@ class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends string =
   ) { /* ... */
   }
 
-  public addTask(query: RciTask, saveConfiguration?: boolean): Observable<any> { /* ... */
-  }
-
-  public setScheduler(scheduler: BatchScheduler<QueryPath>): void { /* ... */
-  }
-
-  public destroy(): void { /* ... */
-  }
+  public addTask(query: RciTask, saveConfiguration?: boolean): Observable<any> { /* ... */ }
+  public setScheduler(scheduler: BatchScheduler<QueryPath>): void { /* ... */ }
+  public destroy(): void { /* ... */ }
 }
 ```
 
@@ -126,16 +121,14 @@ batchQueue.addTask({path: 'show.version'}).subscribe();
 > запроса отбрасывает только *ответ* &mdash; сам запрос уже дошёл до устройства, и оно может его
 > выполнить. Повторно отправленный батч выполнит те же запросы ещё раз. Для опроса `show.*` это
 > осознанный компромисс (актуальность данных после приоритетной работы важнее дедупликации), но
-> это означает, что вытесненный батч с командами записи (включая запрос
-> `system.configuration.save`, добавляемый опцией `saveConfiguration: true`) может быть применён
-> дважды.
+> в общем случае это означает, и команды, меняющие что-то в состоянии устройства могут быть 
+> выполнены дважды.
 >
 > Избежать вытеснения можно следующими способами:
 >
-> - при использовании `RciManager` отправляйте команды записи через приоритетную очередь
->   (`queue(query, {isPriorityTask: true})`) &mdash; у приоритетной очереди нет блокирующей, и она
->   никогда не вытесняется;
-> - либо используйте отдельный `RciQueue` без `blockerQueue` для команд записи &mdash;
+> - используйте только одну очередь (не использовать аргумент `isPriorityTask` в методах
+>   `RciManager`
+> - используйте отдельный `RciQueue` без `blockerQueue` для команд записи &mdash;
 >   система из двух очередей в `RciManager` полностью опциональна.
 
 ### Своё планирование и статистика
