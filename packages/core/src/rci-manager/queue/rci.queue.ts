@@ -9,7 +9,7 @@ import type {RciQuery, RciTask} from '../query';
 import type {BatchScheduler, BatchSnapshot} from '../scheduler';
 import {TimerScheduler} from '../scheduler';
 import type {QueryStatsCollector} from '../stats';
-import type {RciQueueOptions, RciQueueState, Task} from './rci.queue.types';
+import type {QueueTask, RciQueueOptions, RciQueueState} from './rci.queue.types';
 import {RCI_QUEUE_STATE} from './rci.queue.types';
 import {
   RCI_QUEUE_BUSY_STATES,
@@ -21,7 +21,7 @@ import {QueueNotIdleError} from './queue-not-idle.error';
 import {QueueDestroyedError} from './queue-destroyed.error';
 
 interface InFlightBatch<QueryPath extends string = string> {
-  tasks: Task<QueryPath>[];
+  tasks: QueueTask<QueryPath>[];
   subscription: Subscription;
 }
 
@@ -53,11 +53,11 @@ export class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends s
   private readonly blockerQueue: RciQueue<ResponseType, QueryPath> | null;
   private scheduler: BatchScheduler<QueryPath>;
   private readonly queueName: string;
-  private readonly statsCollector: QueryStatsCollector | null;
+  private readonly statsCollector: QueryStatsCollector<QueryPath> | null;
 
   // tasks waiting for the next HTTP query, in insertion order;
   // tasks recalled from a preempted in-flight query go back to the head
-  private pendingTasks: Task<QueryPath>[] = [];
+  private pendingTasks: QueueTask<QueryPath>[] = [];
   private inFlight: InFlightBatch<QueryPath> | null = null;
 
   private blockerSubscription: Subscription | null = null;
@@ -103,13 +103,17 @@ export class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends s
   public addTask(
     query: RciTask<QueryPath>,
     saveConfiguration?: boolean,
-  ): Observable<GenericObject | GenericObject[] | undefined>;
-  public addTask(query: RciTask<QueryPath>, saveConfiguration: boolean = false): Observable<any> {
+  ): Observable<TaskResult>;
+  public addTask(query: RciTask<QueryPath>, saveConfiguration: boolean = false): Observable<TaskResult> {
     // defer() postpones all side effects until the returned Observable is subscribed to
     return defer(() => this.enqueueTask(query, saveConfiguration));
   }
 
   public setScheduler(scheduler: BatchScheduler<QueryPath>): void {
+    if (this.isDestroyed) {
+      throw new QueueDestroyedError('Unable to set scheduler: queue is destroyed');
+    }
+
     if (this.stateSub$.value !== RCI_QUEUE_STATE.READY) {
       throw new QueueNotIdleError(this.stateSub$.value);
     }
@@ -142,13 +146,13 @@ export class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends s
     this.pendingTasks = [];
 
     for (const task of unresolvedTasks) {
-      task.subject.error(new Error('Queue destroyed'));
+      task.subject.error(new QueueDestroyedError());
     }
 
     this.stateSub$.complete();
   }
 
-  private enqueueTask(query: RciTask<QueryPath>, saveConfiguration: boolean): Observable<any> {
+  private enqueueTask(query: RciTask<QueryPath>, saveConfiguration: boolean): Observable<TaskResult> {
     if (this.isDestroyed) {
       return throwError(() => new QueueDestroyedError());
     }
@@ -168,7 +172,7 @@ export class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends s
     return task.subject.asObservable();
   }
 
-  private prepareTask(query: RciTask<QueryPath>, saveConfiguration: boolean): Task<QueryPath> {
+  private prepareTask(query: RciTask<QueryPath>, saveConfiguration: boolean): QueueTask<QueryPath> {
     // A ReplaySubject so that a result produced synchronously
     // (e.g. by a scheduler that fires on subscribe) still reaches the caller
     const subject = new ReplaySubject<TaskResult>(1);
@@ -285,7 +289,7 @@ export class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends s
 
     let isSettled = false;
 
-    const subscription = this.httpTransport.sendQueryArray(this.rciPath, queryArray)
+    const subscription = defer(() => this.httpTransport.sendQueryArray(this.rciPath, queryArray))
       .pipe(
         timeout(RCI_QUERY_TIMEOUT),
         map((batchedResponse): [GenericObject[], unknown] => [batchedResponse, null]),
@@ -306,7 +310,7 @@ export class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends s
   }
 
   private handleBatchResponse(
-    tasks: Task<QueryPath>[],
+    tasks: QueueTask<QueryPath>[],
     queryMap: QueryMap,
     sentAt: number,
     batchedResponse: GenericObject[],
@@ -321,7 +325,7 @@ export class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends s
     }
 
     const durationMs = Date.now() - sentAt;
-    const queryCount = tasks.reduce((sum: number, task: Task<QueryPath>) => sum + task.queries.length, 0);
+    const queryCount = tasks.reduce((sum: number, task: QueueTask<QueryPath>) => sum + task.queries.length, 0);
     const queryPaths = tasks.flatMap((task) => task.queries.map((query) => query.path));
 
     try {
@@ -359,7 +363,7 @@ export class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends s
 
   private provideDataToTasks(
     chunkedResponses: Array<Array<GenericObject | undefined>>,
-    tasks: Task<QueryPath>[],
+    tasks: QueueTask<QueryPath>[],
   ): void {
     tasks.forEach(({subject, isSingleQuery}, index) => {
       const taskData = isSingleQuery
@@ -371,7 +375,7 @@ export class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends s
     });
   }
 
-  private provideErrorDataToTasks(error: unknown, tasks: Task<QueryPath>[]): void {
+  private provideErrorDataToTasks(error: unknown, tasks: QueueTask<QueryPath>[]): void {
     tasks.forEach(({subject}) => {
       subject.error(error);
     });

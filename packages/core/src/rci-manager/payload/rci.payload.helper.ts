@@ -1,7 +1,7 @@
 import {flatMap, get, mapValues, orderBy, pick, reduce, set, sortBy} from 'lodash-es';
 import type {GenericObject} from '../../type.utils';
 import type {RciQuery} from '../query/';
-import {SAVE_CONFIGURATION_QUERY, Task} from '../queue/';
+import {QueueTask, SAVE_CONFIGURATION_QUERY} from '../queue/';
 import {
   CompactPayload,
   PartialQueryMap,
@@ -89,7 +89,7 @@ export class RciPayloadHelper {
       .map((item) => item.response);
   }
 
-  public static batchTasks(tasks: Task[]): CompactPayload {
+  public static batchTasks(tasks: QueueTask[]): CompactPayload {
     const allQueries: RciQuery[] = flatMap(tasks, 'queries');
 
     return RciPayloadHelper.compactQueries(allQueries, QUERY_SORT.SHOW_FIRST | QUERY_SORT.SAVE_CONFIGURATION_LAST);
@@ -97,7 +97,7 @@ export class RciPayloadHelper {
 
   public static splitResponsesPerTask(
     batchedResponse: GenericObject[],
-    tasks: Task[],
+    tasks: QueueTask[],
     queryMap: QueryMap,
   ): Array<Array<GenericObject | undefined>> {
     const allResults = RciPayloadHelper.inflateResponse(batchedResponse, queryMap);

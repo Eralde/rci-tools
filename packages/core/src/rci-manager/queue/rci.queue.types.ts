@@ -11,7 +11,7 @@ export interface RciQueueOptions<ResponseType extends BaseHttpResponse, QueryPat
   blockerQueue: RciQueue<ResponseType, QueryPath> | null;
   queueName?: string;
   scheduler?: BatchScheduler<QueryPath> | undefined;
-  statsCollector?: QueryStatsCollector | null | undefined;
+  statsCollector?: QueryStatsCollector<QueryPath> | null | undefined;
 }
 
 export const RCI_QUEUE_STATE = {
@@ -33,7 +33,7 @@ export const RCI_QUEUE_STATE = {
 
 export type RciQueueState = Values<typeof RCI_QUEUE_STATE>;
 
-export interface Task<QueryPath extends string = string> {
+export interface QueueTask<QueryPath extends string = string> {
   isSingleQuery: boolean;
   queries: RciQuery<QueryPath>[];
   subject: Subject<TaskResult>;

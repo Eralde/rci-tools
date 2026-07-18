@@ -26,7 +26,7 @@ export class RciManager<
   protected readonly batchQueue: RciQueue<BaseHttpResponse, QueryPath>;
   protected readonly priorityQueue: RciQueue<BaseHttpResponse, QueryPath>;
   protected readonly backgroundQueues: Record<string, RciBackgroundTaskQueue<BackgroundQueryPath>> = {};
-  protected readonly statsCollector = new QueryStatsCollector();
+  protected readonly statsCollector = new QueryStatsCollector<QueryPath>();
   protected currentSchedulerSwapToken: symbol | null = null;
 
   protected readonly rciPath: string;
@@ -67,7 +67,7 @@ export class RciManager<
   }
 
   public get stats$(): Observable<QueryStats<QueryPath>> {
-    return this.statsCollector.stats$ as Observable<QueryStats<QueryPath>>;
+    return this.statsCollector.stats$;
   }
 
   public toggleStats(enabled: boolean): void {
@@ -123,8 +123,13 @@ export class RciManager<
     });
   }
 
-  public execute(query: RciQuery<QueryPath>): Observable<GenericObject | undefined>;
-  public execute(query: Array<RciQuery<QueryPath>>): Observable<Array<GenericObject | undefined>>;
+  /**
+   * `T` is asserted, not runtime-validated; validate at runtime (e.g. with a schema) if needed.
+   */
+  public execute<T extends object = GenericObject>(query: RciQuery<QueryPath>): Observable<T | undefined>;
+  public execute<T extends object = GenericObject>(
+    query: Array<RciQuery<QueryPath>>,
+  ): Observable<Array<T | undefined>>;
   public execute(query: RciTask<QueryPath>): Observable<GenericObject | Array<GenericObject | undefined> | undefined> {
     const isSingleQuery = !Array.isArray(query);
     const queryList: Array<RciQuery<QueryPath>> = isSingleQuery
@@ -154,8 +159,17 @@ export class RciManager<
       );
   }
 
-  public queue(query: RciQuery<QueryPath>, options?: QueueOptions): Observable<GenericObject | undefined>;
-  public queue(query: Array<RciQuery<QueryPath>>, options?: QueueOptions): Observable<Array<GenericObject | undefined>>;
+  /**
+   * `T` is asserted, not runtime-validated; validate at runtime (e.g. with a schema) if needed.
+   */
+  public queue<T extends object = GenericObject>(
+    query: RciQuery<QueryPath>,
+    options?: QueueOptions,
+  ): Observable<T | undefined>;
+  public queue<T extends object = GenericObject>(
+    query: Array<RciQuery<QueryPath>>,
+    options?: QueueOptions,
+  ): Observable<Array<T | undefined>>;
   public queue(
     query: RciQuery<QueryPath> | Array<RciQuery<QueryPath>>,
     options?: QueueOptions,
