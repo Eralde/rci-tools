@@ -1,15 +1,13 @@
 import {fileURLToPath} from 'node:url';
 import {resolve} from 'node:path';
 import {firstValueFrom} from 'rxjs';
-import {InspectableAxiosTransport, promptForCredentials} from './common';
+import {DeviceResponse, InspectableAxiosTransport, promptForCredentials} from './common';
 import {SessionManager} from '../../src';
 import {Ndw2InteractiveAuthProtocol, SessionAuthContext} from '../../src/session-manager/auth-protocol';
 
-type DeviceResponse = Awaited<ReturnType<InspectableAxiosTransport['inspectAuth']>>;
+export const AUTH_SCHEMA = 'x-ndw2-interactive';
 
-export const NDW2_AUTH_SCHEME = 'x-ndw2-interactive';
-
-export const assertNdw2Challenge = (status: number, header: string): void => {
+export const assertAuth = (status: number, header: string): void => {
   if (status === 200) {
     throw new Error('Device is already authenticated; no NDW2 challenge was returned.');
   }
@@ -18,8 +16,8 @@ export const assertNdw2Challenge = (status: number, header: string): void => {
     throw new Error(`Expected HTTP 401 from device auth endpoint, received HTTP ${status}.`);
   }
 
-  if (!header.includes(NDW2_AUTH_SCHEME)) {
-    throw new Error(`Device did not advertise "${NDW2_AUTH_SCHEME}" auth schema.`);
+  if (!header.includes(AUTH_SCHEMA)) {
+    throw new Error(`Device did not advertise "${AUTH_SCHEMA}" auth schema.`);
   }
 };
 
@@ -50,8 +48,8 @@ const main = async (): Promise<void> => {
   console.log(`HTTP status: ${challengeResponse.status}`);
   console.log(`WWW-Authenticate: ${challengeHeader || '(missing)'}`);
 
-  assertNdw2Challenge(challengeResponse.status, challengeHeader);
-  console.log('NDW2 challenge detected; forcing legacy login handshake...');
+  assertAuth(challengeResponse.status, challengeHeader);
+  console.log(`${AUTH_SCHEMA} challenge detected; forcing legacy login handshake...`);
 
   const sessionManager = new SessionManager<DeviceResponse>(credentials.address, transport);
   const protocol = new Ndw2InteractiveAuthProtocol<DeviceResponse>(credentials.address, transport);
@@ -72,18 +70,20 @@ const main = async (): Promise<void> => {
   );
 
   if (!authenticated) {
-    throw new Error('NDW2 authentication failed.');
+    throw new Error(`${AUTH_SCHEMA} authentication failed.`);
   }
 
-  console.log('NDW2 authentication succeeded.');
+  console.log(`${AUTH_SCHEMA} authentication succeeded.`);
 };
 
 const isDirectExecution = process.argv[1]
   && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 
 if (isDirectExecution) {
-  void main().catch((error: unknown) => {
-    console.error(error instanceof Error ? error.message : error);
-    process.exitCode = 1;
-  });
+  void main()
+    .catch((error: unknown) => {
+      console.error(error instanceof Error ? error.message : error);
+
+      process.exitCode = 1;
+    });
 }

@@ -86,3 +86,5 @@ export class InspectableAxiosTransport extends AxiosTransport {
     );
   }
 }
+
+export type DeviceResponse = Awaited<ReturnType<InspectableAxiosTransport['inspectAuth']>>;
