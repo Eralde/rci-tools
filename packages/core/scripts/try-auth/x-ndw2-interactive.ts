@@ -3,7 +3,7 @@ import {resolve} from 'node:path';
 import {firstValueFrom} from 'rxjs';
 import {DeviceResponse, InspectableAxiosTransport, promptForCredentials} from './common';
 import {SessionManager} from '../../src';
-import {Ndw2InteractiveAuthProtocol, SessionAuthContext} from '../../src/session-manager/auth-protocol';
+import {Ndw2AuthProtocol, SessionAuthContext} from '../../src/session-manager/auth-protocol';
 
 export const AUTH_SCHEMA = 'x-ndw2-interactive';
 
@@ -52,7 +52,7 @@ const main = async (): Promise<void> => {
   console.log(`${AUTH_SCHEMA} challenge detected; forcing legacy login handshake...`);
 
   const sessionManager = new SessionManager<DeviceResponse>(credentials.address, transport);
-  const protocol = new Ndw2InteractiveAuthProtocol<DeviceResponse>(credentials.address, transport);
+  const protocol = new Ndw2AuthProtocol<DeviceResponse>(credentials.address, transport);
 
   const context: SessionAuthContext<DeviceResponse> = {
     isAuthenticated: () => sessionManager.isAuthenticated(),

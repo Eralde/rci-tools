@@ -1,8 +1,7 @@
 import {Observable, of} from 'rxjs';
 import {catchError, map, switchMap, tap} from 'rxjs/operators';
 import type {BaseHttpResponse, HttpTransport} from '../transport';
-import {Ndw2InteractiveAuthProtocol, SessionAuthContext, SessionAuthProtocol} from './auth-protocol';
-import {Ndw4InteractiveAuthProtocol} from './auth-protocol/ndw4-interactive-auth.protocol';
+import {Ndw2AuthProtocol, Ndw4AuthProtocol, SessionAuthContext, SessionAuthProtocol} from './auth-protocol';
 
 export class SessionManager<ResponseType extends BaseHttpResponse = BaseHttpResponse> {
   private readonly authProtocols: Array<SessionAuthProtocol<ResponseType>> = [];
@@ -17,8 +16,8 @@ export class SessionManager<ResponseType extends BaseHttpResponse = BaseHttpResp
     this.authUri = `${this.host}/auth`;
 
     this.authProtocols.push(
-      new Ndw4InteractiveAuthProtocol(this.host, this.httpTransport), // prefer if available
-      new Ndw2InteractiveAuthProtocol(this.host, this.httpTransport),
+      new Ndw4AuthProtocol(this.host, this.httpTransport), // prefer if available
+      new Ndw2AuthProtocol(this.host, this.httpTransport),
     );
   }
 

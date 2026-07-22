@@ -3,7 +3,7 @@ import {resolve} from 'node:path';
 import {firstValueFrom} from 'rxjs';
 import {InspectableAxiosTransport, promptForCredentials} from './common';
 import {SessionManager} from '../../src';
-import {Ndw4InteractiveAuthProtocol, SessionAuthContext} from '../../src/session-manager/auth-protocol';
+import {Ndw4AuthProtocol, SessionAuthContext} from '../../src/session-manager/auth-protocol';
 
 type DeviceResponse = Awaited<ReturnType<InspectableAxiosTransport['inspectAuth']>>;
 
@@ -54,7 +54,7 @@ const main = async (): Promise<void> => {
   console.log(`${AUTH_SCHEMA} challenge detected; proceeding...`);
 
   const sessionManager = new SessionManager<DeviceResponse>(credentials.address, transport);
-  const protocol = new Ndw4InteractiveAuthProtocol<DeviceResponse>(credentials.address, transport);
+  const protocol = new Ndw4AuthProtocol<DeviceResponse>(credentials.address, transport);
 
   const context: SessionAuthContext<DeviceResponse> = {
     isAuthenticated: () => sessionManager.isAuthenticated(),

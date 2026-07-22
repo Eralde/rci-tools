@@ -2,8 +2,8 @@ import {Observable, defer, exhaustMap, of} from 'rxjs';
 import {catchError, map} from 'rxjs/operators';
 import {md5} from 'hash-wasm';
 import jsSha from 'jssha';
-import type {BaseHttpResponse, HttpTransport} from '../../transport';
-import type {SessionAuthContext, SessionAuthProtocol} from './auth-protocol.types';
+import type {BaseHttpResponse, HttpTransport} from '../../../transport';
+import type {SessionAuthContext, SessionAuthProtocol} from '../auth-protocol.types';
 
 interface PasswordData {
   token: string;
@@ -12,7 +12,7 @@ interface PasswordData {
   password: string;
 }
 
-export class Ndw2InteractiveAuthProtocol<ResponseType extends BaseHttpResponse = BaseHttpResponse>
+export class Ndw2AuthProtocol<ResponseType extends BaseHttpResponse = BaseHttpResponse>
   implements SessionAuthProtocol<ResponseType> {
   public readonly schema = 'x-ndw2-interactive';
   public readonly authEndpoint: string;

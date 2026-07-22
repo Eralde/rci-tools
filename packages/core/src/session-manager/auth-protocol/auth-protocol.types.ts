@@ -1,5 +1,5 @@
-import {BaseHttpResponse, HttpTransport} from '../../transport';
 import {Observable} from 'rxjs';
+import {BaseHttpResponse, HttpTransport} from '../../transport';
 
 export interface SessionAuthContext<ResponseType extends BaseHttpResponse = BaseHttpResponse> {
   isAuthenticated(): Observable<boolean>;

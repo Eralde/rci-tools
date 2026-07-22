@@ -49,7 +49,7 @@ export const promptForCredentials = async (): Promise<DeviceCredentials> => {
       type: 'input',
       name: 'address',
       message: 'Enter device IPv4 address or URL:',
-      default: '192.168.1.1',
+      default: '192.168.38.11',
       filter(input: string): string {
         return normalizeDeviceAddress(input);
       },
