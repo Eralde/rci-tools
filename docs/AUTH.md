@@ -10,8 +10,8 @@ using username and password you need to do the following:
 
 There are two schemas:
 
-- [`x-ndw2-interactive`](#step-2-x-ndw2-interactive) — a single hashed password sent in response to a challenge
-- [`x-ndw4-interactive`](#step-2-x-ndw4-interactive) — a SCRAM-SHA3-512 handshake with Argon2id key derivation
+- [`x-ndw2-interactive`](#step-2-x-ndw2-interactive) &mdash; a single hashed password sent in response to a challenge
+- [`x-ndw4-interactive`](#step-2-x-ndw4-interactive) &mdash; a SCRAM-SHA3-512 handshake with Argon2id key derivation
 
 If the device advertises both, prefer `x-ndw4-interactive`.
 
@@ -105,13 +105,13 @@ the password as well (mutual authentication).
 Every phase is a POST request with a plain JSON body sent to the endpoint taken from
 the `endpoint="..."` parameter of the `x-ndw4-interactive` chunk of the `WWW-Authenticate`
 header (`<KINETIC_ADDRESS><endpoint>`). The device replies with a base64-encoded JSON object
-in the `X-NDM-Data` **response header** — the body of the reply is not used.
+in the `X-NDM-Data` **response header** &mdash; the body of the reply is not used.
 The replies of the first two phases come with a non-200 HTTP code, which is expected;
 only the last one is a 200.
 
 A reply that contains a non-empty `error` (or `e`) field is a failure: report it and stop.
 
-2. **Phase 1** — ask for the challenge.
+2. **Phase 1** &mdash; ask for the challenge.
 
    Generate a client nonce (16 random bytes, base64-encoded) and send:
         ```
@@ -160,7 +160,7 @@ A reply that contains a non-empty `error` (or `e`) field is a failure: report it
        const proof = (message) => base64(clientKey XOR hmacSha3_512(storedKey, message));
        ```
 
-4. **Phase 2** — send the client proof:
+4. **Phase 2** &mdash; send the client proof:
         ```
         {
           login: username,
@@ -180,7 +180,7 @@ A reply that contains a non-empty `error` (or `e`) field is a failure: report it
    If the signatures do not match, the device does not know the password:
    abort without sending the last phase.
 
-5. **Phase 3** — confirm the verified signature:
+5. **Phase 3** &mdash; confirm the verified signature:
         ```
         {
           login: username,
@@ -198,7 +198,7 @@ A reply that contains a non-empty `error` (or `e`) field is a failure: report it
 The HTTP session lasts 10 minutes (i.e., if no requests are sent within 10 minutes,
 you will have to authenticate again).
 
-There is [a `bash` function](./password_auth_fn.sh) that you can call to try
+There is [a `bash` function](ndw2_auth_fn.sh) that you can call to try
 the `x-ndw2-interactive` algorithm described above.
 The function assumes that the following binaries are available:
 - `curl`
@@ -208,9 +208,9 @@ The function assumes that the following binaries are available:
 
 Usage:
 ```bash
-source password_auth_fn.sh
+source ndw2_auth_fn.sh
 
-password_auth --username <username> --password <password> [--addr <address>]
+ndw2_auth --username <username> --password <password> [--addr <address>]
 ```
 
 Both schemas can also be tried against a real device with the scripts from `packages/core`
