@@ -1,5 +1,6 @@
 #!/bin/bash
-# Authenticates an HTTP session on a Keenetic/Netcraze device using username and password.
+# Authenticates an HTTP session on a Keenetic/Netcraze device
+# using username and password (x-ndw2-interactive authentication).
 #
 # The function assumes that the following binaries are available:
 # - `curl`
@@ -8,13 +9,13 @@
 # - `shasum`
 #
 # Usage:
-# > password_auth --username <username> --password <password> [--addr <address>]
+# > ndw2_auth --username <username> --password <password> [--addr <address>]
 #
 # If you run this script without --username and/or --password arguments,
 # it will attempt to authenticate session on the device without them
 # (that will work if the password for the default user is not set).
 #
-password_auth() {
+ndw2_auth() {
   # Check for required binaries
   local required_bins=("curl" "jq" "md5" "shasum")
 
@@ -60,7 +61,7 @@ password_auth() {
       echo "$r" | grep -i 'Set-Cookie:' | awk '{print $2}' | cut -d';' -f1
       return 0
     else
-      echo "Username/password required. Usage: password_auth --username <username> --password <password> [--addr <address>]"
+      echo "Username/password required. Usage: ndw2_auth --username <username> --password <password> [--addr <address>]"
       return 1
     fi
   fi
