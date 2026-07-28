@@ -1,0 +1,9 @@
+export const NDW4_CLIENT_KEY = 'NDW4 Interactive Client Key';
+export const NDW4_SERVER_KEY = 'NDW4 Interactive Server Key';
+export const NDW4_HASH_LENGTH = 64;
+export const NDW4_PARALLELISM = 1;
+export const NDW4_REPLY_HEADER = 'X-NDM-Data';
+export const NDW4_SALT_LENGTH = 16;
+export const NDW4_MAX_ITERATIONS = 64;
+export const NDW4_MIN_MEMORY_KIB = 8;
+export const NDW4_MAX_MEMORY_KIB = 262144;

@@ -1,17 +1,10 @@
-import {Observable, exhaustMap, from, of} from 'rxjs';
+import {Observable, of} from 'rxjs';
 import {catchError, map, switchMap, tap} from 'rxjs/operators';
-import {md5} from 'hash-wasm';
-import jsSha from 'jssha';
 import type {BaseHttpResponse, HttpTransport} from '../transport';
-
-interface PasswordData {
-  token: string;
-  login: string;
-  realm: string;
-  password: string;
-}
+import {Ndw2AuthProtocol, Ndw4AuthProtocol, SessionAuthContext, SessionAuthProtocol} from './auth-protocol';
 
 export class SessionManager<ResponseType extends BaseHttpResponse = BaseHttpResponse> {
+  private readonly authProtocols: Array<SessionAuthProtocol<ResponseType>> = [];
   private readonly authUri: string;
 
   private isLoggingErrors: boolean = false;
@@ -21,6 +14,11 @@ export class SessionManager<ResponseType extends BaseHttpResponse = BaseHttpResp
     private httpTransport: HttpTransport<ResponseType>,
   ) {
     this.authUri = `${this.host}/auth`;
+
+    this.authProtocols.push(
+      new Ndw4AuthProtocol(this.host, this.httpTransport), // prefer if available
+      new Ndw2AuthProtocol(this.host, this.httpTransport),
+    );
   }
 
   public isAuthenticated(): Observable<boolean> {
@@ -43,9 +41,7 @@ export class SessionManager<ResponseType extends BaseHttpResponse = BaseHttpResp
     return this.httpTransport.get(this.authUri)
       .pipe(
         catchError((error) => of(this.errorToResponse(error))),
-        map((response) => {
-          return String(this.httpTransport.getHeader(response, 'X-NDM-Realm') ?? '');
-        }),
+        map((response) => this.httpTransport.getHeader(response, 'X-NDM-Realm')),
       );
   }
 
@@ -60,17 +56,24 @@ export class SessionManager<ResponseType extends BaseHttpResponse = BaseHttpResp
             return of(true);
           }
 
-          const passwordData: PasswordData = {
-            token: this.httpTransport.getHeader(response, 'X-NDM-Challenge'),
-            realm: this.httpTransport.getHeader(response, 'X-NDM-Realm'),
-            login: username,
-            password,
-          };
+          const protocol = this.authProtocols.find((candidate) => {
+            return candidate.isSupported(response);
+          });
 
-          return this.getEncryptedPassword(passwordData)
-            .pipe(
-              exhaustMap((encryptedPassword) => this.doAuth(username, encryptedPassword)),
-            );
+          if (!protocol) {
+            this.logError(`No supported authentication protocol found for response with status ${response.status}`);
+
+            return of(false);
+          }
+
+          const context = this.getAuthContext();
+
+          return protocol.authenticate(
+            response,
+            context,
+            username,
+            password,
+          );
         }),
       );
   }
@@ -108,40 +111,11 @@ export class SessionManager<ResponseType extends BaseHttpResponse = BaseHttpResp
     return error as ResponseType;
   }
 
-  private getEncryptedPassword(props: PasswordData): Observable<string> {
-    const {
-      token,
-      login,
-      realm,
-      password,
-    } = props;
-
-    const sha = new jsSha('SHA-256', 'TEXT');
-
-    return from(md5(`${login}:${realm}:${password}`))
-      .pipe(
-        map((md5Hash) => {
-          sha.update(token + String(md5Hash));
-
-          return sha.getHash('HEX');
-        }),
-      );
-  }
-
-  private doAuth(username: string, encryptedPassword: string): Observable<boolean> {
-    const requestData = {
-      login: username,
-      password: encryptedPassword,
+  private getAuthContext(): SessionAuthContext<ResponseType> {
+    return {
+      isAuthenticated: () => this.isAuthenticated(),
+      errorToResponse: (error) => this.errorToResponse(error),
+      logError: (error) => this.logError(error),
     };
-
-    return this.httpTransport.post(this.authUri, requestData)
-      .pipe(
-        catchError((error) => {
-          this.logError(error);
-
-          return of(this.errorToResponse(error) ?? ({status: -1, data: {error: 'Unknown error'}} as ResponseType));
-        }),
-        exhaustMap(() => this.isAuthenticated()),
-      );
   }
 }

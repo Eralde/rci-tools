@@ -34,6 +34,8 @@
     "fmt": "dprint fmt ./src/**/*.ts",
     "dev": "tsc --watch",
     "test": "tsx scripts/test-runner.ts",
+    "test:ndw2-auth": "tsx scripts/try-auth/x-ndw2-interactive.ts",
+    "test:ndw4-auth": "tsx scripts/try-auth/x-ndw4-interactive.ts",
     "typecheck": "tsc --noEmit",
     "measure": "tsx ./scripts/measurements/measure.ts"
   },
