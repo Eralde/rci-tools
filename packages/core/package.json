@@ -1,6 +1,6 @@
 {
   "name": "@rci-tools/core",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "description": "Interact with REST Core Interface on Keenetic/Netcraze devices",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
