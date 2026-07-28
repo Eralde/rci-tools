@@ -9,10 +9,3 @@ export interface RciManagerOptions<QueryPath extends string = string> {
   batchTimeout?: number;
   batchScheduler?: BatchScheduler<QueryPath>;
 }
-
-export interface RciResponse {
-  [key: string]: unknown;
-  error?: unknown;
-  status?: unknown;
-  body?: unknown;
-}

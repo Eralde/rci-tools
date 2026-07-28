@@ -1,6 +1,6 @@
 export class QueueDestroyedError extends Error {
-  constructor() {
-    super(`Unable to enqueue: queue is destroyed`);
+  constructor(message: string = 'Queue destroyed') {
+    super(message);
 
     this.name = 'QueueDestroyedError';
   }

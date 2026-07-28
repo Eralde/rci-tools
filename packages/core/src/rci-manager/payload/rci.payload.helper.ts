@@ -1,7 +1,7 @@
 import {flatMap, get, mapValues, orderBy, pick, reduce, set, sortBy} from 'lodash-es';
 import type {GenericObject} from '../../type.utils';
 import type {RciQuery} from '../query/';
-import {SAVE_CONFIGURATION_QUERY, Task} from '../queue/';
+import {QueueTask, SAVE_CONFIGURATION_QUERY} from '../queue/';
 import {
   CompactPayload,
   PartialQueryMap,
@@ -89,7 +89,7 @@ export class RciPayloadHelper {
       .map((item) => item.response);
   }
 
-  public static batchTasks(tasks: Task[]): CompactPayload {
+  public static batchTasks(tasks: QueueTask[]): CompactPayload {
     const allQueries: RciQuery[] = flatMap(tasks, 'queries');
 
     return RciPayloadHelper.compactQueries(allQueries, QUERY_SORT.SHOW_FIRST | QUERY_SORT.SAVE_CONFIGURATION_LAST);
@@ -97,11 +97,11 @@ export class RciPayloadHelper {
 
   public static splitResponsesPerTask(
     batchedResponse: GenericObject[],
-    tasks: Task[],
+    tasks: QueueTask[],
     queryMap: QueryMap,
-  ): GenericObject[][] {
+  ): Array<Array<GenericObject | undefined>> {
     const allResults = RciPayloadHelper.inflateResponse(batchedResponse, queryMap);
-    const chunks: GenericObject[][] = [];
+    const chunks: Array<Array<GenericObject | undefined>> = [];
 
     let startIdx = 0;
 
@@ -110,7 +110,7 @@ export class RciPayloadHelper {
       const chunk = allResults
         .slice(startIdx, endIdx)
         .map((response, index) => {
-          return this.prepareResponseData(response!, queries[index]!);
+          return this.prepareResponseData(response, queries[index]!);
         });
 
       chunks.push(chunk);
@@ -126,12 +126,16 @@ export class RciPayloadHelper {
     return set({}, path, data);
   }
 
-  protected static prepareResponseData(response: GenericObject, query: RciQuery): GenericObject {
+  public static prepareResponseData(response: GenericObject | undefined, query: RciQuery): GenericObject | undefined {
     if (query.extractData === false) {
       return response;
     }
 
+    if (response === undefined) {
+      return undefined;
+    }
+
     // We can't know the type of the value inside the `response` object
-    return get(response, query.path) as GenericObject;
+    return get(response, query.path) as GenericObject | undefined;
   }
 }

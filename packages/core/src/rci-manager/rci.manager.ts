@@ -6,7 +6,7 @@ import {RCI_QUEUE_DEFAULT_BATCH_TIMEOUT, RCI_QUEUE_STATE, RciQueue, clampNonNega
 import {BatchScheduler} from './scheduler';
 import {RciBackgroundProcess, RciBackgroundProcessOptions, RciBackgroundTaskQueue} from './background-process';
 import {RciPayloadHelper} from './payload';
-import type {GenericObject} from '../type.utils';
+import type {GenericObject, TaskResult} from '../type.utils';
 import type {QueueOptions, RciManagerOptions} from './rci.manager.types';
 import {DEFAULT_QUEUE_OPTIONS, RCI_QUERY_TIMEOUT, RCI_SCHEDULER_SWAP_DEFAULT_TIMEOUT_MS} from './rci.manager.constants';
 import {QueryStats, QueryStatsCollector} from './stats';
@@ -26,7 +26,7 @@ export class RciManager<
   protected readonly batchQueue: RciQueue<BaseHttpResponse, QueryPath>;
   protected readonly priorityQueue: RciQueue<BaseHttpResponse, QueryPath>;
   protected readonly backgroundQueues: Record<string, RciBackgroundTaskQueue<BackgroundQueryPath>> = {};
-  protected readonly statsCollector = new QueryStatsCollector();
+  protected readonly statsCollector = new QueryStatsCollector<QueryPath>();
   protected currentSchedulerSwapToken: symbol | null = null;
 
   protected readonly rciPath: string;
@@ -67,7 +67,7 @@ export class RciManager<
   }
 
   public get stats$(): Observable<QueryStats<QueryPath>> {
-    return this.statsCollector.stats$ as Observable<QueryStats<QueryPath>>;
+    return this.statsCollector.stats$;
   }
 
   public toggleStats(enabled: boolean): void {
@@ -123,8 +123,13 @@ export class RciManager<
     });
   }
 
-  public execute(query: RciQuery<QueryPath>): Observable<GenericObject | undefined>;
-  public execute(query: Array<RciQuery<QueryPath>>): Observable<Array<GenericObject | undefined>>;
+  /**
+   * `T` is asserted, not runtime-validated; validate at runtime (e.g. with a schema) if needed.
+   */
+  public execute<T extends object = GenericObject>(query: RciQuery<QueryPath>): Observable<T | undefined>;
+  public execute<T extends object = GenericObject>(
+    query: Array<RciQuery<QueryPath>>,
+  ): Observable<Array<T | undefined>>;
   public execute(query: RciTask<QueryPath>): Observable<GenericObject | Array<GenericObject | undefined> | undefined> {
     const isSingleQuery = !Array.isArray(query);
     const queryList: Array<RciQuery<QueryPath>> = isSingleQuery
@@ -143,24 +148,36 @@ export class RciManager<
         timeout(RCI_QUERY_TIMEOUT),
         map((batchedResponse) => {
           const allResponses = RciPayloadHelper.inflateResponse(batchedResponse, queryMap);
+          const extracted = allResponses.map((response, index) => {
+            return RciPayloadHelper.prepareResponseData(response, queryList[index]!);
+          });
 
           return isSingleQuery
-            ? allResponses[0]
-            : allResponses;
+            ? extracted[0]
+            : extracted;
         }),
       );
   }
 
+  /**
+   * `T` is asserted, not runtime-validated; validate at runtime (e.g. with a schema) if needed.
+   */
+  public queue<T extends object = GenericObject>(
+    query: RciQuery<QueryPath>,
+    options?: QueueOptions,
+  ): Observable<T | undefined>;
+  public queue<T extends object = GenericObject>(
+    query: Array<RciQuery<QueryPath>>,
+    options?: QueueOptions,
+  ): Observable<Array<T | undefined>>;
   public queue(
     query: RciQuery<QueryPath> | Array<RciQuery<QueryPath>>,
     options?: QueueOptions,
-  ): Observable<GenericObject | GenericObject[] | undefined>;
-  public queue(query: RciQuery<QueryPath>, options?: QueueOptions): Observable<GenericObject | undefined>;
-  public queue(query: Array<RciQuery<QueryPath>>, options?: QueueOptions): Observable<GenericObject[]>;
+  ): Observable<TaskResult>;
   public queue(
     query: RciTask<QueryPath>,
     options: QueueOptions = DEFAULT_QUEUE_OPTIONS,
-  ): Observable<GenericObject | GenericObject[] | undefined> {
+  ): Observable<TaskResult> {
     if (options.isPriorityTask) {
       return this.priorityQueue.addTask(query, options.saveConfiguration);
     } else {

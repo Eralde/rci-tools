@@ -1,6 +1,6 @@
 import {Subject} from 'rxjs';
 import type {BaseHttpResponse} from '../../transport';
-import type {ObjectOrArray, Values} from '../../type.utils';
+import type {TaskResult, Values} from '../../type.utils';
 import {RciQuery} from '../query';
 import type {BatchScheduler} from '../scheduler';
 import type {QueryStatsCollector} from '../stats';
@@ -11,7 +11,7 @@ export interface RciQueueOptions<ResponseType extends BaseHttpResponse, QueryPat
   blockerQueue: RciQueue<ResponseType, QueryPath> | null;
   queueName?: string;
   scheduler?: BatchScheduler<QueryPath> | undefined;
-  statsCollector?: QueryStatsCollector | null | undefined;
+  statsCollector?: QueryStatsCollector<QueryPath> | null | undefined;
 }
 
 export const RCI_QUEUE_STATE = {
@@ -33,8 +33,8 @@ export const RCI_QUEUE_STATE = {
 
 export type RciQueueState = Values<typeof RCI_QUEUE_STATE>;
 
-export interface Task<QueryPath extends string = string> {
+export interface QueueTask<QueryPath extends string = string> {
   isSingleQuery: boolean;
   queries: RciQuery<QueryPath>[];
-  subject: Subject<ObjectOrArray>;
+  subject: Subject<TaskResult>;
 }

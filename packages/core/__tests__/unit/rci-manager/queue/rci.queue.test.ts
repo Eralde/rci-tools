@@ -292,6 +292,23 @@ describe('RciQueue', () => {
   });
 
   describe('scheduler error handling', () => {
+    it('errors tasks instead of losing them when the transport throws synchronously', () => {
+      const transport = {
+        ...makeTransport(),
+        sendQueryArray: vi.fn().mockImplementation(() => {
+          throw new Error('sync transport failure');
+        }),
+      };
+      const queue = new RciQueue(FAKE_RCI, transport, {batchTimeout: 0});
+      const error = vi.fn();
+
+      queue.addTask({path: 'show.version'}).subscribe({error});
+
+      vi.advanceTimersByTime(0);
+
+      expect(error).toHaveBeenCalledTimes(1);
+    });
+
     it('flushes batch when scheduler throws', () => {
       const transport = makeTransport();
       const faultyScheduler: BatchScheduler = {

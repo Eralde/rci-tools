@@ -1,6 +1,6 @@
 import {expect, vi} from 'vitest';
 import {of} from 'rxjs';
-import type {BaseHttpResponse, HttpTransport} from '../src';
+import type {BaseHttpResponse, HttpTransport} from '../../src';
 
 export const expectObjectContainingPath = (path: string): any => {
   const keys = path.split('.').filter(Boolean);
@@ -14,7 +14,7 @@ export const expectObjectContainingPath = (path: string): any => {
   let result = expect.anything();
 
   for (let i = keys.length - 1; i >= 0; i--) {
-    const key = keys[i];
+    const key = keys[i]!;
 
     result = expect.objectContaining({
       [key]: result,
