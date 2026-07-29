@@ -7,7 +7,8 @@
   "license": "ISC",
   "scripts": {
     "dev": "tsx src/index.ts",
-    "fmt": "dprint fmt \"./src/**/*.ts\""
+    "fmt": "dprint fmt \"./src/**/*.ts\"",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@rci-tools/adapter-axios": "workspace:*",

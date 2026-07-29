@@ -3,16 +3,7 @@
   "compilerOptions": {
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "noEmit": true,
-    "baseUrl": ".",
-    "paths": {
-      "@rci-tools/core": [
-        "../../packages/core/src/index.ts"
-      ],
-      "@rci-tools/adapter-axios": [
-        "../../packages/adapter-axios/src/index.ts"
-      ]
-    }
+    "noEmit": true
   },
   "include": [
     "src"
