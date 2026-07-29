@@ -1,27 +1,19 @@
-import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {afterEach, beforeEach, expect, it, vi} from 'vitest';
 import {firstValueFrom, forkJoin} from 'rxjs';
 import {FetchTransport, RciManager, RciQuery} from '../../src';
 import {expectArrayContainingPath} from '../unit/test.utils';
-
-const IP_ADDRESS = process.env.RCI_DEVICE_IP;
-
-if (!IP_ADDRESS) {
-  throw new Error('Device IP address was not provided.');
-}
+import {describeWithDevice, getDeviceHost} from './device';
 
 const SHOW_VERSION = 'show.version';
 const SHOW_IDENTIFICATION = 'show.identification';
-
-const host = String(IP_ADDRESS).startsWith('http://')
-  ? String(IP_ADDRESS)
-  : `http://${String(IP_ADDRESS)}`;
 
 const originalFetch = global.fetch;
 
 let lastResponseBody: string;
 let fetchSpy: any;
 
-describe('RciManager.execute', () => {
+describeWithDevice('RciManager.execute', () => {
+  const host = getDeviceHost();
   let rciManager: RciManager;
   let fetchTransport: FetchTransport;
 

@@ -1,6 +1,7 @@
 {
   "name": "rci-tools",
   "private": true,
+  "packageManager": "pnpm@10.32.1",
   "scripts": {
     "clean": "pnpm -r run clean",
     "build:packages": "pnpm -r --filter \"./packages/*\" run build",
@@ -8,7 +9,11 @@
     "build:simple-nodejs-demo": "pnpm -r --filter \"./examples/simple-nodejs-demo\" run build",
     "build:local-monitor": "pnpm -r --filter \"./examples/local-monitor\" run build",
     "build": "pnpm -r run build",
-    "test": "vitest run",
+    "test:core": "pnpm --dir packages/core test",
+    "test:axios": "pnpm --dir packages/adapter-axios test",
+    "test:types": "pnpm -r --if-present --filter \"./packages/*\" run test:types",
+    "typecheck:examples": "pnpm -r --filter \"./examples/*\" run typecheck",
+    "verify": "pnpm build:packages && pnpm typecheck && pnpm test:core && pnpm test:axios && pnpm test:types && pnpm typecheck:examples",
     "typecheck": "pnpm -r --filter \"./packages/*\" run typecheck",
     "dev:simple-browser-demo": "pnpm --filter simple-browser-demo run dev",
     "dev:simple-nodejs-demo": "pnpm --filter simple-nodejs-demo run dev",

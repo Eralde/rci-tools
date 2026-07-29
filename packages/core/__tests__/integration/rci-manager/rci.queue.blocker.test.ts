@@ -1,19 +1,8 @@
-import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {afterEach, beforeEach, expect, it, vi} from 'vitest';
 import {firstValueFrom} from 'rxjs';
 import type {GenericObject} from '../../../src';
 import {FetchTransport, RciQueue} from '../../../src';
-
-const IP_ADDRESS = process.env['RCI_DEVICE_IP'];
-
-if (!IP_ADDRESS) {
-  throw new Error('Device IP address was not provided.');
-}
-
-const host = String(IP_ADDRESS).startsWith('http://')
-  ? String(IP_ADDRESS)
-  : `http://${String(IP_ADDRESS)}`;
-
-const rciPath = `${host}/rci/`;
+import {describeWithDevice, getDeviceHost} from '../device';
 
 const SHOW_VERSION = 'show.version';
 const SHOW_IDENTIFICATION = 'show.identification';
@@ -38,7 +27,8 @@ const waitUntil = async (predicate: () => boolean, timeoutMs: number = 5_000): P
   }
 };
 
-describe('RciQueue blocker semantics (device)', () => {
+describeWithDevice('RciQueue blocker semantics (device)', () => {
+  const rciPath = `${getDeviceHost()}/rci/`;
   let fetchSpy: any;
   let sentBodies: string[];
   let holds: Array<{match: string; open: Promise<void>}>;

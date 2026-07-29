@@ -1,4 +1,4 @@
-import {beforeAll, describe, expect, it} from 'vitest';
+import {beforeAll, expect, it} from 'vitest';
 import {firstValueFrom, take} from 'rxjs';
 import {
   FetchTransport,
@@ -7,23 +7,12 @@ import {
   RciBackgroundProcess,
   SessionManager,
 } from '../../../src';
-
-const IP_ADDRESS = process.env.RCI_DEVICE_IP;
-
-if (!IP_ADDRESS) {
-  throw new Error('Device IP address was not provided. Use --addr <device-ip>');
-}
-
-const host = String(IP_ADDRESS).startsWith('http://')
-  ? String(IP_ADDRESS)
-  : `http://${String(IP_ADDRESS)}`;
-
-const rciPath = `${host}/rci/`;
+import {describeWithDevice, getDeviceHost} from '../device';
 
 const USERNAME = process.env.RCI_USERNAME;
 const PASSWORD = process.env.RCI_PASSWORD;
 
-async function ensureAuth(transport: FetchTransport): Promise<void> {
+async function ensureAuth(host: string, transport: FetchTransport): Promise<void> {
   if (!USERNAME || !PASSWORD) {
     return;
   }
@@ -40,13 +29,15 @@ const getPingArgs = (count: number) => {
   return {host: '127.0.0.1', count, packetsize: 56};
 };
 
-describe('RciBackgroundProcess', () => {
+describeWithDevice('RciBackgroundProcess', () => {
+  const host = getDeviceHost();
+  const rciPath = `${host}/rci/`;
   let transport: FetchTransport;
 
   beforeAll(async () => {
     transport = new FetchTransport();
 
-    await ensureAuth(transport);
+    await ensureAuth(host, transport);
   });
 
   it('should POST tools.ping and receive final response (count=1)', async () => {

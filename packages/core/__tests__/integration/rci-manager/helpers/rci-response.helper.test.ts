@@ -1,18 +1,7 @@
-import {beforeAll, describe, expect, it} from 'vitest';
+import {beforeAll, expect, it} from 'vitest';
 import {firstValueFrom} from 'rxjs';
 import {FetchTransport, RciResponseHelper} from '../../../../src';
-
-const IP_ADDRESS = process.env.RCI_DEVICE_IP;
-
-if (!IP_ADDRESS) {
-  throw new Error('Device IP address was not provided. Use --addr <device-ip>');
-}
-
-const host = String(IP_ADDRESS).startsWith('http://')
-  ? String(IP_ADDRESS)
-  : `http://${String(IP_ADDRESS)}`;
-
-const rciPath = `${host}/rci/`;
+import {describeWithDevice, getDeviceHost} from '../../device';
 
 const ERR_TESTS = {
   UNKNOWN_COMMAND: {
@@ -29,7 +18,8 @@ const ERR_TESTS = {
   },
 };
 
-describe('RciResponseHelper (integration)', () => {
+describeWithDevice('RciResponseHelper (integration)', () => {
+  const rciPath = `${getDeviceHost()}/rci/`;
   let transport: FetchTransport;
 
   beforeAll(() => {
