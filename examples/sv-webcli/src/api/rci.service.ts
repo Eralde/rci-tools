@@ -1,12 +1,11 @@
-import {Observable} from 'rxjs';
+import type {Observable} from 'rxjs';
 import {
   FetchTransport,
   RciBackgroundProcess,
-  RciBackgroundProcessOptions,
   RciManager,
-  RciQuery,
   SessionManager,
 } from '@rci-tools/core';
+import type {RciBackgroundProcessOptions, RciQuery} from '@rci-tools/core';
 
 export class RciService {
   protected transport: FetchTransport;
@@ -45,7 +44,7 @@ export class RciService {
 
   public queueBackgroundProcess(
     query: RciQuery,
-    options: RciBackgroundTaskOptions = {},
+    options: RciBackgroundProcessOptions = {},
   ): RciBackgroundProcess {
     return this.driver.queueBackgroundProcess(query, options);
   }

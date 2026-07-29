@@ -22,12 +22,7 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "esModuleInterop": true,
-    "paths": {
-      "@rci-tools/core": [
-        "../../packages/core/src/index.ts"
-      ]
-    }
+    "esModuleInterop": true
   },
   "include": [
     "src/**/*.ts",
