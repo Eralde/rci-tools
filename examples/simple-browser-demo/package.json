@@ -9,6 +9,7 @@
     "clean": "rimraf dist",
     "dev": "node scripts/dev-runner.js",
     "build": "vite build",
+    "typecheck": "tsc --noEmit",
     "preview": "vite preview",
     "deploy": "node scripts/deploy.js"
   },
