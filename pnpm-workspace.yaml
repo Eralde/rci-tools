@@ -2,6 +2,13 @@ packages:
   - packages/*
   - examples/*
 
+allowBuilds:
+  '@parcel/watcher': true
+  better-sqlite3: true
+  cpu-features: true
+  esbuild: true
+  ssh2: true
+
 onlyBuiltDependencies:
   - '@parcel/watcher'
   - better-sqlite3
