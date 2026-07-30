@@ -1,28 +1,29 @@
-import * as _ from 'lodash-es';
+import {forEach, get, has, isArray, isObject, keys, pickBy, some} from 'lodash-es';
 import type {GenericObject} from '../../type.utils';
 import {RciError, RciStatusList, RciStatusObject} from './rci-response.types';
 
 export class RciResponseHelper {
-  public static hasCode(code: string, response: GenericObject): boolean {
+  public static hasCode(code: string, response: GenericObject | GenericObject[]): boolean {
     const statusList = RciResponseHelper.collectResponseStatuses(response);
 
     return statusList.some((status) => status.code === code);
   }
 
-  public static hasErrors(response: GenericObject): boolean {
+  public static hasErrors(response: GenericObject | GenericObject[]): boolean {
     // @see RCI_API.md -> 5. Generic status/error messages
     if (
-      _.isObject(response)
+      isObject(response)
+      && !isArray(response)
       && (response['error'] || response['status'] === 'error')
     ) {
       return true;
     }
 
     if (
-      _.isObject(response)
-      || _.isArray(response)
+      isObject(response)
+      || isArray(response)
     ) {
-      return _.some(response, (item: GenericObject) => RciResponseHelper.hasErrors(item));
+      return some(response, (item: GenericObject) => RciResponseHelper.hasErrors(item));
     }
 
     return false;
@@ -35,31 +36,37 @@ export class RciResponseHelper {
       ndmErrors[path] = err;
     });
 
-    return _.pickBy<RciError>(ndmErrors, (error) => !errorsToOmit.includes(error.code)) as Record<string, RciError>;
+    return pickBy<RciError>(ndmErrors, (error) => !errorsToOmit.includes(error.code)) as Record<string, RciError>;
   }
 
   private static collectResponseStatuses(
-    response: GenericObject,
+    response: GenericObject | GenericObject[],
     currentPath: string[] = [],
   ): RciStatusList {
     const result: RciStatusList = [];
 
-    if (_.isArray(response) || _.isObject(response)) {
-      const keys = _.keys(response);
+    if (isArray(response) || isObject(response)) {
+      if (isArray(response)) {
+        response.forEach((item, index) => {
+          result.push(...this.collectResponseStatuses(item as GenericObject, [...currentPath, String(index)]));
+        });
+      } else {
+        const keysList = keys(response);
 
-      keys.forEach((key) => {
-        const value = response[key];
-        const path = [...currentPath, key];
+        keysList.forEach((key) => {
+          const value = response[key];
+          const path = [...currentPath, key];
 
-        if (key === 'status') {
-          result.push({
-            ..._.get(value, [0], {}) as RciStatusObject,
-            path,
-          });
-        } else {
-          result.push(...this.collectResponseStatuses(value as GenericObject, path));
-        }
-      });
+          if (key === 'status') {
+            result.push({
+              ...get(value, [0], {}) as RciStatusObject,
+              path,
+            });
+          } else {
+            result.push(...this.collectResponseStatuses(value as GenericObject, path));
+          }
+        });
+      }
     }
 
     return result;
@@ -72,23 +79,23 @@ export class RciResponseHelper {
     propertyPath: string[] = [],
   ): void {
     if (
-      _.isObject(response)
+      isObject(response)
       && (
-        _.has(response, 'error')
-        || _.get(response, 'status') === 'error'
+        has(response, 'error')
+        || get(response, 'status') === 'error'
       )
     ) {
       const path = propertyPath
         .join('.')
         .replace('body.', '');
 
-      const error = String(_.get(response, 'error') ?? '');
-      const message = String(_.get(response, 'message') ?? '');
-      const code = String(_.get(response, 'code') ?? '');
+      const error = String(get(response, 'error') ?? '');
+      const message = String(get(response, 'message') ?? '');
+      const code = String(get(response, 'code') ?? '');
 
       onErrorFn(path, {error, message, code});
-    } else if (_.isObject(response) || _.isArray(response)) {
-      _.forEach(response, (value, key) => {
+    } else if (isObject(response) || isArray(response)) {
+      forEach(response, (value, key) => {
         RciResponseHelper.processNdmResponseErrors(value as GenericObject, onErrorFn, [...propertyPath, key]);
       });
     }

@@ -1,4 +1,6 @@
-export type GenericObject = Record<string, unknown>;
+export interface GenericObject {
+  [key: string]: unknown;
+}
 
 export type ObjectOrArray =
   | GenericObject
