@@ -1,5 +1,5 @@
-import {Observable, of} from 'rxjs';
-import {catchError, map, switchMap, tap} from 'rxjs/operators';
+import {Observable, defer, of} from 'rxjs';
+import {catchError, finalize, map, switchMap, tap} from 'rxjs/operators';
 import type {BaseHttpResponse, HttpTransport} from '../transport';
 import {Ndw2AuthProtocol, Ndw4AuthProtocol, SessionAuthContext, SessionAuthProtocol} from './auth-protocol';
 
@@ -46,36 +46,41 @@ export class SessionManager<ResponseType extends BaseHttpResponse = BaseHttpResp
   }
 
   public login(username: string, password: string): Observable<boolean> {
-    return this.httpTransport.get(this.authUri)
-      .pipe(
-        catchError((error) => of(this.errorToResponse(error))),
-        switchMap((response): Observable<boolean> => {
-          this.httpTransport.onAuthRequest(response);
+    return defer(() => {
+      this.httpTransport.authErrorSuspension?.suspend();
 
-          if (response.status === 200) {
-            return of(true);
-          }
+      return this.httpTransport.get(this.authUri)
+        .pipe(
+          catchError((error) => of(this.errorToResponse(error))),
+          switchMap((response): Observable<boolean> => {
+            this.httpTransport.onAuthRequest(response);
 
-          const protocol = this.authProtocols.find((candidate) => {
-            return candidate.isSupported(response);
-          });
+            if (response.status === 200) {
+              return of(true);
+            }
 
-          if (!protocol) {
-            this.logError(`No supported authentication protocol found for response with status ${response.status}`);
+            const protocol = this.authProtocols.find((candidate) => {
+              return candidate.isSupported(response);
+            });
 
-            return of(false);
-          }
+            if (!protocol) {
+              this.logError(`No supported authentication protocol found for response with status ${response.status}`);
 
-          const context = this.getAuthContext();
+              return of(false);
+            }
 
-          return protocol.authenticate(
-            response,
-            context,
-            username,
-            password,
-          );
-        }),
-      );
+            const context = this.getAuthContext();
+
+            return protocol.authenticate(
+              response,
+              context,
+              username,
+              password,
+            );
+          }),
+          finalize(() => this.httpTransport.authErrorSuspension?.resume()),
+        );
+    });
   }
 
   public logout(): Observable<unknown> {
