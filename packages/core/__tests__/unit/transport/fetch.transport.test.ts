@@ -36,5 +36,17 @@ describe('FetchTransport', () => {
 
       expect(authErrorCount).toBe(0);
     });
+
+    it('suspends and resumes authError$ through authErrorSuspension', async () => {
+      vi.spyOn(global, 'fetch').mockImplementation(() => Promise.resolve(makeResponse(401)));
+
+      transport.authErrorSuspension.suspend();
+      await firstValueFrom(transport.sendQueryArray('http://example.com/rci/', [{}])).catch(() => {});
+      expect(authErrorCount).toBe(0);
+
+      transport.authErrorSuspension.resume();
+      await firstValueFrom(transport.sendQueryArray('http://example.com/rci/', [{}])).catch(() => {});
+      expect(authErrorCount).toBe(1);
+    });
   });
 });

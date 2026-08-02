@@ -6,7 +6,14 @@ export interface BaseHttpResponse<Data = unknown> {
   data: Data;
 }
 
+export interface AuthErrorSuspension {
+  suspend(): void;
+  resume(): void;
+}
+
 export interface HttpTransport<ResponseType extends BaseHttpResponse = BaseHttpResponse> {
+  readonly authErrorSuspension?: AuthErrorSuspension;
+
   get(url: string): Observable<ResponseType>;
   post(url: string, data: unknown): Observable<ResponseType>;
   delete(url: string): Observable<ResponseType>;

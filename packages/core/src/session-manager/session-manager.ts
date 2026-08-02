@@ -1,5 +1,5 @@
-import {Observable, of} from 'rxjs';
-import {catchError, map, switchMap, tap} from 'rxjs/operators';
+import {Observable, defer, of} from 'rxjs';
+import {catchError, finalize, map, shareReplay, switchMap, tap} from 'rxjs/operators';
 import type {BaseHttpResponse, HttpTransport} from '../transport';
 import {Ndw2AuthProtocol, Ndw4AuthProtocol, SessionAuthContext, SessionAuthProtocol} from './auth-protocol';
 
@@ -8,6 +8,7 @@ export class SessionManager<ResponseType extends BaseHttpResponse = BaseHttpResp
   private readonly authUri: string;
 
   private isLoggingErrors: boolean = false;
+  private loginAttemptInProgress$: Observable<boolean> | null = null;
 
   constructor(
     private host: string,
@@ -46,36 +47,70 @@ export class SessionManager<ResponseType extends BaseHttpResponse = BaseHttpResp
   }
 
   public login(username: string, password: string): Observable<boolean> {
-    return this.httpTransport.get(this.authUri)
-      .pipe(
-        catchError((error) => of(this.errorToResponse(error))),
-        switchMap((response): Observable<boolean> => {
-          this.httpTransport.onAuthRequest(response);
+    return defer(() => {
+      if (this.loginAttemptInProgress$) {
+        return this.loginAttemptInProgress$;
+      }
 
-          if (response.status === 200) {
-            return of(true);
-          }
+      const flight = this.runLoginHandshake(username, password)
+        .pipe(
+          tap({
+            next: () => this.onLoginAttemptEnd(flight),
+            complete: () => this.onLoginAttemptEnd(flight),
+            error: () => this.onLoginAttemptEnd(flight),
+          }),
+          finalize(() => this.onLoginAttemptEnd(flight)),
+          shareReplay({bufferSize: 1, refCount: true}),
+        );
 
-          const protocol = this.authProtocols.find((candidate) => {
-            return candidate.isSupported(response);
-          });
+      this.loginAttemptInProgress$ = flight;
 
-          if (!protocol) {
-            this.logError(`No supported authentication protocol found for response with status ${response.status}`);
+      return flight;
+    });
+  }
 
-            return of(false);
-          }
+  private runLoginHandshake(username: string, password: string): Observable<boolean> {
+    return defer(() => {
+      this.httpTransport.authErrorSuspension?.suspend();
 
-          const context = this.getAuthContext();
+      return this.httpTransport.get(this.authUri)
+        .pipe(
+          catchError((error) => of(this.errorToResponse(error))),
+          switchMap((response): Observable<boolean> => {
+            this.httpTransport.onAuthRequest(response);
 
-          return protocol.authenticate(
-            response,
-            context,
-            username,
-            password,
-          );
-        }),
-      );
+            if (response.status === 200) {
+              return of(true);
+            }
+
+            const protocol = this.authProtocols.find((candidate) => {
+              return candidate.isSupported(response);
+            });
+
+            if (!protocol) {
+              this.logError(`No supported authentication protocol found for response with status ${response.status}`);
+
+              return of(false);
+            }
+
+            const context = this.getAuthContext();
+
+            return protocol.authenticate(
+              response,
+              context,
+              username,
+              password,
+            );
+          }),
+          finalize(() => this.httpTransport.authErrorSuspension?.resume()),
+        );
+    });
+  }
+
+  private onLoginAttemptEnd(loginAttempt: Observable<boolean>): void {
+    if (this.loginAttemptInProgress$ === loginAttempt) {
+      this.loginAttemptInProgress$ = null;
+    }
   }
 
   public logout(): Observable<unknown> {

@@ -1,6 +1,6 @@
 import {Observable, exhaustMap, from, map} from 'rxjs';
 import {GenericObject} from '../../type.utils';
-import type {BaseHttpResponse, HttpTransport} from '../http.transport';
+import type {AuthErrorSuspension, BaseHttpResponse, HttpTransport} from '../http.transport';
 import {AuthErrorHandler} from '../errors';
 
 export interface FetchTransportResponse extends BaseHttpResponse {
@@ -10,6 +10,7 @@ export interface FetchTransportResponse extends BaseHttpResponse {
 export class FetchTransport implements HttpTransport<FetchTransportResponse> {
   protected readonly authHandler = new AuthErrorHandler();
   public readonly authError$: Observable<void> = this.authHandler.authError$;
+  public readonly authErrorSuspension: AuthErrorSuspension = this.authHandler;
 
   public onAuthRequest(): void {
     // noop; handled by the browser

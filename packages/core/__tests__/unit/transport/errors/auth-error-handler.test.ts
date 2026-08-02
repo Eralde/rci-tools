@@ -60,6 +60,69 @@ describe('AuthErrorHandler', () => {
       );
       expect(result).toEqual([1, 2, 3]);
     });
+
+    it('suppresses a 401 while suspended and still rethrows it', async () => {
+      const handler = new AuthErrorHandler();
+      const emitted = vi.fn();
+      handler.authError$.subscribe(emitted);
+      const error = {status: 401};
+
+      handler.suspend();
+
+      const result = firstValueFrom(
+        throwError(() => error)
+          .pipe(handler.handleAuthError<unknown>(), catchError((value) => of(value))),
+      );
+
+      await expect(result).resolves.toBe(error);
+      expect(emitted).not.toHaveBeenCalled();
+    });
+
+    it('keeps 401s suppressed until the outermost resume', async () => {
+      const handler = new AuthErrorHandler();
+      const emitted = vi.fn();
+      handler.authError$.subscribe(emitted);
+      const error = {status: 401};
+
+      handler.suspend();
+      handler.suspend();
+      handler.resume();
+
+      await firstValueFrom(
+        throwError(() => error)
+          .pipe(handler.handleAuthError<unknown>(), catchError((value) => of(value))),
+      );
+      expect(emitted).not.toHaveBeenCalled();
+
+      handler.resume();
+
+      await firstValueFrom(
+        throwError(() => error)
+          .pipe(handler.handleAuthError<unknown>(), catchError((value) => of(value))),
+      );
+      expect(emitted).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not let resume underflow affect a later suspension', async () => {
+      const handler = new AuthErrorHandler();
+      const emitted = vi.fn();
+      handler.authError$.subscribe(emitted);
+      const error = {status: 401};
+
+      handler.resume();
+      await firstValueFrom(
+        throwError(() => error)
+          .pipe(handler.handleAuthError<unknown>(), catchError((value) => of(value))),
+      );
+      expect(emitted).toHaveBeenCalledTimes(1);
+
+      handler.suspend();
+      await firstValueFrom(
+        throwError(() => error)
+          .pipe(handler.handleAuthError<unknown>(), catchError((value) => of(value))),
+      );
+      expect(emitted).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('destroy()', () => {

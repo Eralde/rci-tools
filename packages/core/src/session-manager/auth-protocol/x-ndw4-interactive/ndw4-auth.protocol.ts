@@ -225,6 +225,7 @@ export class Ndw4AuthProtocol<ResponseType extends BaseHttpResponse = BaseHttpRe
       `salt2=${saltBase64}`,
     ].join(',');
     const clientFinal = `login3=${username},nonce3=${combinedNonce}`;
+    const authMessage = `${clientFirst};${serverFirst};${clientFinal}`;
 
     return {
       ...handshake,
@@ -232,7 +233,7 @@ export class Ndw4AuthProtocol<ResponseType extends BaseHttpResponse = BaseHttpRe
       salt,
       iterations: iterations.value,
       memorySize: memorySize.value,
-      authMessage: `${clientFirst};${serverFirst};${clientFinal}`,
+      authMessage,
     };
   }
 
@@ -298,7 +299,11 @@ export class Ndw4AuthProtocol<ResponseType extends BaseHttpResponse = BaseHttpRe
       );
   }
 
-  private post(authUrl: string, data: unknown, context: SessionAuthContext<ResponseType>): Observable<ResponseType> {
+  private post(
+    authUrl: string,
+    data: unknown,
+    context: SessionAuthContext<ResponseType>,
+  ): Observable<ResponseType> {
     return this.httpTransport.post(authUrl, data)
       .pipe(
         catchError((error) => {
