@@ -1,5 +1,5 @@
 import {Observable, defer, of} from 'rxjs';
-import {catchError, finalize, map, switchMap, tap} from 'rxjs/operators';
+import {catchError, finalize, map, shareReplay, switchMap, tap} from 'rxjs/operators';
 import type {BaseHttpResponse, HttpTransport} from '../transport';
 import {Ndw2AuthProtocol, Ndw4AuthProtocol, SessionAuthContext, SessionAuthProtocol} from './auth-protocol';
 
@@ -8,6 +8,7 @@ export class SessionManager<ResponseType extends BaseHttpResponse = BaseHttpResp
   private readonly authUri: string;
 
   private isLoggingErrors: boolean = false;
+  private inFlightLogin$: Observable<boolean> | null = null;
 
   constructor(
     private host: string,
@@ -47,6 +48,29 @@ export class SessionManager<ResponseType extends BaseHttpResponse = BaseHttpResp
 
   public login(username: string, password: string): Observable<boolean> {
     return defer(() => {
+      if (this.inFlightLogin$) {
+        return this.inFlightLogin$;
+      }
+
+      const flight = this.runLoginHandshake(username, password)
+        .pipe(
+          tap({
+            next: () => this.clearFlight(flight),
+            complete: () => this.clearFlight(flight),
+            error: () => this.clearFlight(flight),
+          }),
+          finalize(() => this.clearFlight(flight)),
+          shareReplay({bufferSize: 1, refCount: true}),
+        );
+
+      this.inFlightLogin$ = flight;
+
+      return flight;
+    });
+  }
+
+  private runLoginHandshake(username: string, password: string): Observable<boolean> {
+    return defer(() => {
       this.httpTransport.authErrorSuspension?.suspend();
 
       return this.httpTransport.get(this.authUri)
@@ -81,6 +105,12 @@ export class SessionManager<ResponseType extends BaseHttpResponse = BaseHttpResp
           finalize(() => this.httpTransport.authErrorSuspension?.resume()),
         );
     });
+  }
+
+  private clearFlight(flight: Observable<boolean>): void {
+    if (this.inFlightLogin$ === flight) {
+      this.inFlightLogin$ = null;
+    }
   }
 
   public logout(): Observable<unknown> {

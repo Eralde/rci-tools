@@ -299,7 +299,11 @@ export class Ndw4AuthProtocol<ResponseType extends BaseHttpResponse = BaseHttpRe
       );
   }
 
-  private post(authUrl: string, data: unknown, context: SessionAuthContext<ResponseType>): Observable<ResponseType> {
+  private post(
+    authUrl: string,
+    data: unknown,
+    context: SessionAuthContext<ResponseType>,
+  ): Observable<ResponseType> {
     return this.httpTransport.post(authUrl, data)
       .pipe(
         catchError((error) => {

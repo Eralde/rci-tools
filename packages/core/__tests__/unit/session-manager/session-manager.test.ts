@@ -1,5 +1,5 @@
 import {describe, expect, it, vi} from 'vitest';
-import {NEVER, catchError, firstValueFrom, of, throwError} from 'rxjs';
+import {NEVER, Subject, catchError, firstValueFrom, of, throwError} from 'rxjs';
 import {AuthErrorHandler, type BaseHttpResponse, type HttpTransport, SessionManager} from '../../../src';
 
 const makeTransport = (overrides: Partial<HttpTransport<BaseHttpResponse>> = {}): HttpTransport<BaseHttpResponse> => ({
@@ -85,6 +85,235 @@ describe('SessionManager', () => {
     subscription.unsubscribe();
 
     expect(authErrorSuspension.resume).toHaveBeenCalledTimes(1);
+  });
+
+  it('shares one handshake across overlapping login subscriptions', () => {
+    const response = {status: 200, data: {}};
+    const pending = new Subject<BaseHttpResponse>();
+    const get = vi.fn().mockReturnValue(pending);
+    const transport = makeTransport({get});
+    const session = new SessionManager('http://device', transport);
+    const results: boolean[] = [];
+
+    session.login('admin', 'password').subscribe((value) => results.push(value));
+    session.login('admin', 'password').subscribe((value) => results.push(value));
+
+    expect(get).toHaveBeenCalledTimes(1);
+
+    pending.next(response);
+    pending.complete();
+
+    expect(results).toEqual([true, true]);
+  });
+
+  it('starts a fresh handshake after the previous flight settles', async () => {
+    const response = {status: 200, data: {}};
+    const get = vi.fn().mockReturnValue(of(response));
+    const transport = makeTransport({get});
+    const session = new SessionManager('http://device', transport);
+
+    await expect(firstValueFrom(session.login('admin', 'password'))).resolves.toBe(true);
+    await expect(firstValueFrom(session.login('admin', 'password'))).resolves.toBe(true);
+
+    expect(get).toHaveBeenCalledTimes(2);
+  });
+
+  it('shares a false result and resets for a later login', async () => {
+    const pending = new Subject<BaseHttpResponse>();
+    const get = vi.fn()
+      .mockReturnValueOnce(pending)
+      .mockReturnValueOnce(of({status: 200, data: {}}));
+    const transport = makeTransport({get});
+    const session = new SessionManager('http://device', transport);
+    const results: boolean[] = [];
+
+    session.login('admin', 'password').subscribe((value) => results.push(value));
+    session.login('admin', 'password').subscribe((value) => results.push(value));
+
+    expect(get).toHaveBeenCalledTimes(1);
+
+    pending.next({status: 401, data: {}});
+    pending.complete();
+
+    expect(results).toEqual([false, false]);
+    await expect(firstValueFrom(session.login('admin', 'password'))).resolves.toBe(true);
+    expect(get).toHaveBeenCalledTimes(2);
+  });
+
+  it('shares an escaping error and resets for a later login', async () => {
+    const response = {status: 200, data: {}};
+    const pending = new Subject<BaseHttpResponse>();
+    const failure = new Error('projection failure');
+    const get = vi.fn()
+      .mockReturnValueOnce(pending)
+      .mockReturnValueOnce(of(response));
+    const onAuthRequest = vi.fn(() => {
+      throw failure;
+    });
+    const transport = makeTransport({get, onAuthRequest});
+    const session = new SessionManager('http://device', transport);
+    const errors: unknown[] = [];
+
+    session.login('admin', 'password').subscribe({error: (error) => errors.push(error)});
+    session.login('admin', 'password').subscribe({error: (error) => errors.push(error)});
+
+    expect(get).toHaveBeenCalledTimes(1);
+
+    pending.next(response);
+    pending.complete();
+
+    expect(errors).toEqual([failure, failure]);
+
+    onAuthRequest.mockImplementation(() => undefined);
+    await expect(firstValueFrom(session.login('admin', 'password'))).resolves.toBe(true);
+    expect(get).toHaveBeenCalledTimes(2);
+  });
+
+  it('suspends and resumes exactly once for an overlapping flight', () => {
+    const authErrorSuspension = makeSuspension();
+    const pending = new Subject<BaseHttpResponse>();
+    const transport = makeTransport({
+      get: vi.fn().mockReturnValue(pending),
+      authErrorSuspension,
+    });
+    const session = new SessionManager('http://device', transport);
+
+    session.login('admin', 'password').subscribe();
+    session.login('admin', 'password').subscribe();
+
+    expect(authErrorSuspension.suspend).toHaveBeenCalledTimes(1);
+
+    pending.next({status: 200, data: {}});
+    pending.complete();
+
+    expect(authErrorSuspension.resume).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancels a shared flight after all subscribers unsubscribe', async () => {
+    const authErrorSuspension = makeSuspension();
+    const pending = new Subject<BaseHttpResponse>();
+    const get = vi.fn()
+      .mockReturnValueOnce(pending)
+      .mockReturnValueOnce(of({status: 200, data: {}}));
+    const transport = makeTransport({get, authErrorSuspension});
+    const session = new SessionManager('http://device', transport);
+
+    const first = session.login('admin', 'password').subscribe();
+    const second = session.login('admin', 'password').subscribe();
+
+    expect(get).toHaveBeenCalledTimes(1);
+
+    first.unsubscribe();
+    expect(authErrorSuspension.resume).not.toHaveBeenCalled();
+
+    second.unsubscribe();
+    expect(authErrorSuspension.resume).toHaveBeenCalledTimes(1);
+
+    await expect(firstValueFrom(session.login('admin', 'password'))).resolves.toBe(true);
+    expect(get).toHaveBeenCalledTimes(2);
+  });
+
+  it('re-subscribes a stale outer observable to the current flight', () => {
+    const current = new Subject<BaseHttpResponse>();
+    const get = vi.fn()
+      .mockReturnValueOnce(NEVER)
+      .mockReturnValue(current);
+    const transport = makeTransport({get});
+    const session = new SessionManager('http://device', transport);
+    const stale$ = session.login('first', 'password');
+    const staleInitialSubscription = stale$.subscribe();
+
+    expect(get).toHaveBeenCalledTimes(1);
+    staleInitialSubscription.unsubscribe();
+
+    const currentResults: boolean[] = [];
+    session.login('second', 'password').subscribe((value) => currentResults.push(value));
+    expect(get).toHaveBeenCalledTimes(2);
+
+    const staleResults: boolean[] = [];
+    stale$.subscribe((value) => staleResults.push(value));
+    expect(get).toHaveBeenCalledTimes(2);
+
+    current.next({status: 200, data: {}});
+    current.complete();
+
+    expect(currentResults).toEqual([true]);
+    expect(staleResults).toEqual([true]);
+  });
+
+  it('uses first-subscribed login credentials structurally', () => {
+    const pending = new Subject<BaseHttpResponse>();
+    const get = vi.fn().mockReturnValue(pending);
+    const transport = makeTransport({get});
+    const session = new SessionManager('http://device', transport);
+    const loginA = session.login('a', 'pa');
+    const loginB = session.login('b', 'pb');
+    const results: boolean[] = [];
+
+    loginB.subscribe((value) => results.push(value));
+    loginA.subscribe((value) => results.push(value));
+
+    expect(get).toHaveBeenCalledTimes(1);
+
+    pending.next({status: 200, data: {}});
+    pending.complete();
+
+    expect(results).toEqual([true, true]);
+  });
+
+  it('starts a fresh flight for synchronous false retry', () => {
+    const get = vi.fn()
+      .mockReturnValueOnce(of({status: 401, data: {}}))
+      .mockReturnValueOnce(of({status: 200, data: {}}));
+    const transport = makeTransport({get});
+    const session = new SessionManager('http://device', transport);
+    const results: boolean[] = [];
+
+    session.login('admin', 'password').subscribe((value) => {
+      results.push(value);
+
+      if (!value) {
+        session.login('admin', 'password').subscribe((retry) => results.push(retry));
+      }
+    });
+
+    expect(get).toHaveBeenCalledTimes(2);
+    expect(results).toEqual([false, true]);
+  });
+
+  it('starts a fresh flight for synchronous complete retry', () => {
+    const response = {status: 200, data: {}};
+    const get = vi.fn().mockReturnValue(of(response));
+    const transport = makeTransport({get});
+    const session = new SessionManager('http://device', transport);
+
+    session.login('admin', 'password').subscribe({
+      complete: () => {
+        session.login('admin', 'password').subscribe();
+      },
+    });
+
+    expect(get).toHaveBeenCalledTimes(2);
+  });
+
+  it('starts a fresh flight for synchronous error retry', () => {
+    const response = {status: 200, data: {}};
+    const failure = new Error('projection failure');
+    const get = vi.fn().mockReturnValue(of(response));
+    const onAuthRequest = vi.fn(() => {
+      throw failure;
+    });
+    const transport = makeTransport({get, onAuthRequest});
+    const session = new SessionManager('http://device', transport);
+
+    session.login('admin', 'password').subscribe({
+      error: () => {
+        onAuthRequest.mockImplementation(() => undefined);
+        session.login('admin', 'password').subscribe();
+      },
+    });
+
+    expect(get).toHaveBeenCalledTimes(2);
   });
 
   it('keeps auth errors muted until the last overlapping login settles', async () => {
