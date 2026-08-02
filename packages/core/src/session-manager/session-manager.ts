@@ -8,7 +8,7 @@ export class SessionManager<ResponseType extends BaseHttpResponse = BaseHttpResp
   private readonly authUri: string;
 
   private isLoggingErrors: boolean = false;
-  private inFlightLogin$: Observable<boolean> | null = null;
+  private loginAttemptInProgress$: Observable<boolean> | null = null;
 
   constructor(
     private host: string,
@@ -48,22 +48,22 @@ export class SessionManager<ResponseType extends BaseHttpResponse = BaseHttpResp
 
   public login(username: string, password: string): Observable<boolean> {
     return defer(() => {
-      if (this.inFlightLogin$) {
-        return this.inFlightLogin$;
+      if (this.loginAttemptInProgress$) {
+        return this.loginAttemptInProgress$;
       }
 
       const flight = this.runLoginHandshake(username, password)
         .pipe(
           tap({
-            next: () => this.clearFlight(flight),
-            complete: () => this.clearFlight(flight),
-            error: () => this.clearFlight(flight),
+            next: () => this.onLoginAttemptEnd(flight),
+            complete: () => this.onLoginAttemptEnd(flight),
+            error: () => this.onLoginAttemptEnd(flight),
           }),
-          finalize(() => this.clearFlight(flight)),
+          finalize(() => this.onLoginAttemptEnd(flight)),
           shareReplay({bufferSize: 1, refCount: true}),
         );
 
-      this.inFlightLogin$ = flight;
+      this.loginAttemptInProgress$ = flight;
 
       return flight;
     });
@@ -107,9 +107,9 @@ export class SessionManager<ResponseType extends BaseHttpResponse = BaseHttpResp
     });
   }
 
-  private clearFlight(flight: Observable<boolean>): void {
-    if (this.inFlightLogin$ === flight) {
-      this.inFlightLogin$ = null;
+  private onLoginAttemptEnd(loginAttempt: Observable<boolean>): void {
+    if (this.loginAttemptInProgress$ === loginAttempt) {
+      this.loginAttemptInProgress$ = null;
     }
   }
 
