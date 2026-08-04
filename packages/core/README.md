@@ -383,7 +383,7 @@ along with optional settings:
 ```typescript
 interface RciBackgroundProcessOptions {
   pollInterval?: number; // ms between GET poll requests. Default: 1000
-  timeout?: number;      // ms before the process is aborted. Default: 0 (no timeout)
+  timeout?: number;      // ms before DELETE is sent to stop the process. Default: 0 (no timeout)
 }
 ```
 
@@ -405,7 +405,7 @@ Both methods return a `RciBackgroundProcess` object with:
 - `attachToRunning(): boolean`: Attaches to an already-running background process (e.g. one started
   via `RciManager.execute()`). Skips the initial POST and polls via GET immediately.
   Returns `false` if `start()` was already called, or the process is not in `INIT` state.
-- `abort(): boolean`: Manually aborts the process. Returns `false` if not running.
+- `abort(): boolean`: Sends `DELETE` to the command-specific RCI resource and aborts the local process. Returns `false` if not running.
 - `state$`: Emits state changes (`RCI_BACKGROUND_PROCESS_STATE`)
 - `data$`: Emits polled data updates as the background process runs
 - `result$`: Emits the final payload once, right before the process completes. Does NOT emit on
@@ -551,4 +551,3 @@ from running the same command with different arguments simultaneously.
 When enabled via `toggleStats(true)`, `stats$` emits a `QueryStats` object for each completed
 batch. See [Query stats](./docs/QUEUE.md#query-stats) for the full `QueryStats` interface and
 usage with standalone `RciQueue`.
-

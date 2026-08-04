@@ -34,7 +34,7 @@ export function makeTransport(): HttpTransport<BaseHttpResponse> {
   return {
     get: vi.fn().mockReturnValue(of({status: 200, data: {}})),
     post: vi.fn().mockReturnValue(of({status: 200, data: {}})),
-    delete: vi.fn(),
+    delete: vi.fn().mockReturnValue(of({status: 200, data: {}})),
     getHeader: vi.fn(),
     onAuthRequest: vi.fn(),
     clearAuthData: vi.fn(),

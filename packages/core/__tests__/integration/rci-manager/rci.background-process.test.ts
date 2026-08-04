@@ -1,5 +1,5 @@
-import {beforeAll, describe, expect, it} from 'vitest';
-import {firstValueFrom, take} from 'rxjs';
+import {beforeAll, describe, expect, it, vi} from 'vitest';
+import {catchError, finalize, firstValueFrom, map, of, take} from 'rxjs';
 import {
   FetchTransport,
   RCI_BACKGROUND_PROCESS_FINISH_REASON,
@@ -178,20 +178,55 @@ describe('RciBackgroundProcess', () => {
       resultEmitted = true;
     });
 
-    process.start();
+    let resolveDelete: (() => void) | undefined;
 
-    await new Promise((r) => setTimeout(r, 100));
+    const deleteCompleted = new Promise<void>((resolve) => {
+      resolveDelete = resolve;
+    });
 
-    const donePromise = firstValueFrom(process.done$.pipe(take(1)));
-    const aborted = process.abort();
+    const originalDelete = transport.delete.bind(transport);
 
-    expect(aborted).toBe(true);
+    const deleteSpy = vi.spyOn(transport, 'delete').mockImplementation((url) =>
+      originalDelete(url).pipe(
+        finalize(() => resolveDelete?.()),
+      )
+    );
 
-    const done = await donePromise;
+    try {
+      process.start();
 
-    expect(resultEmitted).toBe(false);
-    expect(done).toBe(RCI_BACKGROUND_PROCESS_FINISH_REASON.ABORTED);
-    expect(process.getState()).toBe(RCI_BACKGROUND_PROCESS_STATE.ABORTED);
+      await new Promise((r) => setTimeout(r, 100));
+
+      const donePromise = firstValueFrom(process.done$.pipe(take(1)));
+      const aborted = process.abort();
+
+      expect(aborted).toBe(true);
+
+      const done = await donePromise;
+      await deleteCompleted;
+
+      expect(resultEmitted).toBe(false);
+      expect(done).toBe(RCI_BACKGROUND_PROCESS_FINISH_REASON.ABORTED);
+      expect(process.getState()).toBe(RCI_BACKGROUND_PROCESS_STATE.ABORTED);
+
+      const stoppedProbe = await firstValueFrom(
+        transport.get(`${rciPath}tools/ping`).pipe(
+          map((response) => ({kind: 'response' as const, status: response.status, data: response.data})),
+          catchError((error: {status?: number; data?: unknown}) => {
+            return of({kind: 'error' as const, status: error.status, data: error.data});
+          }),
+        ),
+      );
+
+      if (stoppedProbe.kind === 'response') {
+        expect((stoppedProbe.data as Record<string, unknown>)['continued']).not.toBe(true);
+      } else {
+        expect(stoppedProbe.status).not.toBe(200);
+      }
+    } finally {
+      deleteSpy.mockRestore();
+      process.destroy();
+    }
   }, 10000);
 
   it('should not emit result$ when timed out', async () => {

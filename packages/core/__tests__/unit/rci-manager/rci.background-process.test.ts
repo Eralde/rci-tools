@@ -1,6 +1,7 @@
 import {describe, expect, it, vi} from 'vitest';
-import {Subject, of} from 'rxjs';
+import {NEVER, Subject, defer, firstValueFrom, of} from 'rxjs';
 import {
+  type BaseHttpResponse,
   RCI_BACKGROUND_PROCESS_FINISH_REASON,
   RCI_BACKGROUND_PROCESS_STATE,
   RciBackgroundProcess,
@@ -15,6 +16,70 @@ class TestBackgroundProcess extends RciBackgroundProcess<string> {
 }
 
 describe('RciBackgroundProcess cleanup', () => {
+  it('sends DELETE to the process resource when aborted', async () => {
+    const transport = makeTransport();
+    const pendingPost$ = new Subject<BaseHttpResponse>();
+
+    let deleteSubscribed = false;
+
+    vi.mocked(transport.post).mockReturnValue(pendingPost$.asObservable());
+    vi.mocked(transport.delete).mockReturnValue(
+      defer(() => {
+        deleteSubscribed = true;
+
+        return of({status: 200, data: {}});
+      }),
+    );
+
+    const process = new RciBackgroundProcess(
+      'tools.ping',
+      {host: '127.0.0.1', count: 100},
+      {},
+      'http://device/rci/',
+      transport,
+    );
+
+    const donePromise = firstValueFrom(process.done$);
+
+    expect(process.start()).toBe(true);
+    expect(process.abort()).toBe(true);
+
+    expect(deleteSubscribed).toBe(true);
+    expect(transport.delete).toHaveBeenCalledWith('http://device/rci/tools/ping');
+    await expect(donePromise).resolves.toBe(RCI_BACKGROUND_PROCESS_FINISH_REASON.ABORTED);
+
+    process.destroy();
+  });
+
+  it('sends DELETE to the process resource when timed out', async () => {
+    vi.useFakeTimers();
+
+    try {
+      const transport = makeTransport();
+      vi.mocked(transport.post).mockReturnValue(NEVER);
+      vi.mocked(transport.delete).mockReturnValue(of({status: 200, data: {}}));
+
+      const process = new RciBackgroundProcess(
+        'tools.ping',
+        {},
+        {timeout: 10},
+        'http://device/rci/',
+        transport,
+      );
+      const donePromise = firstValueFrom(process.done$);
+
+      expect(process.start()).toBe(true);
+      await vi.advanceTimersByTimeAsync(10);
+
+      expect(transport.delete).toHaveBeenCalledWith('http://device/rci/tools/ping');
+      await expect(donePromise).resolves.toBe(RCI_BACKGROUND_PROCESS_FINISH_REASON.TIMED_OUT);
+
+      process.destroy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('maps finish reasons to final states', () => {
     const cases = [
       [RCI_BACKGROUND_PROCESS_FINISH_REASON.DONE, RCI_BACKGROUND_PROCESS_STATE.COMPLETED],

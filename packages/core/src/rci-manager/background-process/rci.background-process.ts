@@ -12,6 +12,7 @@ import {
   race,
   repeat,
   skipWhile,
+  tap,
   switchMap,
   take,
   timer,
@@ -128,6 +129,19 @@ export class RciBackgroundProcess<CommandType extends string = string> {
     return this.stateSub$.value;
   }
 
+  private getProcessUrl(path: string): string {
+    return `${this.rciPath}${path.replace(/\./g, '/')}`;
+  }
+
+  private requestRemoteStop(): void {
+    this.httpTransport.delete(this.getProcessUrl(this.command))
+      .subscribe({
+        error: (error: unknown) => {
+          console.error(`Failed to stop background process: ${this.command}`, error);
+        },
+      });
+  }
+
   public destroy(): void {
     if (this.isDestroyed) {
       return;
@@ -178,6 +192,7 @@ export class RciBackgroundProcess<CommandType extends string = string> {
 
     this.stateSub$.next(RCI_BACKGROUND_PROCESS_STATE.ABORTING);
 
+    this.requestRemoteStop();
     this.abortSub$.next();
     this.abortSub$.complete();
 
@@ -214,7 +229,10 @@ export class RciBackgroundProcess<CommandType extends string = string> {
       ? timer(this.options.timeout)
       : NEVER;
 
-    const timeout$ = timeoutTrigger$.pipe(map(() => RCI_BACKGROUND_PROCESS_FINISH_REASON.TIMED_OUT));
+    const timeout$ = timeoutTrigger$.pipe(
+      tap(() => this.requestRemoteStop()),
+      map(() => RCI_BACKGROUND_PROCESS_FINISH_REASON.TIMED_OUT),
+    );
     const abort$ = this.abortSub$.pipe(map(() => RCI_BACKGROUND_PROCESS_FINISH_REASON.ABORTED));
 
     const task$ = this.executeTask(
@@ -257,7 +275,7 @@ export class RciBackgroundProcess<CommandType extends string = string> {
     data: RciQuery['data'],
   ): Observable<GenericObject> {
     const pollInterval = Math.max(1, this.options.pollInterval ?? DEFAULT_BACKGROUND_PROCESS_OPTIONS.pollInterval);
-    const url = `${this.rciPath}${path.replace(/\./g, '/')}`;
+    const url = this.getProcessUrl(path);
 
     const onDataUpdate: (data: GenericObject) => void = (data) => this.responseSub$.next(data);
     const isFinished = (response: BaseHttpResponse) => !((response.data as GenericObject)?.['continued']);
