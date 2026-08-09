@@ -13,10 +13,21 @@ the [RCI API](../../docs/RCI_API.md). Two main classes exported by this package 
   uniform way.
 
 Both classes require an [`HTTP transport` instance](./src/transport/http.transport.ts) to
-send HTTP requests to the device. The `@rci-tools/core` module providers
-[a wrapper over `fetch`](./src/transport/fetch/fetch.transport.ts) as such transport.
-Pass the same instance of `FetchTransport` to both `SessionManager` and `RciManager`
-so that requests from `RciManager` are sent within an authorized HTTP session.
+send HTTP requests to the device. The package provides two browser transports:
+
+- [`FetchTransport`](./src/transport/fetch/fetch.transport.ts) wraps the built-in `fetch` API.
+- [`XHRTransport`](./src/transport/xhr/xhr.transport.ts) uses `XMLHttpRequest`.
+
+Pass the same transport instance to both `SessionManager` and `RciManager` so that requests from
+`RciManager` are sent within the authenticated HTTP session:
+
+```typescript
+import {RciManager, SessionManager, XHRTransport} from '@rci-tools/core';
+
+const transport = new XHRTransport();
+const sessionManager = new SessionManager('http://192.168.1.1', transport);
+const rciManager = new RciManager('http://192.168.1.1', transport);
+```
 
 ## Installation
 
