@@ -12,10 +12,21 @@
 - [RciManager](./src/rci-manager/rci.manager.ts): основной класс для работы с API в едином стиле;
 
 Оба класса требуют экземпляр [`HTTP транспорта`](./src/transport/http.transport.ts)
-для отправки HTTP-запросов к устройству. Модуль `@rci-tools/core` предоставляет
-[обёртку над `fetch`](./src/transport/fetch/fetch.transport.ts) в качестве такого транспорта.
-Передавайте один и тот же экземпляр `FetchTransport` и в `SessionManager`,
-и в `RciManager`, чтобы запросы от `RciManager` отправлялись в рамках авторизованной HTTP-сессии.
+для отправки HTTP-запросов к устройству. Пакет предоставляет два браузерных транспорта:
+
+- [`FetchTransport`](./src/transport/fetch/fetch.transport.ts) — обёртка над встроенным API `fetch`;
+- [`XHRTransport`](./src/transport/xhr/xhr.transport.ts) — транспорт на основе `XMLHttpRequest`.
+
+Передавайте один и тот же экземпляр транспорта в `SessionManager` и `RciManager`, чтобы запросы
+`RciManager` выполнялись в рамках авторизованной HTTP-сессии:
+
+```typescript
+import {RciManager, SessionManager, XHRTransport} from '@rci-tools/core';
+
+const transport = new XHRTransport();
+const sessionManager = new SessionManager('http://192.168.1.1', transport);
+const rciManager = new RciManager('http://192.168.1.1', transport);
+```
 
 ## Установка
 
