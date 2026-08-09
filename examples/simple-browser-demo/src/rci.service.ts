@@ -1,13 +1,14 @@
-import {RciManager, RciQuery, SessionManager, FetchTransport} from '@rci-tools/core';
-import {catchError, Observable, of} from 'rxjs';
+import {HttpTransport, RciManager, RciQuery, SessionManager} from '@rci-tools/core';
+import {Observable, catchError, of} from 'rxjs';
+import {createTransport} from './transport.factory';
 
 class RciService {
-  protected transport: FetchTransport;
+  protected transport: HttpTransport;
   protected auth: SessionManager;
   protected driver: RciManager;
 
   constructor() {
-    this.transport = new FetchTransport();
+    this.transport = createTransport(import.meta.env.VITE_TRANSPORT);
     this.driver = new RciManager(window.origin, this.transport);
     this.auth = new SessionManager(window.origin, this.transport);
   }

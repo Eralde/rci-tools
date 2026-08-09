@@ -16,6 +16,15 @@ const argv = yargs(hideBin(process.argv))
       alias: 'a',
     },
   )
+  .option(
+    'transport',
+    {
+      type: 'string',
+      choices: ['fetch', 'xhr'],
+      default: 'fetch',
+      description: 'HTTP transport to use in the browser',
+    },
+  )
   .help()
   .alias('help', 'h')
   .argv;
@@ -51,7 +60,7 @@ const runDev = () => {
       command,
       {
         stdio: 'inherit',
-        env: {...process.env, PROXY_ADDR: proxyAddr},
+        env: {...process.env, PROXY_ADDR: proxyAddr, VITE_TRANSPORT: argv.transport},
         shell: true,
       },
     );
