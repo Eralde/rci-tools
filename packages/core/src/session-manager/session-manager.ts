@@ -1,25 +1,57 @@
 import {Observable, defer, of} from 'rxjs';
 import {catchError, finalize, map, shareReplay, switchMap, tap} from 'rxjs/operators';
 import type {BaseHttpResponse, HttpTransport} from '../transport';
-import {Ndw2AuthProtocol, Ndw4AuthProtocol, SessionAuthContext, SessionAuthProtocol} from './auth-protocol';
+import {
+  AUTH_PROTOCOL,
+  LOGIN_FAILURE_REASON,
+  Ndw2AuthProtocol,
+  Ndw4AuthProtocol,
+  SessionAuthContext,
+  SessionAuthProtocol,
+} from './auth-protocol';
+import type {AuthProtocolName} from './auth-protocol';
+import {toLoginFailure, toLoginSuccess} from './auth-protocol/login-result.utils';
+import type {LoginDetails, SessionManagerOptions} from './session-manager.types';
+
+// NDW4 first: prefer it if the device offers it
+const DEFAULT_AUTH_PROTOCOLS: readonly AuthProtocolName[] = [AUTH_PROTOCOL.NDW4, AUTH_PROTOCOL.NDW2];
+
+type BuiltInAuthProtocol<ResponseType extends BaseHttpResponse> =
+  & SessionAuthProtocol<ResponseType>
+  & {readonly schema: AuthProtocolName};
 
 export class SessionManager<ResponseType extends BaseHttpResponse = BaseHttpResponse> {
-  private readonly authProtocols: Array<SessionAuthProtocol<ResponseType>> = [];
+  private readonly authProtocols: Array<BuiltInAuthProtocol<ResponseType>>;
   private readonly authUri: string;
 
   private isLoggingErrors: boolean = false;
-  private loginAttemptInProgress$: Observable<boolean> | null = null;
+  private loginAttemptInProgress$: Observable<LoginDetails> | null = null;
 
   constructor(
     private host: string,
     private httpTransport: HttpTransport<ResponseType>,
+    options: SessionManagerOptions = {},
   ) {
     this.authUri = `${this.host}/auth`;
 
-    this.authProtocols.push(
-      new Ndw4AuthProtocol(this.host, this.httpTransport), // prefer if available
-      new Ndw2AuthProtocol(this.host, this.httpTransport),
-    );
+    const protocols = options.protocols ?? DEFAULT_AUTH_PROTOCOLS;
+
+    if (protocols.length === 0) {
+      throw new Error('SessionManager: at least one auth protocol is required.');
+    }
+
+    this.authProtocols = [...new Set(protocols)].map((name) => this.createAuthProtocol(name));
+  }
+
+  private createAuthProtocol(name: AuthProtocolName): BuiltInAuthProtocol<ResponseType> {
+    switch (name) {
+      case AUTH_PROTOCOL.NDW4:
+        return new Ndw4AuthProtocol(this.host, this.httpTransport);
+      case AUTH_PROTOCOL.NDW2:
+        return new Ndw2AuthProtocol(this.host, this.httpTransport);
+      default:
+        throw new Error(`SessionManager: unknown auth protocol "${String(name)}".`);
+    }
   }
 
   public isAuthenticated(): Observable<boolean> {
@@ -47,6 +79,23 @@ export class SessionManager<ResponseType extends BaseHttpResponse = BaseHttpResp
   }
 
   public login(username: string, password: string): Observable<boolean> {
+    return this.loginDetailed(username, password)
+      .pipe(
+        map((result) => result.success),
+      );
+  }
+
+  /**
+   * Same as `login()` (and shares the same in-flight attempt with it), but reports the details:
+   * the auth protocol used (see `LoginDetails`) and, on failure, the reason:
+   * - `rejected`: the device refused the credentials (`401` on the NDW2 `POST /auth`;
+   *   a server signature mismatch or an `error` in an NDW4 reply);
+   * - `unavailable`: anything else — the handshake could not be completed
+   *   (network error, unexpected HTTP status, malformed reply, no session after the handshake, etc.).
+   *
+   * Unsubscribing stops the handshake: no further requests are sent, and the next call starts a fresh one.
+   */
+  public loginDetailed(username: string, password: string): Observable<LoginDetails> {
     return defer(() => {
       if (this.loginAttemptInProgress$) {
         return this.loginAttemptInProgress$;
@@ -69,18 +118,18 @@ export class SessionManager<ResponseType extends BaseHttpResponse = BaseHttpResp
     });
   }
 
-  private runLoginHandshake(username: string, password: string): Observable<boolean> {
+  private runLoginHandshake(username: string, password: string): Observable<LoginDetails> {
     return defer(() => {
       this.httpTransport.authErrorSuspension?.suspend();
 
       return this.httpTransport.get(this.authUri)
         .pipe(
           catchError((error) => of(this.errorToResponse(error))),
-          switchMap((response): Observable<boolean> => {
+          switchMap((response): Observable<LoginDetails> => {
             this.httpTransport.onAuthRequest(response);
 
             if (response.status === 200) {
-              return of(true);
+              return of({...toLoginSuccess(), protocol: null});
             }
 
             const protocol = this.authProtocols.find((candidate) => {
@@ -90,24 +139,30 @@ export class SessionManager<ResponseType extends BaseHttpResponse = BaseHttpResp
             if (!protocol) {
               this.logError(`No supported authentication protocol found for response with status ${response.status}`);
 
-              return of(false);
+              return of({...toLoginFailure(LOGIN_FAILURE_REASON.UNAVAILABLE), protocol: null});
             }
 
-            const context = this.getAuthContext();
-
-            return protocol.authenticate(
-              response,
-              context,
-              username,
-              password,
-            );
+            return this.authenticateWith(protocol, response, username, password);
           }),
           finalize(() => this.httpTransport.authErrorSuspension?.resume()),
         );
     });
   }
 
-  private onLoginAttemptEnd(loginAttempt: Observable<boolean>): void {
+  // runs the handshake of the selected protocol and reports the protocol along with the result
+  private authenticateWith(
+    protocol: BuiltInAuthProtocol<ResponseType>,
+    initialResponse: ResponseType,
+    username: string,
+    password: string,
+  ): Observable<LoginDetails> {
+    return protocol.authenticate(initialResponse, this.getAuthContext(), username, password)
+      .pipe(
+        map((result): LoginDetails => ({...result, protocol: protocol.schema})),
+      );
+  }
+
+  private onLoginAttemptEnd(loginAttempt: Observable<LoginDetails>): void {
     if (this.loginAttemptInProgress$ === loginAttempt) {
       this.loginAttemptInProgress$ = null;
     }

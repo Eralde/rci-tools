@@ -45,6 +45,7 @@ npm install @rci-tools/core
 interface SessionManager<ResponseType extends BaseHttpResponse = BaseHttpResponse> {
   isAuthenticated(): Observable<boolean>;
   login(username: string, password: string): Observable<boolean>;
+  loginDetailed(username: string, password: string): Observable<LoginDetails>;
   logout(): Observable<unknown>;
 
   getRealmHeader(): Observable<string>;
@@ -58,6 +59,46 @@ interface SessionManager<ResponseType extends BaseHttpResponse = BaseHttpRespons
 - `getRealmHeader`: позволяет получить имя устройства до аутентификации (например, чтобы показать
   его на экране входа)
 - `toggleErrorLogging`: включает/отключает логирование HTTP-ошибок в консоль
+
+По умолчанию `SessionManager` использует первый протокол аутентификации, который предлагает устройство,
+и предпочитает `'x-ndw4-interactive'` протоколу `'x-ndw2-interactive'`; после неудачи он никогда
+не переключается на другой протокол. Чтобы ограничить набор протоколов или изменить их порядок,
+передайте их в конструктор:
+
+```typescript
+import {AUTH_PROTOCOL, SessionManager} from '@rci-tools/core';
+
+const sessionManager = new SessionManager('http://192.168.1.1', transport, {
+  protocols: [AUTH_PROTOCOL.NDW2], // в порядке предпочтения
+});
+```
+
+Если устройство не предлагает ни одного из разрешенных протоколов, вход завершается с `'unavailable'`.
+
+`loginDetailed` использует ту же попытку входа, что и `login` (одновременные вызовы любого
+из методов приводят к одному обмену с устройством), но возвращает `LoginDetails`:
+`{success: true, protocol}` или `{success: false, reason, protocol}`.
+
+`protocol` (`AUTH_PROTOCOL.*`) — протокол, выбранный по challenge устройства (ответу на `GET /auth`):
+`'x-ndw4-interactive'` или `'x-ndw2-interactive'`. Выбранный протокол возвращается при любом дальнейшем
+исходе, даже если вход не удался до отправки логина и пароля. `null` — протокол не выбран: сессия
+уже была, или в ответе нет подходящего challenge (сетевая ошибка, неожиданный HTTP-код,
+устройство не предлагает ни одного из разрешенных протоколов).
+
+`reason` (`LOGIN_FAILURE_REASON.*`):
+
+- `'rejected'`: устройство отклонило логин/пароль; повторять попытку с тем же паролем бессмысленно;
+- `'unavailable'`: обмен не удалось завершить (устройство выключается, загружается, недоступно
+  или ответило что-то неожиданное); имеет смысл повторить попытку позже.
+
+Чтобы ограничить время попытки, используйте собственный таймаут и отпишитесь: дальнейшие запросы
+не отправляются, а следующий вызов начинает обмен заново (уже отправленные запросы встроенные
+транспорты не прерывают).
+
+Если ваш код сам повторяет вход (например, с сохраненным паролем), учитывайте, что в устройства встроена
+защита от перебора пароля: после слишком большого числа неудачных попыток входа клиент может быть
+временно заблокирован. Ограничивайте число `'rejected'` подряд и делайте паузы после **любой** неудачи,
+а не только после `'rejected'`.
 
 ### `RciManager`
 
