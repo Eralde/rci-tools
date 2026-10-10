@@ -177,7 +177,7 @@ A reply that contains a non-empty `error` (or `e`) field is a failure: report it
         ```
 
    Verify it against `hmacSha3_512(serverKey, authMessage)`.
-   If the signatures do not match, the device does not know the password:
+   If the signatures do not match, the signature was not computed from the password the client used:
    abort without sending the last phase.
 
 5. **Phase 3** &mdash; confirm the verified signature:

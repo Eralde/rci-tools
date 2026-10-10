@@ -60,7 +60,7 @@ const main = async (): Promise<void> => {
     logError: (error) => console.error(error),
   };
 
-  const authenticated = await firstValueFrom(
+  const result = await firstValueFrom(
     protocol.authenticate(
       challengeResponse,
       context,
@@ -69,8 +69,8 @@ const main = async (): Promise<void> => {
     ),
   );
 
-  if (!authenticated) {
-    throw new Error(`${AUTH_SCHEMA} authentication failed.`);
+  if (!result.success) {
+    throw new Error(`${AUTH_SCHEMA} authentication failed (${result.reason}).`);
   }
 
   console.log(`${AUTH_SCHEMA} authentication succeeded.`);

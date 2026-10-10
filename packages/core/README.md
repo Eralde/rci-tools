@@ -46,6 +46,7 @@ It has the following interface:
 interface SessionManager<ResponseType extends BaseHttpResponse = BaseHttpResponse> {
   isAuthenticated(): Observable<boolean>;
   login(username: string, password: string): Observable<boolean>;
+  loginDetailed(username: string, password: string): Observable<LoginDetails>;
   logout(): Observable<unknown>;
 
   getRealmHeader(): Observable<string>;
@@ -59,6 +60,44 @@ Two remaining methods are:
 - `getRealmHeader`: allows to get the device name before authenticating (e.g., to show it on the
   login screen)
 - `toggleErrorLogging`: enables/disables logging of HTTP errors to the console
+
+By default `SessionManager` uses the first auth protocol the device offers, preferring
+`'x-ndw4-interactive'` over `'x-ndw2-interactive'`; it never falls back to another protocol after a failure.
+To restrict or reorder the protocols, pass them to the constructor:
+
+```typescript
+import {AUTH_PROTOCOL, SessionManager} from '@rci-tools/core';
+
+const sessionManager = new SessionManager('http://192.168.1.1', transport, {
+  protocols: [AUTH_PROTOCOL.NDW2], // most preferred first
+});
+```
+
+If the device offers none of the allowed protocols, the login fails with `'unavailable'`.
+
+`loginDetailed` shares the same in-flight attempt with `login` (concurrent callers of either method
+trigger one handshake), but emits `LoginDetails`: `{success: true, protocol}` or
+`{success: false, reason, protocol}`.
+
+`protocol` (`AUTH_PROTOCOL.*`) is the auth protocol selected from the device challenge (the `GET /auth`
+reply): `'x-ndw4-interactive'` or `'x-ndw2-interactive'`. Once selected, it is reported whatever happens next,
+even if the login fails before any credentials are sent. It is `null` when no protocol was selected:
+the session was already there, or the reply had no usable challenge (network error, unexpected status,
+none of the allowed protocols offered).
+
+`reason` (`LOGIN_FAILURE_REASON.*`) is:
+
+- `'rejected'`: the device refused the credentials; retrying with the same password is pointless;
+- `'unavailable'`: the handshake could not be completed (the device is going down, booting, unreachable,
+  or answered with something unexpected); retrying later is the right thing to do.
+
+To bound an attempt, apply your own timeout and unsubscribe: no further handshake requests are sent,
+and the next call starts a fresh handshake (requests already sent are not aborted by the built-in transports).
+
+If your code re-authenticates on its own (e.g. with a stored password), keep in mind that devices have
+built-in brute-force protection: too many failed logins from one client may get it temporarily blocked.
+Limit the number of `'rejected'` results in a row and space out attempts after **any** failure,
+not only after `'rejected'`.
 
 ### `RciManager`
 

@@ -3,7 +3,9 @@ import {catchError, map} from 'rxjs/operators';
 import {md5} from 'hash-wasm';
 import jsSha from 'jssha';
 import type {BaseHttpResponse, HttpTransport} from '../../../transport';
-import type {SessionAuthContext, SessionAuthProtocol} from '../auth-protocol.types';
+import {AUTH_PROTOCOL, LOGIN_FAILURE_REASON} from '../auth-protocol.types';
+import type {LoginResult, SessionAuthContext, SessionAuthProtocol} from '../auth-protocol.types';
+import {checkFinalLoginResult, toLoginFailure} from '../login-result.utils';
 
 interface PasswordData {
   token: string;
@@ -14,7 +16,7 @@ interface PasswordData {
 
 export class Ndw2AuthProtocol<ResponseType extends BaseHttpResponse = BaseHttpResponse>
   implements SessionAuthProtocol<ResponseType> {
-  public readonly schema = 'x-ndw2-interactive';
+  public readonly schema = AUTH_PROTOCOL.NDW2;
   public readonly authEndpoint: string;
 
   constructor(
@@ -35,14 +37,14 @@ export class Ndw2AuthProtocol<ResponseType extends BaseHttpResponse = BaseHttpRe
     context: SessionAuthContext<ResponseType>,
     username: string,
     password: string,
-  ): Observable<boolean> {
+  ): Observable<LoginResult> {
     const token = this.httpTransport.getHeader(initialResponse, 'X-NDM-Challenge');
     const realm = this.httpTransport.getHeader(initialResponse, 'X-NDM-Realm');
 
     if (!token || !realm) {
       context.logError('One of the requried headers ("X-NDM-Challenge", "X-NDM-Realm") is missing');
 
-      return of(false);
+      return of(toLoginFailure(LOGIN_FAILURE_REASON.UNAVAILABLE));
     }
 
     return this.getEncryptedPassword({token, realm, login: username, password})
@@ -75,7 +77,7 @@ export class Ndw2AuthProtocol<ResponseType extends BaseHttpResponse = BaseHttpRe
     context: SessionAuthContext<ResponseType>,
     username: string,
     encryptedPassword: string,
-  ): Observable<boolean> {
+  ): Observable<LoginResult> {
     const requestData = {
       login: username,
       password: encryptedPassword,
@@ -88,7 +90,14 @@ export class Ndw2AuthProtocol<ResponseType extends BaseHttpResponse = BaseHttpRe
 
           return of(context.errorToResponse(error));
         }),
-        exhaustMap(() => context.isAuthenticated()),
+        exhaustMap((response) => {
+          // the device answers `401` to credentials it does not accept
+          if (response?.status === 401) {
+            return of(toLoginFailure(LOGIN_FAILURE_REASON.REJECTED));
+          }
+
+          return checkFinalLoginResult(context);
+        }),
       );
   }
 }

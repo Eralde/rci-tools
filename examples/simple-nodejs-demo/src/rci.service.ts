@@ -1,6 +1,6 @@
 import {Observable, catchError, exhaustMap, of} from 'rxjs';
 import {AxiosTransport} from '@rci-tools/adapter-axios';
-import {RciBackgroundProcess, RciManager, RciQuery, SessionManager} from '@rci-tools/core';
+import {QueueOptions, RciBackgroundProcess, RciManager, RciQuery, SessionManager} from '@rci-tools/core';
 
 export interface DeviceCredentials {
   address: string;
@@ -23,10 +23,10 @@ export class RciService {
     this.auth = new SessionManager(address, this.transport);
   }
 
-  public execute(query: RciQuery | RciQuery[]): Observable<any> {
+  public execute(query: RciQuery | RciQuery[], options?: QueueOptions,): Observable<any> {
     return this.ensureAuth()
       .pipe(
-        exhaustMap(() => this.manager.queue(query)),
+        exhaustMap(() => this.manager.queue(query, options)),
         catchError((error) => {
           console.log('Failed to execute an RCI query', error);
 

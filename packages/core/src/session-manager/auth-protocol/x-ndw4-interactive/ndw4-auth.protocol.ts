@@ -2,7 +2,9 @@ import {argon2id} from 'hash-wasm';
 import {Observable, defer, of} from 'rxjs';
 import {catchError, exhaustMap, map} from 'rxjs/operators';
 import type {BaseHttpResponse, HttpTransport} from '../../../transport';
-import type {SessionAuthContext, SessionAuthProtocol} from '../auth-protocol.types';
+import {AUTH_PROTOCOL, LOGIN_FAILURE_REASON} from '../auth-protocol.types';
+import type {LoginResult, SessionAuthContext, SessionAuthProtocol} from '../auth-protocol.types';
+import {checkFinalLoginResult, toLoginFailure} from '../login-result.utils';
 import {decodeBase64, encodeBase64, equalBytes, hmacSha3_512, sha3_512} from './ndw4-auth.utils';
 import {
   NDW4_CLIENT_KEY,
@@ -25,6 +27,14 @@ import {
   Ndw4ServerReply,
   Ndw4ServerSignature,
 } from './ndw4-auth.types';
+
+/**
+ * The device has refused the credentials:
+ * - the phase 2 server signature does not match the password the client used;
+ * - a non-empty `error` / `e` in a reply.
+ */
+class Ndw4RejectedError extends Error {
+}
 
 /**
  * SCRAM-SHA3-512 (Argon2id variant) auth over a JSON / X-NDM-Data transport.
@@ -57,7 +67,7 @@ import {
  */
 export class Ndw4AuthProtocol<ResponseType extends BaseHttpResponse = BaseHttpResponse>
   implements SessionAuthProtocol<ResponseType> {
-  public readonly schema = 'x-ndw4-interactive';
+  public readonly schema = AUTH_PROTOCOL.NDW4;
 
   constructor(
     public readonly host: string,
@@ -76,7 +86,7 @@ export class Ndw4AuthProtocol<ResponseType extends BaseHttpResponse = BaseHttpRe
     context: SessionAuthContext<ResponseType>,
     username: string,
     password: string,
-  ): Observable<boolean> {
+  ): Observable<LoginResult> {
     return defer(() => of(this.createHandshake(initialResponse, username, password)))
       .pipe(
         exhaustMap((handshake) => this.requestChallenge(handshake, context)),
@@ -86,7 +96,11 @@ export class Ndw4AuthProtocol<ResponseType extends BaseHttpResponse = BaseHttpRe
         catchError((error) => {
           context.logError(error);
 
-          return of(false);
+          const reason = error instanceof Ndw4RejectedError
+            ? LOGIN_FAILURE_REASON.REJECTED
+            : LOGIN_FAILURE_REASON.UNAVAILABLE;
+
+          return of(toLoginFailure(reason));
         }),
       );
   }
@@ -131,7 +145,7 @@ export class Ndw4AuthProtocol<ResponseType extends BaseHttpResponse = BaseHttpRe
   private sendSignatureProof(
     serverSignature: Ndw4ServerSignature,
     context: SessionAuthContext<ResponseType>,
-  ): Observable<boolean> {
+  ): Observable<LoginResult> {
     const {keys, signatureBase64} = serverSignature;
     const authMessage = `${serverSignature.authMessage};signature4=${signatureBase64}`;
 
@@ -147,9 +161,11 @@ export class Ndw4AuthProtocol<ResponseType extends BaseHttpResponse = BaseHttpRe
           return this.post(serverSignature.authUrl, requestData, context);
         }),
         exhaustMap((response) => {
+          // The server signature has matched, so the password is right:
+          // a non-200 here is not a password issue (e.g. the device has dropped the handshake state).
           return response.status === 200
-            ? context.isAuthenticated()
-            : of(false);
+            ? checkFinalLoginResult(context)
+            : of(toLoginFailure(LOGIN_FAILURE_REASON.UNAVAILABLE));
         }),
       );
   }
@@ -280,7 +296,7 @@ export class Ndw4AuthProtocol<ResponseType extends BaseHttpResponse = BaseHttpRe
       const expectedSignature = await hmacSha3_512(secrets.keys.serverKey, secrets.authMessage);
 
       if (!equalBytes(decodeBase64(signatureBase64), expectedSignature)) {
-        throw new Error('NDW4 auth failed: server signature mismatch.');
+        throw new Ndw4RejectedError('NDW4 auth failed: server signature mismatch.');
       }
 
       return {...secrets, signatureBase64};
@@ -353,7 +369,7 @@ export class Ndw4AuthProtocol<ResponseType extends BaseHttpResponse = BaseHttpRe
     const message = reply.error ?? reply.e;
 
     if (typeof message === 'string' && message) {
-      throw new Error(`NDW4 auth failed at ${stage} step: ${message}`);
+      throw new Ndw4RejectedError(`NDW4 auth failed at ${stage} step: ${message}`);
     }
   }
 

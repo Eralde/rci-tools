@@ -1,6 +1,14 @@
 import {describe, expect, it, vi} from 'vitest';
 import {NEVER, Subject, catchError, firstValueFrom, of, throwError} from 'rxjs';
-import {AuthErrorHandler, type BaseHttpResponse, type HttpTransport, SessionManager} from '../../../src';
+import {
+  AUTH_PROTOCOL,
+  AuthErrorHandler,
+  type AuthProtocolName,
+  type BaseHttpResponse,
+  type HttpTransport,
+  LOGIN_FAILURE_REASON,
+  SessionManager,
+} from '../../../src';
 
 const makeTransport = (overrides: Partial<HttpTransport<BaseHttpResponse>> = {}): HttpTransport<BaseHttpResponse> => ({
   get: vi.fn().mockReturnValue(of({status: 200, data: {}})),
@@ -420,5 +428,430 @@ describe('SessionManager', () => {
     const session = new SessionManager('http://device', transport);
 
     await expect(firstValueFrom(session.login('admin', 'password'))).resolves.toBe(false);
+  });
+});
+
+const readHeader = (response: BaseHttpResponse, name: string): string => {
+  const headers = (response as {headers?: Record<string, string>} | undefined)?.headers;
+
+  return headers?.[name] ?? '';
+};
+
+const ndw2Challenge = {
+  status: 401,
+  data: {},
+  headers: {
+    'WWW-Authenticate': 'x-ndw2-interactive',
+    'X-NDM-Challenge': 'challenge-token',
+    'X-NDM-Realm': 'Keenetic',
+  },
+};
+
+const ndw4Challenge = {
+  status: 401,
+  data: {},
+  headers: {
+    'WWW-Authenticate': 'x-ndw4-interactive realm="Keenetic" endpoint="/auth"',
+  },
+};
+
+// NDW4 replies come as non-200 responses with a base64-encoded JSON in `X-NDM-Data`
+const ndw4Reply = (reply: object) => {
+  return throwError(() => ({
+    response: {
+      status: 401,
+      data: {},
+      headers: {'X-NDM-Data': Buffer.from(JSON.stringify(reply)).toString('base64')},
+    },
+  }));
+};
+
+// A valid phase 1 reply with the cheapest Argon2id parameters the protocol accepts
+const ndw4FirstReply = (clientNonce: string) => {
+  return ndw4Reply({
+    salt: Buffer.alloc(16).toString('base64'),
+    nonce: `${clientNonce}server`,
+    iter: 1,
+    memcost: 8,
+  });
+};
+
+// Phase 1 sends `{login, nonce}`, phase 2 adds `proof`, phase 3 sends `signature-proof` instead
+type Ndw4RequestData = {nonce: string; proof?: string; 'signature-proof'?: string};
+
+const NDW2 = AUTH_PROTOCOL.NDW2;
+const NDW4 = AUTH_PROTOCOL.NDW4;
+
+const succeeded = (protocol: AuthProtocolName | null) => ({success: true, protocol});
+const rejected = (protocol: AuthProtocolName | null) => ({success: false, reason: LOGIN_FAILURE_REASON.REJECTED,
+  protocol});
+const unavailable = (protocol: AuthProtocolName | null) => {
+  return {success: false, reason: LOGIN_FAILURE_REASON.UNAVAILABLE, protocol};
+};
+
+describe('SessionManager.loginDetailed()', () => {
+  it('reports success when the auth endpoint already returns 200', async () => {
+    const transport = makeTransport({get: vi.fn().mockReturnValue(of({status: 200, data: {}}))});
+    const session = new SessionManager('http://device', transport);
+
+    await expect(firstValueFrom(session.loginDetailed('admin', 'password'))).resolves.toEqual(succeeded(null));
+  });
+
+  it('reports an unavailable device when no auth protocol matches the response', async () => {
+    const transport = makeTransport({
+      get: vi.fn().mockReturnValue(of({status: 403, data: {}, headers: {}})),
+      getHeader: vi.fn(readHeader),
+    });
+    const session = new SessionManager('http://device', transport);
+
+    await expect(firstValueFrom(session.loginDetailed('admin', 'password'))).resolves.toEqual(unavailable(null));
+  });
+
+  it('reports an unavailable device when NDW2 challenge headers are missing', async () => {
+    const transport = makeTransport({
+      get: vi.fn().mockReturnValue(of({status: 401, data: {}, headers: {'WWW-Authenticate': 'x-ndw2-interactive'}})),
+      getHeader: vi.fn(readHeader),
+    });
+    const session = new SessionManager('http://device', transport);
+
+    await expect(firstValueFrom(session.loginDetailed('admin', 'password'))).resolves.toEqual(unavailable(NDW2));
+    expect(transport.post).not.toHaveBeenCalled();
+  });
+
+  it('reports a rejected NDW2 login on 401 from POST /auth without re-checking the session', async () => {
+    const get = vi.fn().mockReturnValue(of(ndw2Challenge));
+    const transport = makeTransport({
+      get,
+      post: vi.fn().mockReturnValue(throwError(() => ({response: {status: 401, data: {}, headers: {}}}))),
+      getHeader: vi.fn(readHeader),
+    });
+    const session = new SessionManager('http://device', transport);
+
+    await expect(firstValueFrom(session.loginDetailed('admin', 'password'))).resolves.toEqual(rejected(NDW2));
+    expect(get).toHaveBeenCalledTimes(1);
+  });
+
+  // FetchTransport and XHRTransport throw the response object itself, not `{response}`
+  it('reports a rejected NDW2 login when the transport throws the 401 response itself', async () => {
+    const get = vi.fn().mockReturnValue(of(ndw2Challenge));
+    const transport = makeTransport({
+      get,
+      post: vi.fn().mockReturnValue(throwError(() => ({status: 401, data: {}, headers: {}}))),
+      getHeader: vi.fn(readHeader),
+    });
+    const session = new SessionManager('http://device', transport);
+
+    await expect(firstValueFrom(session.loginDetailed('admin', 'password'))).resolves.toEqual(rejected(NDW2));
+    expect(get).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports an unavailable device when NDW2 POST /auth fails without a response', async () => {
+    const transport = makeTransport({
+      get: vi.fn()
+        .mockReturnValueOnce(of(ndw2Challenge))
+        .mockReturnValueOnce(throwError(() => ({response: {status: 401, data: {}, headers: {}}}))),
+      post: vi.fn().mockReturnValue(throwError(() => new Error('network error'))),
+      getHeader: vi.fn(readHeader),
+    });
+    const session = new SessionManager('http://device', transport);
+
+    await expect(firstValueFrom(session.loginDetailed('admin', 'password'))).resolves.toEqual(unavailable(NDW2));
+  });
+
+  it('reports an unavailable device when NDW2 POST is accepted but the final check finds no session', async () => {
+    const get = vi.fn()
+      .mockReturnValueOnce(of(ndw2Challenge))
+      .mockReturnValueOnce(of({status: 401, data: {}, headers: {}}));
+    const transport = makeTransport({
+      get,
+      post: vi.fn().mockReturnValue(of({status: 200, data: {}})),
+      getHeader: vi.fn(readHeader),
+    });
+    const session = new SessionManager('http://device', transport);
+
+    await expect(firstValueFrom(session.loginDetailed('admin', 'password'))).resolves.toEqual(unavailable(NDW2));
+    expect(get).toHaveBeenCalledTimes(2);
+  });
+
+  it('reports success when NDW2 POST /auth is accepted and the session is there', async () => {
+    const transport = makeTransport({
+      get: vi.fn()
+        .mockReturnValueOnce(of(ndw2Challenge))
+        .mockReturnValueOnce(of({status: 200, data: {}})),
+      post: vi.fn().mockReturnValue(of({status: 200, data: {}})),
+      getHeader: vi.fn(readHeader),
+    });
+    const session = new SessionManager('http://device', transport);
+
+    await expect(firstValueFrom(session.loginDetailed('admin', 'password'))).resolves.toEqual(succeeded(NDW2));
+  });
+
+  // Devices refuse a wrong NDW4 password this way: phase 2 answers as usual, but the signature
+  // is computed from a key that does not match the password the client used
+  it('reports a rejected NDW4 login on a server signature mismatch and sends no phase 3', async () => {
+    const post = vi.fn((_url: string, data: Ndw4RequestData) => {
+      return data.proof === undefined
+        ? ndw4FirstReply(data.nonce)
+        : ndw4Reply({signature: Buffer.alloc(64).toString('base64')});
+    });
+    const transport = makeTransport({
+      get: vi.fn().mockReturnValue(of(ndw4Challenge)),
+      post,
+      getHeader: vi.fn(readHeader),
+    });
+    const session = new SessionManager('http://device', transport);
+
+    await expect(firstValueFrom(session.loginDetailed('admin', 'password'))).resolves.toEqual(rejected(NDW4));
+    expect(post).toHaveBeenCalledTimes(2);
+  });
+
+  // e.g. an expired handshake state: the device answers phase 2 without the expected fields
+  it('reports an unavailable device when the NDW4 phase 2 reply has no signature', async () => {
+    const post = vi.fn((_url: string, data: Ndw4RequestData) => {
+      return data.proof === undefined ? ndw4FirstReply(data.nonce) : ndw4Reply({});
+    });
+    const transport = makeTransport({
+      get: vi.fn().mockReturnValue(of(ndw4Challenge)),
+      post,
+      getHeader: vi.fn(readHeader),
+    });
+    const session = new SessionManager('http://device', transport);
+
+    await expect(firstValueFrom(session.loginDetailed('admin', 'password'))).resolves.toEqual(unavailable(NDW4));
+    expect(post).toHaveBeenCalledTimes(2);
+  });
+
+  it('reports a rejected NDW4 login on an error in a reply', async () => {
+    const transport = makeTransport({
+      get: vi.fn().mockReturnValue(of(ndw4Challenge)),
+      post: vi.fn().mockReturnValue(ndw4Reply({error: 'unknown login'})),
+      getHeader: vi.fn(readHeader),
+    });
+    const session = new SessionManager('http://device', transport);
+
+    await expect(firstValueFrom(session.loginDetailed('admin', 'password'))).resolves.toEqual(rejected(NDW4));
+  });
+
+  it('reports a rejected NDW4 login on an error in the short `e` field', async () => {
+    const transport = makeTransport({
+      get: vi.fn().mockReturnValue(of(ndw4Challenge)),
+      post: vi.fn().mockReturnValue(ndw4Reply({e: 'unknown login'})),
+      getHeader: vi.fn(readHeader),
+    });
+    const session = new SessionManager('http://device', transport);
+
+    await expect(firstValueFrom(session.loginDetailed('admin', 'password'))).resolves.toEqual(rejected(NDW4));
+  });
+
+  it('reports an unavailable device when an NDW4 reply has no X-NDM-Data', async () => {
+    const transport = makeTransport({
+      get: vi.fn().mockReturnValue(of(ndw4Challenge)),
+      post: vi.fn().mockReturnValue(throwError(() => ({response: {status: 502, data: {}, headers: {}}}))),
+      getHeader: vi.fn(readHeader),
+    });
+    const session = new SessionManager('http://device', transport);
+
+    await expect(firstValueFrom(session.loginDetailed('admin', 'password'))).resolves.toEqual(unavailable(NDW4));
+  });
+
+  it('reports an unavailable device when an NDW4 request fails without a response', async () => {
+    const transport = makeTransport({
+      get: vi.fn().mockReturnValue(of(ndw4Challenge)),
+      post: vi.fn().mockReturnValue(throwError(() => new Error('network error'))),
+      getHeader: vi.fn(readHeader),
+    });
+    const session = new SessionManager('http://device', transport);
+
+    await expect(firstValueFrom(session.loginDetailed('admin', 'password'))).resolves.toEqual(unavailable(NDW4));
+  });
+
+  // a caller that bounds the attempt with its own timeout
+  it('sends no NDW4 phase 3 and releases the flight when unsubscribed during phase 2', async () => {
+    const phase2 = new Subject<BaseHttpResponse>();
+    const get = vi.fn().mockReturnValue(of(ndw4Challenge));
+    const post = vi.fn((_url: string, data: Ndw4RequestData) => {
+      return data.proof === undefined ? ndw4FirstReply(data.nonce) : phase2;
+    });
+    const transport = makeTransport({get, post, getHeader: vi.fn(readHeader)});
+    const session = new SessionManager('http://device', transport);
+
+    const subscription = session.loginDetailed('admin', 'password').subscribe();
+
+    // Argon2id runs between phase 1 and phase 2, so phase 2 starts asynchronously
+    await vi.waitFor(() => expect(post).toHaveBeenCalledTimes(2));
+    subscription.unsubscribe();
+
+    phase2.complete();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(post).toHaveBeenCalledTimes(2);
+
+    get.mockReturnValue(of({status: 200, data: {}}));
+
+    await expect(firstValueFrom(session.loginDetailed('admin', 'password'))).resolves.toEqual(succeeded(null));
+    expect(get).toHaveBeenCalledTimes(2);
+  });
+
+  it('propagates an escaping error instead of reporting a result', async () => {
+    const failure = new Error('projection failure');
+    const transport = makeTransport({
+      get: vi.fn().mockReturnValue(of({status: 200, data: {}})),
+      onAuthRequest: vi.fn(() => {
+        throw failure;
+      }),
+    });
+    const session = new SessionManager('http://device', transport);
+
+    await expect(firstValueFrom(session.loginDetailed('admin', 'password'))).rejects.toBe(failure);
+  });
+
+  it('shares one flight between login() and loginDetailed()', () => {
+    const pending = new Subject<BaseHttpResponse>();
+    const get = vi.fn().mockReturnValue(pending);
+    const transport = makeTransport({get});
+    const session = new SessionManager('http://device', transport);
+    const results: unknown[] = [];
+
+    session.loginDetailed('admin', 'password').subscribe((value) => results.push(value));
+    session.login('admin', 'password').subscribe((value) => results.push(value));
+
+    expect(get).toHaveBeenCalledTimes(1);
+
+    pending.next({status: 200, data: {}});
+    pending.complete();
+
+    expect(results).toEqual([succeeded(null), true]);
+  });
+
+  it('login() maps a rejected login to false', async () => {
+    const transport = makeTransport({
+      get: vi.fn().mockReturnValue(of(ndw4Challenge)),
+      post: vi.fn().mockReturnValue(ndw4Reply({error: 'unknown login'})),
+      getHeader: vi.fn(readHeader),
+    });
+    const session = new SessionManager('http://device', transport);
+
+    await expect(firstValueFrom(session.login('admin', 'password'))).resolves.toBe(false);
+  });
+});
+
+// a device that offers both protocols
+const dualChallenge = {
+  status: 401,
+  data: {},
+  headers: {
+    'WWW-Authenticate': 'x-ndw4-interactive realm="Keenetic" endpoint="/auth", x-ndw2-interactive',
+    'X-NDM-Challenge': 'challenge-token',
+    'X-NDM-Realm': 'Keenetic',
+  },
+};
+
+// NDW2 sends `{login, password}`, NDW4 starts with `{login, nonce}`
+const ndw2Request = expect.objectContaining({password: expect.any(String)});
+const ndw4Request = expect.objectContaining({nonce: expect.any(String)});
+
+describe('SessionManager auth protocols', () => {
+  it('prefers NDW4 when the device offers both protocols', async () => {
+    const post = vi.fn().mockReturnValue(ndw4Reply({error: 'unknown login'}));
+    const transport = makeTransport({
+      get: vi.fn().mockReturnValue(of(dualChallenge)),
+      post,
+      getHeader: vi.fn(readHeader),
+    });
+    const session = new SessionManager('http://device', transport);
+
+    await expect(firstValueFrom(session.loginDetailed('admin', 'password'))).resolves.toEqual(rejected(NDW4));
+    expect(post).toHaveBeenCalledWith(expect.any(String), ndw4Request);
+  });
+
+  it('uses only the allowed protocols', async () => {
+    const post = vi.fn().mockReturnValue(of({status: 200, data: {}}));
+    const transport = makeTransport({
+      get: vi.fn()
+        .mockReturnValueOnce(of(dualChallenge))
+        .mockReturnValueOnce(of({status: 200, data: {}})),
+      post,
+      getHeader: vi.fn(readHeader),
+    });
+    const session = new SessionManager('http://device', transport, {protocols: [NDW2]});
+
+    await expect(firstValueFrom(session.loginDetailed('admin', 'password'))).resolves.toEqual(succeeded(NDW2));
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(post).toHaveBeenCalledWith(expect.any(String), ndw2Request);
+  });
+
+  it('follows the order of the allowed protocols', async () => {
+    const post = vi.fn().mockReturnValue(throwError(() => ({response: {status: 401, data: {}, headers: {}}})));
+    const transport = makeTransport({
+      get: vi.fn().mockReturnValue(of(dualChallenge)),
+      post,
+      getHeader: vi.fn(readHeader),
+    });
+    const session = new SessionManager('http://device', transport, {protocols: [NDW2, NDW4]});
+
+    await expect(firstValueFrom(session.loginDetailed('admin', 'password'))).resolves.toEqual(rejected(NDW2));
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(post).toHaveBeenCalledWith(expect.any(String), ndw2Request);
+  });
+
+  it('does not fall back to another protocol after a failure', async () => {
+    const post = vi.fn().mockReturnValue(ndw4Reply({error: 'unknown login'}));
+    const transport = makeTransport({
+      get: vi.fn().mockReturnValue(of(dualChallenge)),
+      post,
+      getHeader: vi.fn(readHeader),
+    });
+    const session = new SessionManager('http://device', transport);
+
+    await expect(firstValueFrom(session.loginDetailed('admin', 'password'))).resolves.toEqual(rejected(NDW4));
+    expect(post).not.toHaveBeenCalledWith(expect.any(String), ndw2Request);
+  });
+
+  it('does not fall back to another protocol after an unavailable result', async () => {
+    const post = vi.fn().mockReturnValue(throwError(() => ({response: {status: 502, data: {}, headers: {}}})));
+    const transport = makeTransport({
+      get: vi.fn().mockReturnValue(of(dualChallenge)),
+      post,
+      getHeader: vi.fn(readHeader),
+    });
+    const session = new SessionManager('http://device', transport);
+
+    await expect(firstValueFrom(session.loginDetailed('admin', 'password'))).resolves.toEqual(unavailable(NDW4));
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(post).not.toHaveBeenCalledWith(expect.any(String), ndw2Request);
+  });
+
+  it('reports no protocol when the initial GET /auth fails without a response', async () => {
+    const transport = makeTransport({
+      get: vi.fn().mockReturnValue(throwError(() => new Error('network error'))),
+      getHeader: vi.fn(readHeader),
+    });
+    const session = new SessionManager('http://device', transport);
+
+    await expect(firstValueFrom(session.loginDetailed('admin', 'password'))).resolves.toEqual(unavailable(null));
+    expect(transport.post).not.toHaveBeenCalled();
+  });
+
+  it('reports an unavailable device without a handshake when it offers no allowed protocol', async () => {
+    const transport = makeTransport({
+      get: vi.fn().mockReturnValue(of(ndw2Challenge)),
+      getHeader: vi.fn(readHeader),
+    });
+    const session = new SessionManager('http://device', transport, {protocols: [NDW4]});
+
+    await expect(firstValueFrom(session.loginDetailed('admin', 'password'))).resolves.toEqual(unavailable(null));
+    expect(transport.post).not.toHaveBeenCalled();
+  });
+
+  it('requires at least one protocol', () => {
+    expect(() => new SessionManager('http://device', makeTransport(), {protocols: []}))
+      .toThrow('at least one auth protocol is required');
+  });
+
+  it('rejects an unknown protocol', () => {
+    const protocols = ['x-unknown-interactive' as AuthProtocolName];
+
+    expect(() => new SessionManager('http://device', makeTransport(), {protocols}))
+      .toThrow('unknown auth protocol "x-unknown-interactive"');
   });
 });
