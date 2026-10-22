@@ -5,7 +5,6 @@ export default defineConfig({
     exclude: [
       '**/node_modules/**',
       '**/dist/**',
-      '.no-commit/**',
       // integration tests need a device; run them via `pnpm test -- --addr <device-ip>` in packages/core
       'packages/core/__tests__/integration/**',
     ],
