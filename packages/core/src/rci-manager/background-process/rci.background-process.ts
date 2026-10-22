@@ -215,15 +215,15 @@ export class RciBackgroundProcess<CommandType extends string = string> {
 
     this.stateSub$.next(RCI_BACKGROUND_PROCESS_STATE.QUEUED);
 
-    this.subscriptions.add(
-      trigger
-        .pipe(
-          take(1),
-        )
-        .subscribe(() => {
-          this.startTrigger$.next();
-        }),
-    );
+    const triggerSub$ = trigger
+      .pipe(
+        take(1),
+      )
+      .subscribe(() => {
+        this.startTrigger$.next();
+      });
+
+    this.subscriptions.add(triggerSub$);
 
     return true;
   }
