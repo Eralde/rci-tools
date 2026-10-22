@@ -1,4 +1,4 @@
-import {Observable, from, map} from 'rxjs';
+import {Observable, map} from 'rxjs';
 import {GenericObject} from '../../type.utils';
 import type {AuthErrorSuspension, BaseHttpResponse, HttpTransport} from '../http.transport';
 import {AuthErrorHandler} from '../errors';
@@ -93,7 +93,7 @@ export class XHRTransport implements HttpTransport<XHRTransportResponse> {
     body: string | undefined,
     headers: Record<string, string> | undefined,
   ): Observable<XHRTransportResponse> {
-    return from(this.sendRequest(method, url, body, headers))
+    return this.sendRequest(method, url, body, headers)
       .pipe(this.authHandler.handleAuthError<XHRTransportResponse>());
   }
 
@@ -102,8 +102,9 @@ export class XHRTransport implements HttpTransport<XHRTransportResponse> {
     url: string,
     body: string | undefined,
     headers: Record<string, string> | undefined,
-  ): Promise<XHRTransportResponse> {
-    return new Promise<XHRTransportResponse>((resolve, reject) => {
+  ): Observable<XHRTransportResponse> {
+    // the request is sent on subscription; unsubscribing before completion aborts it
+    return new Observable<XHRTransportResponse>((subscriber) => {
       const xhr = new XMLHttpRequest();
 
       xhr.open(method, url, true);
@@ -124,17 +125,28 @@ export class XHRTransport implements HttpTransport<XHRTransportResponse> {
         const response = this.toResponse(xhr);
 
         if (response.status === 200) {
-          resolve(response);
+          subscriber.next(response);
+          subscriber.complete();
         } else {
-          reject(response);
+          subscriber.error(response);
         }
       };
 
       xhr.onerror = () => {
-        reject(new Error('XMLHttpRequest request failed'));
+        subscriber.error(new Error('XMLHttpRequest request failed'));
       };
 
       xhr.send(body);
+
+      return () => {
+        if (xhr.readyState === XMLHttpRequest.DONE) {
+          return;
+        }
+
+        xhr.onreadystatechange = null;
+        xhr.onerror = null;
+        xhr.abort();
+      };
     });
   }
 

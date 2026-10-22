@@ -92,7 +92,7 @@ none of the allowed protocols offered).
   or answered with something unexpected); retrying later is the right thing to do.
 
 To bound an attempt, apply your own timeout and unsubscribe: no further handshake requests are sent,
-and the next call starts a fresh handshake (requests already sent are not aborted by the built-in transports).
+and the next call starts a fresh handshake (the built-in transports also abort the in-flight HTTP request).
 
 If your code re-authenticates on its own (e.g. with a stored password), keep in mind that devices have
 built-in brute-force protection: too many failed logins from one client may get it temporarily blocked.
@@ -121,8 +121,10 @@ interface RciManager<
   toggleStats(enabled: boolean): void;
   replaceBatchScheduler(scheduler: BatchScheduler<QueryPath>, options?: {waitIdleFor?: number}): Observable<void>;
 
-  execute(query: RciTask<QueryPath>): Observable<any>;
-  queue(query: RciTask<QueryPath>, options?: QueueOptions): Observable<any>;
+  execute<T extends object = GenericObject>(query: RciQuery<QueryPath>): Observable<T | undefined>;
+  execute<T extends object = GenericObject>(query: RciQuery<QueryPath>[]): Observable<Array<T | undefined>>;
+  queue<T extends object = GenericObject>(query: RciQuery<QueryPath>, options?: QueueOptions): Observable<T | undefined>;
+  queue<T extends object = GenericObject>(query: RciQuery<QueryPath>[], options?: QueueOptions): Observable<Array<T | undefined>>;
   initBackgroundProcess(query: RciQuery<BackgroundQueryPath>, options?: RciBackgroundProcessOptions): RciBackgroundProcess;
   queueBackgroundProcess(query: RciQuery<BackgroundQueryPath>, options?: RciBackgroundProcessOptions): RciBackgroundProcess;
 
@@ -140,6 +142,14 @@ Additional members:
   Throws `SchedulerReplacementInProgressError` if another replacement is already in progress.
   See [Batch Scheduling](./docs/SCHEDULING.md).
 - `destroy()`: tears down internal queues, background process queues, and the stats collector.
+  Pending `queue()` results error with `QueueDestroyedError`. After `destroy()`, `execute()`, `queue()`
+  and `replaceBatchScheduler()` return Observables that error with `RciManagerDestroyedError`;
+  `initBackgroundProcess()` and `queueBackgroundProcess()` throw it. Processes created with
+  `initBackgroundProcess()` belong to the caller and are not destroyed. The transport is not owned by
+  the manager either. Calling `destroy()` again does nothing.
+
+`T` in `execute()`/`queue()` is a type assertion, not a runtime check. An element is `undefined` when
+the device response has no value at the query path.
 
 The `RciManager` relies heavily on the [root API endpoint (`/rci/`)](../../docs/RCI_API.md#31-root-api-resource).
 Interactions with both [setting](../../docs/RCI_API.md#21-settings) and
@@ -250,7 +260,8 @@ You can use the representation that is more convenient for you.
 The `RciManager` provides two methods for sending API queries:
 
 - **`execute(query)`**: Sends the HTTP request when you subscribe to the returned Observable.
-  You have full control over the subscription lifecycle. This may be useful when you need to:
+  Each subscription sends its own request; unsubscribing before the response arrives aborts it
+  (built-in transports). You have full control over the subscription lifecycle. This may be useful when you need to:
     - Manually control when the HTTP request is made
     - Chain multiple queries with precise timing
 
@@ -313,7 +324,7 @@ auth$
       data: {name: 'Bridge0', description: 'My awesome home network'},
     };
 
-    const changeSettingResult = await rciManager.queue(changeHomeDescription).toPromise(); // a generic status object
+    const changeSettingResult = await firstValueFrom(rciManager.queue(changeHomeDescription)); // a generic status object
 
     // relevant action (setting prefixed with 'show.rc')
     const readInterfaceDescription: RciQuery = {
@@ -321,14 +332,14 @@ auth$
       data: {name: 'Bridge0'},
     };
 
-    const readSettingResult = await rciManager.queue(readInterfaceDescription).toPromise(); // 'My awesome home network'
+    const readSettingResult = await firstValueFrom(rciManager.queue(readInterfaceDescription)); // 'My awesome home network'
 
     // another action
     const showVersion: RciQuery = { // data will default to {}
       path: 'show.version',
     };
 
-    const actionResult = await rciManager.queue(showVersion).toPromise(); // an object conataing device version info
+    const actionResult = await firstValueFrom(rciManager.queue(showVersion)); // an object containing device version info
 
     console.log(changeSettingResult, readSettingResult, actionResult);
   });
@@ -455,12 +466,20 @@ Both methods return a `RciBackgroundProcess` object with:
 - `attachToRunning(): boolean`: Attaches to an already-running background process (e.g. one started
   via `RciManager.execute()`). Skips the initial POST and polls via GET immediately.
   Returns `false` if `start()` was already called, or the process is not in `INIT` state.
-- `abort(): boolean`: Sends `DELETE` to the command-specific RCI resource and aborts the local process. Returns `false` if not running.
+- `abort(): boolean`: Sends `DELETE` to the command-specific RCI resource and aborts the local process.
+  A process still waiting in a `queueBackgroundProcess()` queue has not reached the device yet:
+  it finishes locally with `ABORTED` (no `DELETE` is sent) and the queue skips it.
+  Returns `false` in any other state.
 - `state$`: Emits state changes (`RCI_BACKGROUND_PROCESS_STATE`)
 - `data$`: Emits polled data updates as the background process runs
 - `result$`: Emits the final payload once, right before the process completes. Does NOT emit on
   abort or timeout.
-- `done$`: Emits when the process finishes, with a reason (`RCI_BACKGROUND_PROCESS_FINISH_REASON`)
+- `done$`: Emits when the process finishes, with a reason (`RCI_BACKGROUND_PROCESS_FINISH_REASON`),
+  then completes
+- `destroy(): void`: Releases local resources: stops polling, cancels the in-flight HTTP request,
+  and completes all streams (`done$` completes without emitting). It does **not** stop the process
+  on the device; call `abort()` first if you need that. A destroyed process no longer blocks its
+  `queueBackgroundProcess()` queue.
 
 ```typescript
 interface RciBackgroundProcess {

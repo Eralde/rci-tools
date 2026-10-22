@@ -2,6 +2,7 @@ import {BehaviorSubject, Subject, Subscription} from 'rxjs';
 import type {Values} from '../../type.utils';
 import {RciQuery} from '../query';
 import {BaseHttpResponse, HttpTransport} from '../../transport';
+import {QueueDestroyedError} from '../queue';
 import {
   DEFAULT_BACKGROUND_PROCESS_OPTIONS,
   RciBackgroundProcess,
@@ -48,6 +49,10 @@ export class RciBackgroundTaskQueue<QueryPath extends string = string> {
     data: RciQuery['data'],
     options: RciBackgroundProcessOptions = DEFAULT_BACKGROUND_PROCESS_OPTIONS,
   ): RciBackgroundProcess<QueryPath> {
+    if (this.isDestroyed) {
+      throw new QueueDestroyedError();
+    }
+
     const trigger = new Subject<void>();
 
     const process = new RciBackgroundProcess(
@@ -81,25 +86,29 @@ export class RciBackgroundTaskQueue<QueryPath extends string = string> {
 
         this.stateSub$.next(RCI_BACKGROUND_TASK_QUEUE_STATE.AWAITING_RESPONSE);
 
-        queuedProcess.trigger.next();
-        queuedProcess.trigger.complete();
-
+        // `done$` completes on every terminal outcome, including `destroy()` of the process;
+        // subscribe before triggering, since a process may finish synchronously
         const doneSub = queuedProcess.process.done$
-          .subscribe(() => {
-            this.currentProcess = null;
+          .subscribe({
+            complete: () => {
+              this.currentProcess = null;
 
-            this.stateSub$.next(RCI_BACKGROUND_TASK_QUEUE_STATE.READY);
+              this.stateSub$.next(RCI_BACKGROUND_TASK_QUEUE_STATE.READY);
 
-            const head = this.queuedProcesses[0];
+              const head = this.queuedProcesses[0];
 
-            if (head) {
-              this.queuedProcesses = this.queuedProcesses.slice(1);
+              if (head) {
+                this.queuedProcesses = this.queuedProcesses.slice(1);
 
-              this.nextProcess$.next(head);
-            }
+                this.nextProcess$.next(head);
+              }
+            },
           });
 
         this.subscription.add(doneSub);
+
+        queuedProcess.trigger.next();
+        queuedProcess.trigger.complete();
       });
   }
 

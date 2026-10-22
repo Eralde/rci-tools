@@ -1,4 +1,4 @@
-import {Observable, OperatorFunction, from, map, throwError} from 'rxjs';
+import {Observable, OperatorFunction, defer, finalize, from, map, throwError} from 'rxjs';
 import {catchError} from 'rxjs/operators';
 import axios, {type AxiosInstance, AxiosResponse, AxiosResponseHeaders} from 'axios';
 import {CookieJar} from 'tough-cookie';
@@ -68,17 +68,27 @@ export class AxiosTransport implements HttpTransport<AxiosResponse> {
   }
 
   public get(url: string): Observable<AxiosResponse> {
-    return from(this.client.get(url, {withCredentials: true}))
-      .pipe(this.handleNetworkError);
+    return this.request((signal) => this.client.get(url, {withCredentials: true, signal}));
   }
 
   public post(url: string, data: unknown): Observable<AxiosResponse> {
-    return from(this.client.post(url, data, {withCredentials: true}))
-      .pipe(this.handleNetworkError);
+    return this.request((signal) => this.client.post(url, data, {withCredentials: true, signal}));
   }
 
   public delete(url: string): Observable<AxiosResponse> {
-    return from(this.client.delete(url, {withCredentials: true}))
+    return this.request((signal) => this.client.delete(url, {withCredentials: true, signal}));
+  }
+
+  // the request is sent on subscription; unsubscribing before completion aborts it
+  protected request(send: (signal: AbortSignal) => Promise<AxiosResponse>): Observable<AxiosResponse> {
+    return defer(() => {
+      const controller = new AbortController();
+
+      return from(send(controller.signal))
+        .pipe(
+          finalize(() => controller.abort()),
+        );
+    })
       .pipe(this.handleNetworkError);
   }
 

@@ -12,9 +12,9 @@ import {
   race,
   repeat,
   skipWhile,
-  tap,
   switchMap,
   take,
+  tap,
   timer,
 } from 'rxjs';
 import type {GenericObject, ObjectOrArray} from '../../type.utils';
@@ -184,6 +184,13 @@ export class RciBackgroundProcess<CommandType extends string = string> {
   }
 
   public abort(): boolean {
+    // a queued process has not reached the device yet: finish it locally
+    if (this.stateSub$.value === RCI_BACKGROUND_PROCESS_STATE.QUEUED) {
+      this.finish(RCI_BACKGROUND_PROCESS_FINISH_REASON.ABORTED);
+
+      return true;
+    }
+
     if (this.stateSub$.value !== RCI_BACKGROUND_PROCESS_STATE.RUNNING) {
       console.error(`Cannot abort process: current state is ${this.stateSub$.value}`);
 
@@ -208,15 +215,24 @@ export class RciBackgroundProcess<CommandType extends string = string> {
 
     this.stateSub$.next(RCI_BACKGROUND_PROCESS_STATE.QUEUED);
 
-    trigger
-      .pipe(
-        take(1),
-      )
-      .subscribe(() => {
-        this.startTrigger$.next();
-      });
+    this.subscriptions.add(
+      trigger
+        .pipe(
+          take(1),
+        )
+        .subscribe(() => {
+          this.startTrigger$.next();
+        }),
+    );
 
     return true;
+  }
+
+  private finish(reason: RCI_BACKGROUND_PROCESS_FINISH_REASON): void {
+    this.responseSub$.complete();
+    this.resultSub$.complete();
+    this.doneSub$.next(reason);
+    this.doneSub$.complete();
   }
 
   protected markDone(): void {
@@ -242,7 +258,7 @@ export class RciBackgroundProcess<CommandType extends string = string> {
 
     const race$: Observable<GenericObject | RCI_BACKGROUND_PROCESS_FINISH_REASON> = race(task$, timeout$, abort$);
 
-    race$.subscribe({
+    const raceSub$ = race$.subscribe({
       next: (result: GenericObject | RCI_BACKGROUND_PROCESS_FINISH_REASON) => {
         if (typeof result === 'string') {
           if (Object.values(RCI_BACKGROUND_PROCESS_FINISH_REASON).includes(result)) {
@@ -262,12 +278,11 @@ export class RciBackgroundProcess<CommandType extends string = string> {
         this.resultSub$.complete();
       },
       error: () => {
-        this.responseSub$.complete();
-        this.resultSub$.complete();
-        this.doneSub$.next(RCI_BACKGROUND_PROCESS_FINISH_REASON.ERROR);
-        this.doneSub$.complete();
+        this.finish(RCI_BACKGROUND_PROCESS_FINISH_REASON.ERROR);
       },
     });
+
+    this.subscriptions.add(raceSub$);
   }
 
   protected executeTask(
