@@ -175,9 +175,10 @@ export class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends s
     const queriesList: RciQuery<QueryPath>[] = isSingleQuery
       ? [query]
       : [...query];
+    const resultCount = queriesList.length;
 
     if (saveConfiguration) {
-      queriesList.push({path: SAVE_CONFIGURATION_QUERY as QueryPath, data: {}});
+      queriesList.push({path: SAVE_CONFIGURATION_QUERY as QueryPath});
     }
 
     const queries = queriesList.map((query) => {
@@ -187,7 +188,7 @@ export class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends s
       };
     });
 
-    return {queries, subject, isSingleQuery};
+    return {queries, subject, isSingleQuery, resultCount};
   }
 
   private setState(state: RciQueueState): void {
@@ -360,10 +361,10 @@ export class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends s
     chunkedResponses: Array<Array<GenericObject | undefined>>,
     tasks: QueueTask<QueryPath>[],
   ): void {
-    tasks.forEach(({subject, isSingleQuery}, index) => {
+    tasks.forEach(({subject, isSingleQuery, resultCount}, index) => {
       const taskData = isSingleQuery
         ? chunkedResponses[index]![0]
-        : chunkedResponses[index]!;
+        : chunkedResponses[index]!.slice(0, resultCount);
 
       subject.next(taskData);
       subject.complete();

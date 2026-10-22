@@ -27,6 +27,7 @@ class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends string =
   }
 
   public addTask(query: RciTask, saveConfiguration?: boolean): Observable<any> { /* ... */ }
+  // saveConfiguration: добавить запрос system/configuration/save; его ответ не возвращается
   public setScheduler(scheduler: BatchScheduler<QueryPath>): void { /* ... */ }
   public destroy(): void { /* ... */ }
 }

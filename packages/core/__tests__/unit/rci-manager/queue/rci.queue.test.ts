@@ -1,7 +1,14 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {NEVER, Subject, firstValueFrom, throwError} from 'rxjs';
+import {NEVER, Subject, firstValueFrom, of, throwError} from 'rxjs';
 import {take, toArray} from 'rxjs/operators';
-import {type BatchScheduler, type BatchSnapshot, QueueNotIdleError, RciQueue, TimerScheduler} from '../../../../src';
+import {
+  type BatchScheduler,
+  type BatchSnapshot,
+  type GenericObject,
+  QueueNotIdleError,
+  RciQueue,
+  TimerScheduler,
+} from '../../../../src';
 import {makeTransport} from '../../test.utils';
 
 const FAKE_RCI = 'http://device/rci/';
@@ -319,6 +326,108 @@ describe('RciQueue', () => {
       queue.addTask({path: 'show.version'}).subscribe();
 
       expect(transport.sendQueryArray).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('saveConfiguration results', () => {
+    const makeEchoTransport = () => {
+      const transport = makeTransport();
+
+      vi.mocked(transport.sendQueryArray).mockImplementation((_, queryArray) => of(queryArray));
+
+      return transport;
+    };
+
+    const DESCRIPTION = {path: 'system.description', data: 'Home'};
+    const NAME = {path: 'system.name', data: 'router'};
+    const SAVE = {path: 'system.configuration.save'};
+
+    it('emits one result per input query for an array task', () => {
+      const queue = new RciQueue(FAKE_RCI, makeEchoTransport(), {batchTimeout: 0});
+      const results: unknown[] = [];
+
+      queue.addTask([DESCRIPTION, NAME], true).subscribe((result) => results.push(result));
+      vi.advanceTimersByTime(0);
+
+      expect(results).toEqual([['Home', 'router']]);
+    });
+
+    it('emits the query result only for a single task', () => {
+      const queue = new RciQueue(FAKE_RCI, makeEchoTransport(), {batchTimeout: 0});
+      const results: unknown[] = [];
+
+      queue.addTask(DESCRIPTION, true).subscribe((result) => results.push(result));
+      vi.advanceTimersByTime(0);
+
+      expect(results).toEqual(['Home']);
+    });
+
+    it('returns the result of an explicit save query', () => {
+      const queue = new RciQueue(FAKE_RCI, makeEchoTransport(), {batchTimeout: 0});
+      const results: unknown[] = [];
+
+      queue.addTask([DESCRIPTION, SAVE]).subscribe((result) => results.push(result));
+      vi.advanceTimersByTime(0);
+
+      expect(results).toEqual([['Home', {}]]);
+    });
+
+    it('sends one save query for an explicit and a synthetic save in one batch', () => {
+      const transport = makeEchoTransport();
+      const queue = new RciQueue(FAKE_RCI, transport, {batchTimeout: 100});
+      const results: unknown[] = [];
+
+      queue.addTask([DESCRIPTION, SAVE]).subscribe((result) => results.push(result));
+      queue.addTask(NAME, true).subscribe((result) => results.push(result));
+      vi.advanceTimersByTime(100);
+
+      const [, payload] = vi.mocked(transport.sendQueryArray).mock.calls[0]!;
+
+      expect(JSON.stringify(payload).match(/"save"/g)).toHaveLength(1);
+      expect(results).toEqual([['Home', {}], 'router']);
+    });
+
+    it('keeps duplicate queries and drops the save result', () => {
+      const queue = new RciQueue(FAKE_RCI, makeEchoTransport(), {batchTimeout: 0});
+      const results: unknown[] = [];
+
+      queue.addTask([DESCRIPTION, DESCRIPTION], true).subscribe((result) => results.push(result));
+      vi.advanceTimersByTime(0);
+
+      expect(results).toEqual([['Home', 'Home']]);
+    });
+
+    it('emits N results when the response is truncated', () => {
+      const transport = makeTransport();
+      const queue = new RciQueue(FAKE_RCI, transport, {batchTimeout: 0});
+      const results: unknown[] = [];
+
+      vi.mocked(transport.sendQueryArray).mockReturnValue(of([]));
+
+      queue.addTask([DESCRIPTION, NAME], true).subscribe((result) => results.push(result));
+      vi.advanceTimersByTime(0);
+
+      expect(results).toEqual([[undefined, undefined]]);
+    });
+
+    it('keeps result arity after preemption and re-send', () => {
+      const transport = makeEchoTransport();
+      const pending$ = new Subject<GenericObject[]>();
+      const blockerQueue = new RciQueue(FAKE_RCI, transport, {batchTimeout: 0});
+      const queue = new RciQueue(FAKE_RCI, transport, {batchTimeout: 0, blockerQueue});
+      const results: unknown[] = [];
+
+      // first send of the batch queue hangs, then the blocker preempts it
+      vi.mocked(transport.sendQueryArray)
+        .mockImplementationOnce(() => pending$.asObservable())
+        .mockImplementation((_, queryArray) => of(queryArray));
+
+      queue.addTask([DESCRIPTION, NAME], true).subscribe((result) => results.push(result));
+      vi.advanceTimersByTime(0);
+      blockerQueue.addTask({path: 'show.version'}).subscribe();
+      vi.advanceTimersByTime(0);
+
+      expect(results).toEqual([['Home', 'router']]);
     });
   });
 });

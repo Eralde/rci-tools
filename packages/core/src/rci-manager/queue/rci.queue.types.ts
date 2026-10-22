@@ -35,6 +35,7 @@ export type RciQueueState = Values<typeof RCI_QUEUE_STATE>;
 
 export interface QueueTask<QueryPath extends string = string> {
   isSingleQuery: boolean;
+  resultCount: number;
   queries: RciQuery<QueryPath>[];
   subject: Subject<TaskResult>;
 }

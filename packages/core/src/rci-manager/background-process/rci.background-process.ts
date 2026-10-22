@@ -73,6 +73,7 @@ export class RciBackgroundProcess<CommandType extends string = string> {
 
   private readonly subscriptions = new Subscription();
   private isDestroyed = false;
+  private lastError: unknown = null;
 
   private readonly rciPath: string;
   private readonly httpTransport: HttpTransport<BaseHttpResponse>;
@@ -127,6 +128,10 @@ export class RciBackgroundProcess<CommandType extends string = string> {
 
   public getState(): RCI_BACKGROUND_PROCESS_STATE {
     return this.stateSub$.value;
+  }
+
+  public get error(): unknown {
+    return this.lastError;
   }
 
   private getProcessUrl(path: string): string {
@@ -277,7 +282,8 @@ export class RciBackgroundProcess<CommandType extends string = string> {
         this.responseSub$.complete();
         this.resultSub$.complete();
       },
-      error: () => {
+      error: (error: unknown) => {
+        this.lastError = error;
         this.finish(RCI_BACKGROUND_PROCESS_FINISH_REASON.ERROR);
       },
     });

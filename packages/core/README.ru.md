@@ -178,8 +178,20 @@ export type RciTask<PathType extends string = string> = RciQuery<PathType> | Rci
 ```typescript
 interface QueueOptions {
   isPriorityTask?: boolean;  // отправить через приоритетную очередь. По умолчанию: false
-  saveConfiguration?: boolean; // добавить запрос system/configuration/save. По умолчанию: false
+  saveConfiguration?: boolean; // добавить запрос system/configuration/save; его ответ не возвращается. По умолчанию: false
 }
+```
+
+`saveConfiguration` не меняет форму результата: одиночный запрос выдаёт одно значение, массив из N запросов — массив
+из N элементов. Запрос сохранения всегда отправляется последним в своём пакете, поэтому сохраняет и изменения других
+задач этого пакета. Если нужен ответ запроса сохранения, добавьте его в массив сами — как обычный запрос со своим
+элементом в результате:
+
+```typescript
+rciManager.queue([
+  {path: 'system.description', data: 'Home'},
+  {path: 'system.configuration.save'},
+]); // выдаёт [descriptionResult, saveResult]
 ```
 
 Перед отправкой на устройство объекты `RciQuery` преобразуются в объект,
@@ -484,6 +496,14 @@ interface RciBackgroundProcessOptions {
   Не выдаёт значения при прерывании или таймауте.
 - `done$`: Observable, который выдаёт значение по завершении процесса (
   `RCI_BACKGROUND_PROCESS_FINISH_REASON`), после чего завершается
+- `error: unknown`: Ошибка, которой завершился процесс с `ERROR` (`done$` выдаёт
+  `RCI_BACKGROUND_PROCESS_FINISH_REASON.ERROR`); `null` при любом другом исходе и пока процесс выполняется.
+  Значение устанавливается до того, как `done$` выдаст причину, и остаётся доступным после `destroy()`. Это значение,
+  с которым завершился запрос транспорта, без преобразований, поэтому его тип зависит от транспорта: `FetchTransport`
+  отдаёт `Response` ответа со статусом не 200, `XHRTransport` — `XHRTransportResponse` для ответа со статусом не 200 или
+  `Error` при сетевой ошибке, адаптер axios — `AxiosError` (при сетевой ошибке — простой объект с его полями и
+  `response.status` `503`). Ошибки, которые устройство сообщает внутри ответа `200` (записи `status` в ответе RCI),
+  не завершают процесс с `ERROR`: они приходят в `data$` / `result$`.
 - `destroy(): void`: Освобождает локальные ресурсы: останавливает опрос, прерывает текущий HTTP-запрос
   и завершает все потоки (`done$` завершается без значения). Процесс на устройстве **не** останавливается;
   если это нужно, сначала вызовите `abort()`. Уничтоженный процесс больше не блокирует свою очередь
@@ -495,6 +515,7 @@ interface RciBackgroundProcess {
   data$: Observable<GenericObject | null>;
   result$: Observable<GenericObject | null>;
   done$: Observable<RCI_BACKGROUND_PROCESS_FINISH_REASON>;
+  readonly error: unknown;
 
   start(): boolean;
   attachToRunning(): boolean;
@@ -529,6 +550,16 @@ ping$.done$
   });
 
 ping$.start();
+```
+
+Чтобы узнать, почему процесс завершился с ошибкой:
+
+```typescript
+process.done$.subscribe((reason) => {
+  if (reason === RCI_BACKGROUND_PROCESS_FINISH_REASON.ERROR) {
+    console.warn(`${process.command} failed`, process.error);
+  }
+});
 ```
 
 Вы также можете вручную прервать фоновый процесс до его завершения:
