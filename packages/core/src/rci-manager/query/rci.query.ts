@@ -1,3 +1,5 @@
+import type {GenericObject} from '../../type.utils';
+
 export type QueryData =
   | string
   | number
@@ -13,3 +15,13 @@ export interface RciQuery<PathType extends string = string> {
 }
 
 export type RciTask<PathType extends string = string> = RciQuery<PathType> | RciQuery<PathType>[];
+
+export type TypedRciQuery<T, PathType extends string = string> =
+  RciQuery<PathType> & {readonly '~response'?: T};
+
+export type RciResponseOf<Q> = Q extends {readonly '~response'?: infer T}
+  ? (unknown extends T ? GenericObject : T)
+  : GenericObject;
+
+export type RciResultsOf<Q extends readonly unknown[]> =
+  {-readonly [K in keyof Q]: RciResponseOf<Q[K]> | undefined};

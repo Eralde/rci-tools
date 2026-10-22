@@ -125,10 +125,11 @@ interface RciManager<
     waitIdleFor?: number
   }): Observable<void>;
 
-  execute<T extends object = GenericObject>(query: RciQuery<QueryPath>): Observable<T | undefined>;
-  execute<T extends object = GenericObject>(query: RciQuery<QueryPath>[]): Observable<Array<T | undefined>>;
-  queue<T extends object = GenericObject>(query: RciQuery<QueryPath>, options?: QueueOptions): Observable<T | undefined>;
-  queue<T extends object = GenericObject>(query: RciQuery<QueryPath>[], options?: QueueOptions): Observable<Array<T | undefined>>;
+  // `T` необязателен: без него тип результата выводится из запросов, см. «Типизированные запросы»
+  execute<T extends object>(query: RciQuery<QueryPath>): Observable<T | undefined>;
+  execute<T extends object>(query: readonly RciQuery<QueryPath>[]): Observable<Array<T | undefined>>;
+  queue<T extends object>(query: RciQuery<QueryPath>, options?: QueueOptions): Observable<T | undefined>;
+  queue<T extends object>(query: readonly RciQuery<QueryPath>[], options?: QueueOptions): Observable<Array<T | undefined>>;
 
   initBackgroundProcess(query: RciQuery<BackgroundQueryPath>, options?: RciBackgroundProcessOptions): RciBackgroundProcess;
   queueBackgroundProcess(query: RciQuery<BackgroundQueryPath>, options?: RciBackgroundProcessOptions): RciBackgroundProcess;
@@ -293,6 +294,51 @@ const query = {path: 'ip', data: {telnet: {session: {timeout: 123456}}}};
 Оба метода возвращают [rxjs Observable](https://rxjs.dev/guide/observable),
 на который нужно подписаться, чтобы получить результат. Ниже приведено несколько примеров
 использования.
+
+#### Типизированные запросы
+
+`TypedRciQuery<T>` — это `RciQuery`, который несёт тип своего ответа. `queue()` и `execute()` выводят из него тип
+результата, поэтому тип объявляется один раз, рядом с запросом, и вызову не нужны ни параметр типа, ни приведение:
+
+```typescript
+import type {RciResponseOf, TypedRciQuery} from '@rci-tools/core';
+
+interface ShowVersion {
+  release: string;
+  title: string;
+}
+
+interface RrdResponse {
+  data?: Array<{t: number; v: number}>;
+}
+
+const SHOW_VERSION: TypedRciQuery<ShowVersion> = {path: 'show.version'};
+const interfaceRrd = (name: string, attribute: string): TypedRciQuery<RrdResponse> => ({
+  path: 'show.interface.rrd',
+  data: {name, attribute},
+});
+
+rciManager.queue(SHOW_VERSION); // Observable<ShowVersion | undefined>
+rciManager.queue([interfaceRrd('Bridge0', 'txspeed'), interfaceRrd('Bridge0', 'rxspeed')]);
+// Observable<[RrdResponse | undefined, RrdResponse | undefined]>
+
+type Version = RciResponseOf<typeof SHOW_VERSION>; // ShowVersion
+```
+
+- Литерал массива даёт кортеж: по одному элементу на запрос, в том же порядке. Для обычного `RciQuery` в его позиции
+  получается `GenericObject | undefined`. Массив, собранный во время выполнения (`RciQuery[]`), по-прежнему даёт
+  `Array<GenericObject | undefined>`.
+- Тип ответа — утверждение типа, как `T` в `queue<T>()`: во время выполнения он не проверяется. Тип из контекста
+  (аннотация или `as`) имеет приоритет над выведенным, если длина кортежа совпадает с числом запросов; другая длина
+  вызывает ошибку компиляции.
+- Явный параметр типа, `queue<T>(...)`, имеет приоритет над типами в запросах; для массива он даёт
+  `Array<T | undefined>`, как и раньше.
+- При `extractData: false` тип `T` описывает весь объект ответа, а не значение по пути запроса.
+- Если `RciManager` сужает `QueryPath`, укажите его вторым параметром, например через локальный алиас:
+  `type Query<T> = TypedRciQuery<T, MyQueryPath>`. У `TypedRciQuery<T>` путь имеет тип `string`, поэтому такой
+  запрос суженный менеджер не примет.
+- Тип ответа хранится в необязательном свойстве `'~response'`, которое существует только на уровне типов. Не задавайте
+  его в объектах запросов.
 
 #### Пакетное планирование (Batch Scheduling)
 

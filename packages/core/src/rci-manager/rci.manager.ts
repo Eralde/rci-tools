@@ -1,7 +1,7 @@
 import {Observable, defer, throwError} from 'rxjs';
 import {filter, finalize, map, shareReplay, take, tap, timeout} from 'rxjs/operators';
 import type {BaseHttpResponse, HttpTransport} from '../transport/http.transport';
-import type {RciQuery, RciTask} from './query/rci.query';
+import type {RciQuery, RciResponseOf, RciResultsOf} from './query/rci.query';
 import {RCI_QUEUE_DEFAULT_BATCH_TIMEOUT, clampNonNegativeTimeout} from './queue/rci.queue.constants';
 import {RCI_QUEUE_STATE} from './queue/rci.queue.types';
 import {RciQueue} from './queue/rci.queue';
@@ -14,6 +14,15 @@ import type {QueueOptions, RciManagerOptions} from './rci.manager.types';
 import {DEFAULT_QUEUE_OPTIONS, RCI_QUERY_TIMEOUT, RCI_SCHEDULER_SWAP_DEFAULT_TIMEOUT_MS} from './rci.manager.constants';
 import type {QueryStats} from './stats/query-stats';
 import {QueryStatsCollector} from './stats/query-stats-collector';
+
+// `T = never` marks "no explicit response type": the result is then inferred from the queries
+type RciBatchResultsConstraint<T, Q extends readonly unknown[]> = [T] extends [never]
+  ? { -readonly [K in keyof Q]: unknown }
+  : Array<T | undefined>;
+
+const isQueryList = <P extends string>(
+  query: RciQuery<P> | readonly RciQuery<P>[],
+): query is readonly RciQuery<P>[] => Array.isArray(query);
 
 export class SchedulerReplacementInProgressError extends Error {
   constructor() {
@@ -143,19 +152,27 @@ export class RciManager<
   /**
    * `T` is asserted, not runtime-validated; validate at runtime (e.g. with a schema) if needed.
    */
-  public execute<T extends object = GenericObject>(query: RciQuery<QueryPath>): Observable<T | undefined>;
-  public execute<T extends object = GenericObject>(
-    query: Array<RciQuery<QueryPath>>,
-  ): Observable<Array<T | undefined>>;
-  public execute(query: RciTask<QueryPath>): Observable<GenericObject | Array<GenericObject | undefined> | undefined> {
+  public execute<
+    T extends object = never,
+    Q extends RciQuery<QueryPath> = RciQuery<QueryPath>,
+    R = [T] extends [never] ? RciResponseOf<Q> : T,
+  >(query: Q): Observable<R | undefined>;
+  public execute<
+    T extends object = never,
+    Q extends readonly [] | readonly RciQuery<QueryPath>[] = readonly RciQuery<QueryPath>[],
+    R extends RciBatchResultsConstraint<T, Q> = [T] extends [never] ? RciResultsOf<Q> : Array<T | undefined>,
+  >(query: Q): Observable<R>;
+  public execute(
+    query: RciQuery<QueryPath> | readonly RciQuery<QueryPath>[],
+  ): Observable<GenericObject | Array<GenericObject | undefined> | undefined> {
     if (this.isDestroyed) {
       return throwError(() => new RciManagerDestroyedError());
     }
 
-    const isSingleQuery = !Array.isArray(query);
+    const isSingleQuery = !isQueryList(query);
     const queryList: Array<RciQuery<QueryPath>> = isSingleQuery
       ? [query]
-      : query;
+      : [...query];
 
     const {
       queryArray,
@@ -183,30 +200,34 @@ export class RciManager<
   /**
    * `T` is asserted, not runtime-validated; validate at runtime (e.g. with a schema) if needed.
    */
-  public queue<T extends object = GenericObject>(
-    query: RciQuery<QueryPath>,
-    options?: QueueOptions,
-  ): Observable<T | undefined>;
-  public queue<T extends object = GenericObject>(
-    query: Array<RciQuery<QueryPath>>,
-    options?: QueueOptions,
-  ): Observable<Array<T | undefined>>;
+  public queue<
+    T extends object = never,
+    Q extends RciQuery<QueryPath> = RciQuery<QueryPath>,
+    R = [T] extends [never] ? RciResponseOf<Q> : T,
+  >(query: Q, options?: QueueOptions): Observable<R | undefined>;
+  public queue<
+    T extends object = never,
+    Q extends readonly [] | readonly RciQuery<QueryPath>[] = readonly RciQuery<QueryPath>[],
+    R extends RciBatchResultsConstraint<T, Q> = [T] extends [never] ? RciResultsOf<Q> : Array<T | undefined>,
+  >(query: Q, options?: QueueOptions): Observable<R>;
   public queue(
     query: RciQuery<QueryPath> | Array<RciQuery<QueryPath>>,
     options?: QueueOptions,
   ): Observable<TaskResult>;
   public queue(
-    query: RciTask<QueryPath>,
+    query: RciQuery<QueryPath> | readonly RciQuery<QueryPath>[],
     options: QueueOptions = DEFAULT_QUEUE_OPTIONS,
   ): Observable<TaskResult> {
     if (this.isDestroyed) {
       return throwError(() => new RciManagerDestroyedError());
     }
 
+    const task = isQueryList(query) ? [...query] : query;
+
     if (options.isPriorityTask) {
-      return this.priorityQueue.addTask(query, options.saveConfiguration);
+      return this.priorityQueue.addTask(task, options.saveConfiguration);
     } else {
-      return this.batchQueue.addTask(query, options.saveConfiguration);
+      return this.batchQueue.addTask(task, options.saveConfiguration);
     }
   }
 

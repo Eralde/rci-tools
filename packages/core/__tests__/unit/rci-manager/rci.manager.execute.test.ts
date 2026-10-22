@@ -45,3 +45,20 @@ describe('RciManager.execute extractData handling', () => {
     expect(result).toEqual([VERSION_DATA, undefined]);
   });
 });
+
+describe('RciManager readonly query arrays', () => {
+  it('accepts readonly query arrays', async () => {
+    const queries = Object.freeze([{path: 'show.version'}, {path: 'show.identification'}] as const);
+    const executeTransport = makeTransport();
+    const queueTransport = makeTransport();
+
+    executeTransport.sendQueryArray = vi.fn().mockReturnValue(of([{show: {version: VERSION_DATA}}, {}]));
+    queueTransport.sendQueryArray = vi.fn().mockReturnValue(of([{show: {version: VERSION_DATA}}, {}]));
+
+    const executed = await firstValueFrom(new RciManager('http://device', executeTransport).execute(queries));
+    const queued = await firstValueFrom(new RciManager('http://device', queueTransport).queue(queries));
+
+    expect(executed).toEqual([VERSION_DATA, undefined]);
+    expect(queued).toEqual([VERSION_DATA, undefined]);
+  });
+});
