@@ -56,8 +56,9 @@ export class FetchTransport implements HttpTransport<FetchTransportResponse> {
   protected request(url: string, init: RequestInit): Observable<FetchTransportResponse> {
     return defer(() => {
       const controller = new AbortController();
+      const promise = fetch(url, {...init, signal: controller.signal});
 
-      return from(fetch(url, {...init, signal: controller.signal}))
+      return from(promise)
         .pipe(
           exhaustMap((fetchResponse: Response) => this.processResponse(fetchResponse)),
           finalize(() => controller.abort()),
