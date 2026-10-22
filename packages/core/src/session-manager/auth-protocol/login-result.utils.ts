@@ -1,7 +1,12 @@
 import {Observable} from 'rxjs';
 import {map} from 'rxjs/operators';
-import type {BaseHttpResponse} from '../../transport';
-import {LOGIN_FAILURE_REASON, LoginFailureReason, LoginResult, SessionAuthContext} from './auth-protocol.types';
+import type {BaseHttpResponse} from '../../transport/http.transport';
+import {
+  LOGIN_FAILURE_REASON,
+  type LoginFailureReason,
+  type LoginResult,
+  type SessionAuthContext,
+} from './auth-protocol.types';
 
 export const toLoginSuccess = (): LoginResult => ({success: true});
 

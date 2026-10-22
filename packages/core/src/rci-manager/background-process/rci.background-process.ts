@@ -18,8 +18,8 @@ import {
   timer,
 } from 'rxjs';
 import type {GenericObject, ObjectOrArray} from '../../type.utils';
-import {BaseHttpResponse, HttpTransport} from '../../transport';
-import {RciQuery} from '../query';
+import type {BaseHttpResponse, HttpTransport} from '../../transport/http.transport';
+import type {RciQuery} from '../query/rci.query';
 
 export interface RciBackgroundProcessOptions {
   pollInterval?: number; // time between polling requests to check for updates

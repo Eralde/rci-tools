@@ -5,10 +5,12 @@ import {
   QueueDestroyedError,
   RCI_BACKGROUND_PROCESS_FINISH_REASON,
   RCI_BACKGROUND_PROCESS_STATE,
-  RCI_BACKGROUND_TASK_QUEUE_STATE,
   RciBackgroundProcess,
-  RciBackgroundTaskQueue,
 } from '../../../src';
+import {
+  RCI_BACKGROUND_TASK_QUEUE_STATE,
+  RciBackgroundTaskQueue,
+} from '../../../src/rci-manager/background-process/rci.background-task.queue';
 import {makeTransport} from '../test.utils';
 
 const RCI_PATH = 'http://device/rci/';

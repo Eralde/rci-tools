@@ -1,8 +1,8 @@
 import {BehaviorSubject, Subject, Subscription} from 'rxjs';
 import type {Values} from '../../type.utils';
-import {RciQuery} from '../query';
-import {BaseHttpResponse, HttpTransport} from '../../transport';
-import {QueueDestroyedError} from '../queue';
+import type {RciQuery} from '../query/rci.query';
+import type {BaseHttpResponse, HttpTransport} from '../../transport/http.transport';
+import {QueueDestroyedError} from '../queue/queue-destroyed.error';
 import {
   DEFAULT_BACKGROUND_PROCESS_OPTIONS,
   RciBackgroundProcess,

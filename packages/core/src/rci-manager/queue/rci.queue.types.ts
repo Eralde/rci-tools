@@ -1,10 +1,10 @@
-import {Subject} from 'rxjs';
-import type {BaseHttpResponse} from '../../transport';
+import type {Subject} from 'rxjs';
+import type {BaseHttpResponse} from '../../transport/http.transport';
 import type {TaskResult, Values} from '../../type.utils';
-import {RciQuery} from '../query';
-import type {BatchScheduler} from '../scheduler';
-import type {QueryStatsCollector} from '../stats';
-import {RciQueue} from './rci.queue';
+import type {RciQuery} from '../query/rci.query';
+import type {BatchScheduler} from '../scheduler/scheduler.types';
+import type {QueryStatsCollector} from '../stats/query-stats-collector';
+import type {RciQueue} from './rci.queue';
 
 export interface RciQueueOptions<ResponseType extends BaseHttpResponse, QueryPath extends string = string> {
   batchTimeout: number;

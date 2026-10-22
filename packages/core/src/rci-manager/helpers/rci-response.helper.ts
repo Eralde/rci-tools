@@ -1,6 +1,6 @@
 import {forEach, get, has, isArray, isObject, keys, pickBy, some} from 'lodash-es';
 import type {GenericObject} from '../../type.utils';
-import {RciError, RciStatusList, RciStatusObject} from './rci-response.types';
+import type {RciError, RciStatusList, RciStatusObject} from './rci-response.types';
 
 export class RciResponseHelper {
   public static hasCode(code: string, response: GenericObject | GenericObject[]): boolean {

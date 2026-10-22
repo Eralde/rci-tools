@@ -1,7 +1,7 @@
 import {Observable, defer, exhaustMap, finalize, from, map} from 'rxjs';
-import {GenericObject} from '../../type.utils';
+import type {GenericObject} from '../../type.utils';
 import type {AuthErrorSuspension, BaseHttpResponse, HttpTransport} from '../http.transport';
-import {AuthErrorHandler} from '../errors';
+import {AuthErrorHandler} from '../errors/auth-error-handler';
 
 export interface FetchTransportResponse extends BaseHttpResponse {
   headers: Headers;

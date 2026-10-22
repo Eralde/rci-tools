@@ -1,7 +1,7 @@
 import {argon2id} from 'hash-wasm';
 import {Observable, defer, of} from 'rxjs';
 import {catchError, exhaustMap, map} from 'rxjs/operators';
-import type {BaseHttpResponse, HttpTransport} from '../../../transport';
+import type {BaseHttpResponse, HttpTransport} from '../../../transport/http.transport';
 import {AUTH_PROTOCOL, LOGIN_FAILURE_REASON} from '../auth-protocol.types';
 import type {LoginResult, SessionAuthContext, SessionAuthProtocol} from '../auth-protocol.types';
 import {checkFinalLoginResult, toLoginFailure} from '../login-result.utils';

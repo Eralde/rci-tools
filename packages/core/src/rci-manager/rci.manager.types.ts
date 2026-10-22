@@ -1,4 +1,4 @@
-import type {BatchScheduler} from './scheduler';
+import type {BatchScheduler} from './scheduler/scheduler.types';
 
 export interface QueueOptions {
   saveConfiguration?: boolean;

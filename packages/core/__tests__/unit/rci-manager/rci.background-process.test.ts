@@ -5,8 +5,8 @@ import {
   RCI_BACKGROUND_PROCESS_FINISH_REASON,
   RCI_BACKGROUND_PROCESS_STATE,
   RciBackgroundProcess,
-  RciBackgroundTaskQueue,
 } from '../../../src';
+import {RciBackgroundTaskQueue} from '../../../src/rci-manager/background-process/rci.background-task.queue';
 import {makeTransport} from '../test.utils';
 
 class TestBackgroundProcess extends RciBackgroundProcess<string> {

@@ -1,15 +1,19 @@
 import {Observable, defer, throwError} from 'rxjs';
 import {filter, finalize, map, shareReplay, take, tap, timeout} from 'rxjs/operators';
-import {BaseHttpResponse, HttpTransport} from '../transport';
-import {RciQuery, RciTask} from './query';
-import {RCI_QUEUE_DEFAULT_BATCH_TIMEOUT, RCI_QUEUE_STATE, RciQueue, clampNonNegativeTimeout} from './queue';
-import {BatchScheduler} from './scheduler';
-import {RciBackgroundProcess, RciBackgroundProcessOptions, RciBackgroundTaskQueue} from './background-process';
-import {RciPayloadHelper} from './payload';
+import type {BaseHttpResponse, HttpTransport} from '../transport/http.transport';
+import type {RciQuery, RciTask} from './query/rci.query';
+import {RCI_QUEUE_DEFAULT_BATCH_TIMEOUT, clampNonNegativeTimeout} from './queue/rci.queue.constants';
+import {RCI_QUEUE_STATE} from './queue/rci.queue.types';
+import {RciQueue} from './queue/rci.queue';
+import type {BatchScheduler} from './scheduler/scheduler.types';
+import {RciBackgroundProcess, type RciBackgroundProcessOptions} from './background-process/rci.background-process';
+import {RciBackgroundTaskQueue} from './background-process/rci.background-task.queue';
+import {RciPayloadHelper} from './payload/rci.payload.helper';
 import type {GenericObject, TaskResult} from '../type.utils';
 import type {QueueOptions, RciManagerOptions} from './rci.manager.types';
 import {DEFAULT_QUEUE_OPTIONS, RCI_QUERY_TIMEOUT, RCI_SCHEDULER_SWAP_DEFAULT_TIMEOUT_MS} from './rci.manager.constants';
-import {QueryStats, QueryStatsCollector} from './stats';
+import type {QueryStats} from './stats/query-stats';
+import {QueryStatsCollector} from './stats/query-stats-collector';
 
 export class SchedulerReplacementInProgressError extends Error {
   constructor() {

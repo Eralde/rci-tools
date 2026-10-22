@@ -1,6 +1,6 @@
 import {Observable, timer} from 'rxjs';
 import {map, take} from 'rxjs/operators';
-import {BatchScheduler, BatchSnapshot} from './scheduler.types';
+import type {BatchScheduler, BatchSnapshot} from './scheduler.types';
 
 export class TimerScheduler<QueryPath extends string = string> implements BatchScheduler<QueryPath> {
   constructor(
