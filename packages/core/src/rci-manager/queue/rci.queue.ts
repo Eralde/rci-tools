@@ -1,22 +1,17 @@
 import {BehaviorSubject, Observable, ReplaySubject, Subject, Subscription, defer, of, throwError} from 'rxjs';
 import {catchError, distinctUntilChanged, map, take, timeout} from 'rxjs/operators';
-import {RciPayloadHelper} from '../payload';
-import type {QueryMap} from '../payload';
-import type {BaseHttpResponse, HttpTransport} from '../../transport';
+import {RciPayloadHelper} from '../payload/rci.payload.helper';
+import type {QueryMap} from '../payload/rci.payload.types';
+import type {BaseHttpResponse, HttpTransport} from '../../transport/http.transport';
 import type {GenericObject, TaskResult} from '../../type.utils';
-import {RCI_QUERY_TIMEOUT} from '../rci.manager.constants';
-import type {RciQuery, RciTask} from '../query';
-import type {BatchScheduler, BatchSnapshot} from '../scheduler';
-import {TimerScheduler} from '../scheduler';
-import type {QueryStatsCollector} from '../stats';
+import {RCI_QUERY_TIMEOUT, SAVE_CONFIGURATION_QUERY} from '../rci.manager.constants';
+import type {RciQuery, RciTask} from '../query/rci.query';
+import type {BatchScheduler, BatchSnapshot} from '../scheduler/scheduler.types';
+import {TimerScheduler} from '../scheduler/timer-scheduler';
+import type {QueryStatsCollector} from '../stats/query-stats-collector';
 import type {QueueTask, RciQueueOptions, RciQueueState} from './rci.queue.types';
 import {RCI_QUEUE_STATE} from './rci.queue.types';
-import {
-  RCI_QUEUE_BUSY_STATES,
-  RCI_QUEUE_DEFAULT_BATCH_TIMEOUT,
-  SAVE_CONFIGURATION_QUERY,
-  clampNonNegativeTimeout,
-} from './rci.queue.constants';
+import {RCI_QUEUE_BUSY_STATES, RCI_QUEUE_DEFAULT_BATCH_TIMEOUT, clampNonNegativeTimeout} from './rci.queue.constants';
 import {QueueNotIdleError} from './queue-not-idle.error';
 import {QueueDestroyedError} from './queue-destroyed.error';
 

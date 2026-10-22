@@ -28,9 +28,35 @@ describe('AxiosTransport', () => {
     await expect(firstValueFrom(transport.post('http://device/rci/', [{}]))).resolves.toBe(response);
     await expect(firstValueFrom(transport.delete('http://device/auth'))).resolves.toBe(response);
 
-    expect(client.get).toHaveBeenCalledWith('http://device/auth', {withCredentials: true});
-    expect(client.post).toHaveBeenCalledWith('http://device/rci/', [{}], {withCredentials: true});
-    expect(client.delete).toHaveBeenCalledWith('http://device/auth', {withCredentials: true});
+    const config = expect.objectContaining({withCredentials: true, signal: expect.any(AbortSignal)});
+
+    expect(client.get).toHaveBeenCalledWith('http://device/auth', config);
+    expect(client.post).toHaveBeenCalledWith('http://device/rci/', [{}], config);
+    expect(client.delete).toHaveBeenCalledWith('http://device/auth', config);
+  });
+
+  it('does not send a request until subscribed', () => {
+    const client = makeClient();
+    const transport = new AxiosTransport(client);
+
+    transport.get('http://device/auth');
+
+    expect(client.get).not.toHaveBeenCalled();
+  });
+
+  it('aborts the request when unsubscribed before completion', () => {
+    const client = makeClient();
+    vi.mocked(client.post).mockReturnValue(new Promise(() => {}));
+    const transport = new AxiosTransport(client);
+
+    const subscription = transport.post('http://device/rci/', [{}]).subscribe();
+    const signal = vi.mocked(client.post).mock.calls[0]![2]!.signal as AbortSignal;
+
+    expect(signal.aborted).toBe(false);
+
+    subscription.unsubscribe();
+
+    expect(signal.aborted).toBe(true);
   });
 
   it('extracts response data in sendQueryArray()', async () => {

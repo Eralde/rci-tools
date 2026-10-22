@@ -40,6 +40,12 @@ class FakeXHR {
     this.onreadystatechange?.();
   }
 
+  public aborted = false;
+
+  public abort(): void {
+    this.aborted = true;
+  }
+
   public fail(): void {
     this.onerror?.();
   }
@@ -128,6 +134,31 @@ describe('XHRTransport', () => {
       xhrMock.instances[1]!.respond(401, '', '');
       await resumed;
       expect(authErrorCount).toBe(1);
+    });
+  });
+
+  describe('cancellation', () => {
+    it('does not open a request until subscribed', () => {
+      transport.get('http://example.com/rci/');
+
+      expect(xhrMock.instances).toHaveLength(0);
+    });
+
+    it('aborts the request when unsubscribed before completion', () => {
+      const subscription = transport.post('http://example.com/rci/', [{}]).subscribe();
+
+      subscription.unsubscribe();
+
+      expect(xhrMock.instances[0]!.aborted).toBe(true);
+    });
+
+    it('does not abort a completed request', async () => {
+      const promise = firstValueFrom(transport.get('http://example.com/rci/'));
+
+      xhrMock.instances[0]!.respond(200, '{}', '');
+      await promise;
+
+      expect(xhrMock.instances[0]!.aborted).toBe(false);
     });
   });
 

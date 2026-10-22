@@ -1,21 +1,33 @@
 import {Observable, defer, throwError} from 'rxjs';
 import {filter, finalize, map, shareReplay, take, tap, timeout} from 'rxjs/operators';
-import {BaseHttpResponse, HttpTransport} from '../transport';
-import {RciQuery, RciTask} from './query';
-import {RCI_QUEUE_DEFAULT_BATCH_TIMEOUT, RCI_QUEUE_STATE, RciQueue, clampNonNegativeTimeout} from './queue';
-import {BatchScheduler} from './scheduler';
-import {RciBackgroundProcess, RciBackgroundProcessOptions, RciBackgroundTaskQueue} from './background-process';
-import {RciPayloadHelper} from './payload';
+import type {BaseHttpResponse, HttpTransport} from '../transport/http.transport';
+import type {RciQuery, RciTask} from './query/rci.query';
+import {RCI_QUEUE_DEFAULT_BATCH_TIMEOUT, clampNonNegativeTimeout} from './queue/rci.queue.constants';
+import {RCI_QUEUE_STATE} from './queue/rci.queue.types';
+import {RciQueue} from './queue/rci.queue';
+import type {BatchScheduler} from './scheduler/scheduler.types';
+import {RciBackgroundProcess, type RciBackgroundProcessOptions} from './background-process/rci.background-process';
+import {RciBackgroundTaskQueue} from './background-process/rci.background-task.queue';
+import {RciPayloadHelper} from './payload/rci.payload.helper';
 import type {GenericObject, TaskResult} from '../type.utils';
 import type {QueueOptions, RciManagerOptions} from './rci.manager.types';
 import {DEFAULT_QUEUE_OPTIONS, RCI_QUERY_TIMEOUT, RCI_SCHEDULER_SWAP_DEFAULT_TIMEOUT_MS} from './rci.manager.constants';
-import {QueryStats, QueryStatsCollector} from './stats';
+import type {QueryStats} from './stats/query-stats';
+import {QueryStatsCollector} from './stats/query-stats-collector';
 
 export class SchedulerReplacementInProgressError extends Error {
   constructor() {
     super('A scheduler replacement is already in progress.');
 
     this.name = 'SchedulerReplacementInProgressError';
+  }
+}
+
+export class RciManagerDestroyedError extends Error {
+  constructor() {
+    super('RciManager is destroyed.');
+
+    this.name = 'RciManagerDestroyedError';
   }
 }
 
@@ -28,6 +40,7 @@ export class RciManager<
   protected readonly backgroundQueues: Record<string, RciBackgroundTaskQueue<BackgroundQueryPath>> = {};
   protected readonly statsCollector = new QueryStatsCollector<QueryPath>();
   protected currentSchedulerSwapToken: symbol | null = null;
+  protected isDestroyed = false;
 
   protected readonly rciPath: string;
 
@@ -86,6 +99,10 @@ export class RciManager<
     // across multiple separate calls to `replaceBatchScheduler()`.
     let sharedSwap$: Observable<void> | null = null;
 
+    if (this.isDestroyed) {
+      return throwError(() => new RciManagerDestroyedError());
+    }
+
     return defer(() => {
       if (sharedSwap$) {
         return sharedSwap$;
@@ -131,6 +148,10 @@ export class RciManager<
     query: Array<RciQuery<QueryPath>>,
   ): Observable<Array<T | undefined>>;
   public execute(query: RciTask<QueryPath>): Observable<GenericObject | Array<GenericObject | undefined> | undefined> {
+    if (this.isDestroyed) {
+      return throwError(() => new RciManagerDestroyedError());
+    }
+
     const isSingleQuery = !Array.isArray(query);
     const queryList: Array<RciQuery<QueryPath>> = isSingleQuery
       ? [query]
@@ -178,6 +199,10 @@ export class RciManager<
     query: RciTask<QueryPath>,
     options: QueueOptions = DEFAULT_QUEUE_OPTIONS,
   ): Observable<TaskResult> {
+    if (this.isDestroyed) {
+      return throwError(() => new RciManagerDestroyedError());
+    }
+
     if (options.isPriorityTask) {
       return this.priorityQueue.addTask(query, options.saveConfiguration);
     } else {
@@ -189,6 +214,10 @@ export class RciManager<
     query: RciQuery<BackgroundQueryPath>,
     options: RciBackgroundProcessOptions = {},
   ): RciBackgroundProcess<BackgroundQueryPath> {
+    if (this.isDestroyed) {
+      throw new RciManagerDestroyedError();
+    }
+
     return new RciBackgroundProcess<BackgroundQueryPath>(
       query.path,
       query.data || {},
@@ -202,6 +231,10 @@ export class RciManager<
     query: RciQuery<BackgroundQueryPath>,
     options: RciBackgroundProcessOptions = {},
   ): RciBackgroundProcess<BackgroundQueryPath> {
+    if (this.isDestroyed) {
+      throw new RciManagerDestroyedError();
+    }
+
     const {path} = query;
     const key = String(path);
     const data = query.data || {};
@@ -217,7 +250,14 @@ export class RciManager<
     return this.backgroundQueues[key].push(data, options);
   }
 
+  // Processes created by `initBackgroundProcess` are owned by the caller and are not destroyed here.
   public destroy(): void {
+    if (this.isDestroyed) {
+      return;
+    }
+
+    this.isDestroyed = true;
+
     this.batchQueue.destroy();
     this.priorityQueue.destroy();
 

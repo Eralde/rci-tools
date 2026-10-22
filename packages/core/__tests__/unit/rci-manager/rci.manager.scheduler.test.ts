@@ -4,7 +4,6 @@ import {map} from 'rxjs/operators';
 import {
   type BatchScheduler,
   type BatchSnapshot,
-  RCI_QUEUE_DEFAULT_BATCH_TIMEOUT,
   RciManager,
   RuleScheduler,
   SchedulerReplacementInProgressError,
@@ -12,6 +11,7 @@ import {
   pathIncluded,
   queryCountAtLeast,
 } from '../../../src';
+import {RCI_QUEUE_DEFAULT_BATCH_TIMEOUT} from '../../../src/rci-manager/queue/rci.queue.constants';
 import {makeTransport} from '../test.utils';
 
 const FAKE_HOST = 'http://device';

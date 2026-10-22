@@ -1,6 +1,7 @@
 import {describe, expect, it} from 'vitest';
 import {last, uniqBy} from 'lodash-es';
-import {type CompactPayload, QUERY_SORT, RciPayloadHelper} from '../../src/rci-manager/payload';
+import {RciPayloadHelper} from '../../src/rci-manager/payload/rci.payload.helper';
+import {type CompactPayload, QUERY_SORT} from '../../src/rci-manager/payload/rci.payload.types';
 import type {GenericObject, RciQuery} from '../../src';
 import {expectObjectContainingPath} from './test.utils';
 

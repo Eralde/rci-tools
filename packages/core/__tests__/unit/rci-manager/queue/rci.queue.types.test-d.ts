@@ -2,12 +2,12 @@ import {describe, expectTypeOf, it} from 'vitest';
 import type {Observable} from 'rxjs';
 import {
   type GenericObject,
-  RCI_QUEUE_BUSY_STATES,
   RciQueue,
   type RciQueueState,
   type RciTask,
   type TaskResult,
 } from '../../../../src';
+import {RCI_QUEUE_BUSY_STATES} from '../../../../src/rci-manager/queue/rci.queue.constants';
 import {makeTransport} from '../../test.utils';
 
 declare const unionTask: RciTask;

@@ -1,7 +1,7 @@
 import type {Observable} from 'rxjs';
 import {merge, timer} from 'rxjs';
 import {filter, map, take} from 'rxjs/operators';
-import {BatchScheduler, BatchSnapshot} from './scheduler.types';
+import type {BatchScheduler, BatchSnapshot} from './scheduler.types';
 
 export type BatchRule<QueryPath extends string = string> = (
   batch$: Observable<BatchSnapshot<QueryPath>>,

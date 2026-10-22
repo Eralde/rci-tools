@@ -1,15 +1,10 @@
 import {Observable, defer, of} from 'rxjs';
 import {catchError, finalize, map, shareReplay, switchMap, tap} from 'rxjs/operators';
-import type {BaseHttpResponse, HttpTransport} from '../transport';
-import {
-  AUTH_PROTOCOL,
-  LOGIN_FAILURE_REASON,
-  Ndw2AuthProtocol,
-  Ndw4AuthProtocol,
-  SessionAuthContext,
-  SessionAuthProtocol,
-} from './auth-protocol';
-import type {AuthProtocolName} from './auth-protocol';
+import type {BaseHttpResponse, HttpTransport} from '../transport/http.transport';
+import {AUTH_PROTOCOL, LOGIN_FAILURE_REASON} from './auth-protocol/auth-protocol.types';
+import type {AuthProtocolName, SessionAuthContext, SessionAuthProtocol} from './auth-protocol/auth-protocol.types';
+import {Ndw2AuthProtocol} from './auth-protocol/x-ndw2-interactive/ndw2-auth.protocol';
+import {Ndw4AuthProtocol} from './auth-protocol/x-ndw4-interactive/ndw4-auth.protocol';
 import {toLoginFailure, toLoginSuccess} from './auth-protocol/login-result.utils';
 import type {LoginDetails, SessionManagerOptions} from './session-manager.types';
 

@@ -1,7 +1,8 @@
 import {flatMap, get, mapValues, orderBy, pick, reduce, set, sortBy} from 'lodash-es';
 import type {GenericObject} from '../../type.utils';
-import type {RciQuery} from '../query/';
-import {QueueTask, SAVE_CONFIGURATION_QUERY} from '../queue/';
+import type {RciQuery} from '../query/rci.query';
+import type {QueueTask} from '../queue/rci.queue.types';
+import {SAVE_CONFIGURATION_QUERY} from '../rci.manager.constants';
 import {
   CompactPayload,
   PartialQueryMap,

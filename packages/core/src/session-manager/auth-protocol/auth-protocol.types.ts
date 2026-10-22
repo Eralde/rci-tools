@@ -1,5 +1,5 @@
 import {Observable} from 'rxjs';
-import {BaseHttpResponse, HttpTransport} from '../../transport';
+import type {BaseHttpResponse, HttpTransport} from '../../transport/http.transport';
 import type {Values} from '../../type.utils';
 
 // Built-in auth protocols, named after their `WWW-Authenticate` schema

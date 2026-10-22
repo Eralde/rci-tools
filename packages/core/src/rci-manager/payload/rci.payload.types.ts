@@ -1,4 +1,4 @@
-import {RciQuery} from '../query/';
+import type {RciQuery} from '../query/rci.query';
 import type {GenericObject} from '../../type.utils';
 
 /**

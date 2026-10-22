@@ -92,8 +92,8 @@ const sessionManager = new SessionManager('http://192.168.1.1', transport, {
   или ответило что-то неожиданное); имеет смысл повторить попытку позже.
 
 Чтобы ограничить время попытки, используйте собственный таймаут и отпишитесь: дальнейшие запросы
-не отправляются, а следующий вызов начинает обмен заново (уже отправленные запросы встроенные
-транспорты не прерывают).
+не отправляются, а следующий вызов начинает обмен заново (встроенные транспорты также прерывают
+уже отправленный HTTP-запрос).
 
 Если ваш код сам повторяет вход (например, с сохраненным паролем), учитывайте, что в устройства встроена
 защита от перебора пароля: после слишком большого числа неудачных попыток входа клиент может быть
@@ -125,8 +125,10 @@ interface RciManager<
     waitIdleFor?: number
   }): Observable<void>;
 
-  execute(query: RciTask<QueryPath>): Observable<any>;
-  queue(query: RciTask<QueryPath>, options?: QueueOptions): Observable<any>;
+  execute<T extends object = GenericObject>(query: RciQuery<QueryPath>): Observable<T | undefined>;
+  execute<T extends object = GenericObject>(query: RciQuery<QueryPath>[]): Observable<Array<T | undefined>>;
+  queue<T extends object = GenericObject>(query: RciQuery<QueryPath>, options?: QueueOptions): Observable<T | undefined>;
+  queue<T extends object = GenericObject>(query: RciQuery<QueryPath>[], options?: QueueOptions): Observable<Array<T | undefined>>;
 
   initBackgroundProcess(query: RciQuery<BackgroundQueryPath>, options?: RciBackgroundProcessOptions): RciBackgroundProcess;
   queueBackgroundProcess(query: RciQuery<BackgroundQueryPath>, options?: RciBackgroundProcessOptions): RciBackgroundProcess;
@@ -145,6 +147,14 @@ interface RciManager<
   Выбрасывает `SchedulerReplacementInProgressError`, если другая замена уже выполняется.
   См. [Планировщик](./docs/SCHEDULING.ru.md).
 - `destroy()`: освобождает внутренние очереди, очереди фоновых процессов и сборщик статистики.
+  Ожидающие результаты `queue()` завершаются ошибкой `QueueDestroyedError`. После `destroy()` методы
+  `execute()`, `queue()` и `replaceBatchScheduler()` возвращают Observable, завершающийся ошибкой
+  `RciManagerDestroyedError`; `initBackgroundProcess()` и `queueBackgroundProcess()` выбрасывают её.
+  Процессы, созданные через `initBackgroundProcess()`, принадлежат вызывающему коду и не уничтожаются.
+  Транспортом менеджер тоже не владеет. Повторный вызов `destroy()` ничего не делает.
+
+`T` в `execute()`/`queue()` — утверждение типа, а не проверка во время выполнения. Элемент равен
+`undefined`, если в ответе устройства нет значения по пути запроса.
 
 `RciManager` активно использует [корневой ресурс API (
 `/rci/`)](../../docs/RCI_API.ru.md#31-корневой-ресурс-api).
@@ -255,7 +265,8 @@ const query = {path: 'ip', data: {telnet: {session: {timeout: 123456}}}};
 `RciManager` предоставляет два метода для отправки запросов к API:
 
 - **`execute(query)`**: Отправляет HTTP-запрос при подписке на возвращаемый Observable.
-  Вы полностью контролируете жизненный цикл подписки. Это может быть полезно, если нужно:
+  Каждая подписка отправляет свой запрос; отписка до получения ответа прерывает его
+  (встроенные транспорты). Вы полностью контролируете жизненный цикл подписки. Это может быть полезно, если нужно:
     - вручную управлять моментом отправки HTTP-запроса
     - последовательно отправить несколько запросов с точным контролем времени
 
@@ -318,7 +329,7 @@ auth$
       data: {name: 'Bridge0', description: 'My awesome home network'},
     };
 
-    const changeSettingResult = await rciManager.queue(changeHomeDescription).toPromise(); // объект со статусом выполнения команды
+    const changeSettingResult = await firstValueFrom(rciManager.queue(changeHomeDescription)); // объект со статусом выполнения команды
 
     // соответствующее действие (настройка с префиксом 'show.rc')
     const readInterfaceDescription: RciQuery = {
@@ -326,14 +337,14 @@ auth$
       data: {name: 'Bridge0'},
     };
 
-    const readSettingResult = await rciManager.queue(readInterfaceDescription).toPromise(); // 'My awesome home network'
+    const readSettingResult = await firstValueFrom(rciManager.queue(readInterfaceDescription)); // 'My awesome home network'
 
     // другое действие
     const showVersion: RciQuery = { // data по умолчанию {}
       path: 'show.version',
     };
 
-    const actionResult = await rciManager.queue(showVersion).toPromise(); // объект с информацией о версии устройства
+    const actionResult = await firstValueFrom(rciManager.queue(showVersion)); // объект с информацией о версии устройства
 
     console.log(changeSettingResult, readSettingResult, actionResult);
   });
@@ -462,14 +473,21 @@ interface RciBackgroundProcessOptions {
   (например, запущенному через `RciManager.execute()`). Пропускает начальный POST-запрос
   и сразу начинает опрос через GET. Возвращает `false`, если `start()` уже был вызван
   или процесс не в состоянии `INIT`.
-- `abort(): boolean`: Отправляет `DELETE` к ресурсу команды RCI и прерывает локальный процесс. Возвращает `false`, если процесс не запущен.
+- `abort(): boolean`: Отправляет `DELETE` к ресурсу команды RCI и прерывает локальный процесс.
+  Процесс, ещё ожидающий в очереди `queueBackgroundProcess()`, до устройства не дошёл:
+  он завершается локально с `ABORTED` (`DELETE` не отправляется), очередь его пропускает.
+  В остальных состояниях возвращает `false`.
 - `state$`: Observable, который выдаёт изменения состояния процесса (`RCI_BACKGROUND_PROCESS_STATE`)
 - `data$`: Observable, который выдаёт обновления данных по мере выполнения фонового процесса
 - `result$`: Observable, который выдаёт финальный результат один раз, непосредственно перед
   завершением процесса.
   Не выдаёт значения при прерывании или таймауте.
 - `done$`: Observable, который выдаёт значение по завершении процесса (
-  `RCI_BACKGROUND_PROCESS_FINISH_REASON`)
+  `RCI_BACKGROUND_PROCESS_FINISH_REASON`), после чего завершается
+- `destroy(): void`: Освобождает локальные ресурсы: останавливает опрос, прерывает текущий HTTP-запрос
+  и завершает все потоки (`done$` завершается без значения). Процесс на устройстве **не** останавливается;
+  если это нужно, сначала вызовите `abort()`. Уничтоженный процесс больше не блокирует свою очередь
+  `queueBackgroundProcess()`.
 
 ```typescript
 interface RciBackgroundProcess {

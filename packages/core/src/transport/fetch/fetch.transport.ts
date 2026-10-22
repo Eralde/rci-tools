@@ -1,7 +1,7 @@
-import {Observable, exhaustMap, from, map} from 'rxjs';
-import {GenericObject} from '../../type.utils';
+import {Observable, defer, exhaustMap, finalize, from, map} from 'rxjs';
+import type {GenericObject} from '../../type.utils';
 import type {AuthErrorSuspension, BaseHttpResponse, HttpTransport} from '../http.transport';
-import {AuthErrorHandler} from '../errors';
+import {AuthErrorHandler} from '../errors/auth-error-handler';
 
 export interface FetchTransportResponse extends BaseHttpResponse {
   headers: Headers;
@@ -25,11 +25,7 @@ export class FetchTransport implements HttpTransport<FetchTransportResponse> {
   }
 
   public get(url: string): Observable<FetchTransportResponse> {
-    return from(fetch(url))
-      .pipe(
-        exhaustMap((fetchResponse: Response) => this.processResponse(fetchResponse)),
-        this.authHandler.handleAuthError<FetchTransportResponse>(),
-      );
+    return this.request(url, {});
   }
 
   public post(url: string, data: unknown): Observable<FetchTransportResponse> {
@@ -42,25 +38,34 @@ export class FetchTransport implements HttpTransport<FetchTransportResponse> {
       body: JSON.stringify(data),
     };
 
-    return from(fetch(url, options))
-      .pipe(
-        exhaustMap((fetchResponse: Response) => this.processResponse(fetchResponse)),
-        this.authHandler.handleAuthError<FetchTransportResponse>(),
-      );
+    return this.request(url, options);
   }
 
   public delete(url: string): Observable<FetchTransportResponse> {
-    return from(fetch(url, {method: 'DELETE'}))
-      .pipe(
-        exhaustMap((fetchResponse: Response) => this.processResponse(fetchResponse)),
-        this.authHandler.handleAuthError<FetchTransportResponse>(),
-      );
+    return this.request(url, {method: 'DELETE'});
   }
 
   public sendQueryArray(url: string, queryArray: GenericObject[]): Observable<GenericObject[]> {
     return this.post(url, queryArray)
       .pipe(
         map((response) => (response.data as GenericObject[])),
+      );
+  }
+
+  // `fetch` starts on subscription; unsubscribing before completion aborts the request
+  protected request(url: string, init: RequestInit): Observable<FetchTransportResponse> {
+    return defer(() => {
+      const controller = new AbortController();
+      const promise = fetch(url, {...init, signal: controller.signal});
+
+      return from(promise)
+        .pipe(
+          exhaustMap((fetchResponse: Response) => this.processResponse(fetchResponse)),
+          finalize(() => controller.abort()),
+        );
+    })
+      .pipe(
+        this.authHandler.handleAuthError<FetchTransportResponse>(),
       );
   }
 

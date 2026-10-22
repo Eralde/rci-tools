@@ -5,9 +5,8 @@ export default defineConfig({
     exclude: [
       '**/node_modules/**',
       '**/dist/**',
-      'packages/core/__tests__/rci.manager.execute.test.ts',
-      'packages/core/__tests__/rci-manager/rci.background-process.test.ts',
-      'packages/core/__tests__/rci-manager/helpers/rci-response.helper.integration.test.ts',
+      // integration tests need a device; run them via `pnpm test -- --addr <device-ip>` in packages/core
+      'packages/core/__tests__/integration/**',
     ],
   },
 });
