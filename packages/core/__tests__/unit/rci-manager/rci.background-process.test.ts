@@ -1,13 +1,145 @@
 import {describe, expect, it, vi} from 'vitest';
-import {NEVER, Subject, defer, firstValueFrom, of} from 'rxjs';
+import {NEVER, Subject, defer, firstValueFrom, of, throwError} from 'rxjs';
 import {
   type BaseHttpResponse,
   RCI_BACKGROUND_PROCESS_FINISH_REASON,
   RCI_BACKGROUND_PROCESS_STATE,
   RciBackgroundProcess,
+  RciManager,
 } from '../../../src';
 import {RciBackgroundTaskQueue} from '../../../src/rci-manager/background-process/rci.background-task.queue';
 import {makeTransport} from '../test.utils';
+
+describe('RciManager background process data', () => {
+  const PING_URL = 'http://device/rci/tools/ping';
+
+  it.each([false, 0, ''])('initBackgroundProcess posts falsy data %j as is', (data) => {
+    const transport = makeTransport();
+    const manager = new RciManager('http://device', transport);
+    const process = manager.initBackgroundProcess({path: 'tools.ping', data});
+
+    process.start();
+
+    expect(process.data).toBe(data);
+    expect(transport.post).toHaveBeenCalledWith(PING_URL, data);
+
+    process.destroy();
+    manager.destroy();
+  });
+
+  it.each([false, 0, ''])('queueBackgroundProcess posts falsy data %j as is', (data) => {
+    const transport = makeTransport();
+    const manager = new RciManager('http://device', transport);
+    const process = manager.queueBackgroundProcess({path: 'tools.ping', data});
+
+    expect(process.data).toBe(data);
+    expect(transport.post).toHaveBeenCalledWith(PING_URL, data);
+
+    manager.destroy();
+  });
+
+  it('defaults missing data to {}', () => {
+    const transport = makeTransport();
+    const manager = new RciManager('http://device', transport);
+
+    expect(manager.initBackgroundProcess({path: 'tools.ping'}).data).toEqual({});
+    expect(manager.queueBackgroundProcess({path: 'tools.ping'}).data).toEqual({});
+
+    manager.destroy();
+  });
+});
+
+describe('RciBackgroundProcess error', () => {
+  const RCI_PATH = 'http://device/rci/';
+  const httpError = {status: 500, data: {}};
+
+  it('exposes the transport error of the first POST', () => {
+    const transport = makeTransport();
+
+    vi.mocked(transport.post).mockReturnValue(throwError(() => httpError));
+
+    const process = new RciBackgroundProcess('tools.ping', {}, {}, RCI_PATH, transport);
+
+    process.start();
+
+    expect(process.getState()).toBe(RCI_BACKGROUND_PROCESS_STATE.ERROR);
+    expect(process.error).toBe(httpError);
+  });
+
+  it('sets error before done$ emits ERROR', () => {
+    const transport = makeTransport();
+
+    vi.mocked(transport.post).mockReturnValue(throwError(() => httpError));
+
+    const process = new RciBackgroundProcess('tools.ping', {}, {}, RCI_PATH, transport);
+    const seen: unknown[] = [];
+
+    process.done$.subscribe((reason) => seen.push([reason, process.error]));
+    process.start();
+
+    expect(seen).toEqual([[RCI_BACKGROUND_PROCESS_FINISH_REASON.ERROR, httpError]]);
+  });
+
+  it('exposes an error thrown by a polling GET', () => {
+    const transport = makeTransport();
+
+    vi.mocked(transport.post).mockReturnValue(of({status: 200, data: {continued: true}}));
+    vi.mocked(transport.get).mockReturnValue(throwError(() => httpError));
+
+    const process = new RciBackgroundProcess('tools.ping', {}, {}, RCI_PATH, transport);
+
+    process.start();
+
+    expect(process.error).toBe(httpError);
+  });
+
+  it('exposes an error of attachToRunning', () => {
+    const transport = makeTransport();
+
+    vi.mocked(transport.get).mockReturnValue(throwError(() => httpError));
+
+    const process = new RciBackgroundProcess('tools.ping', {}, {}, RCI_PATH, transport);
+
+    process.attachToRunning();
+
+    expect(process.error).toBe(httpError);
+  });
+
+  it('is null for a completed process', () => {
+    const process = new RciBackgroundProcess('tools.ping', {}, {}, RCI_PATH, makeTransport());
+
+    process.start();
+
+    expect(process.getState()).toBe(RCI_BACKGROUND_PROCESS_STATE.COMPLETED);
+    expect(process.error).toBeNull();
+  });
+
+  it('is null for an aborted process', () => {
+    const transport = makeTransport();
+
+    vi.mocked(transport.post).mockReturnValue(NEVER);
+
+    const process = new RciBackgroundProcess('tools.ping', {}, {}, RCI_PATH, transport);
+
+    process.start();
+    process.abort();
+
+    expect(process.error).toBeNull();
+  });
+
+  it('keeps the error after destroy()', () => {
+    const transport = makeTransport();
+
+    vi.mocked(transport.post).mockReturnValue(throwError(() => httpError));
+
+    const process = new RciBackgroundProcess('tools.ping', {}, {}, RCI_PATH, transport);
+
+    process.start();
+    process.destroy();
+
+    expect(process.error).toBe(httpError);
+  });
+});
 
 class TestBackgroundProcess extends RciBackgroundProcess<string> {
   public finish(reason: RCI_BACKGROUND_PROCESS_FINISH_REASON): void {

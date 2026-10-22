@@ -172,8 +172,20 @@ export type RciTask<PathType extends string = string> = RciQuery<PathType> | Rci
 ```typescript
 interface QueueOptions {
   isPriorityTask?: boolean;  // send through the priority queue. Default: false
-  saveConfiguration?: boolean; // append a `system configuration save` query. Default: false
+  saveConfiguration?: boolean; // append a `system configuration save` query; its response is not returned. Default: false
 }
+```
+
+`saveConfiguration` does not change the shape of the result: a single query emits one value, an array of N queries
+emits an array of N elements. The save query is always sent last in its batch, so it also saves changes made by other
+tasks in the same batch. If you need the response of the save query, add it to the array yourself, as an ordinary query
+with its own result element:
+
+```typescript
+rciManager.queue([
+  {path: 'system.description', data: 'Home'},
+  {path: 'system.configuration.save'},
+]); // emits [descriptionResult, saveResult]
 ```
 
 Before being sent to the device, `RciQuery` objects are converted to
@@ -476,6 +488,14 @@ Both methods return a `RciBackgroundProcess` object with:
   abort or timeout.
 - `done$`: Emits when the process finishes, with a reason (`RCI_BACKGROUND_PROCESS_FINISH_REASON`),
   then completes
+- `error: unknown`: The error that ended the process with `ERROR` (`done$` emits
+  `RCI_BACKGROUND_PROCESS_FINISH_REASON.ERROR`), `null` for any other outcome or while the process is running.
+  It is set before `done$` emits and stays available after `destroy()`. This is the value the transport errored with,
+  passed through as is, so its type depends on the transport: `FetchTransport` gives the `Response` of a non-200 reply,
+  `XHRTransport` gives an `XHRTransportResponse` for a non-200 reply or an `Error` for a network failure, the axios
+  adapter gives an `AxiosError` (for a network failure, a plain object with its fields and `response.status` `503`).
+  Errors reported by the device inside a `200` reply (RCI `status` entries) do not end the process with `ERROR`; they
+  arrive in `data$` / `result$`.
 - `destroy(): void`: Releases local resources: stops polling, cancels the in-flight HTTP request,
   and completes all streams (`done$` completes without emitting). It does **not** stop the process
   on the device; call `abort()` first if you need that. A destroyed process no longer blocks its
@@ -487,6 +507,7 @@ interface RciBackgroundProcess {
   data$: Observable<GenericObject | null>;
   result$: Observable<GenericObject | null>;
   done$: Observable<RCI_BACKGROUND_PROCESS_FINISH_REASON>;
+  readonly error: unknown;
 
   start(): boolean;
   attachToRunning(): boolean;
@@ -521,6 +542,16 @@ ping$.done$
   });
 
 ping$.start();
+```
+
+To find out why a process failed:
+
+```typescript
+process.done$.subscribe((reason) => {
+  if (reason === RCI_BACKGROUND_PROCESS_FINISH_REASON.ERROR) {
+    console.warn(`${process.command} failed`, process.error);
+  }
+});
 ```
 
 You also can abort a background process manually before it finishes:

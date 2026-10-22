@@ -220,7 +220,7 @@ export class RciManager<
 
     return new RciBackgroundProcess<BackgroundQueryPath>(
       query.path,
-      query.data || {},
+      query.data ?? {},
       options,
       this.rciPath,
       this.httpTransport,
@@ -237,7 +237,7 @@ export class RciManager<
 
     const {path} = query;
     const key = String(path);
-    const data = query.data || {};
+    const data = query.data ?? {};
 
     if (!this.backgroundQueues[key]) {
       this.backgroundQueues[key] = new RciBackgroundTaskQueue<BackgroundQueryPath>(
