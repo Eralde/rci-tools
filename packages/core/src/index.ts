@@ -6,7 +6,14 @@ export { RciManager, RciManagerDestroyedError, SchedulerReplacementInProgressErr
 export type { QueueOptions, RciManagerOptions } from './rci-manager/rci.manager.types';
 
 // Queries
-export type { QueryData, RciQuery, RciTask } from './rci-manager/query/rci.query';
+export type {
+  QueryData,
+  RciQuery,
+  RciResponseOf,
+  RciResultsOf,
+  RciTask,
+  TypedRciQuery,
+} from './rci-manager/query/rci.query';
 export type { GenericObject, TaskResult } from './type.utils';
 
 // Response helpers

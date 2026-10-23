@@ -121,10 +121,11 @@ interface RciManager<
   toggleStats(enabled: boolean): void;
   replaceBatchScheduler(scheduler: BatchScheduler<QueryPath>, options?: {waitIdleFor?: number}): Observable<void>;
 
-  execute<T extends object = GenericObject>(query: RciQuery<QueryPath>): Observable<T | undefined>;
-  execute<T extends object = GenericObject>(query: RciQuery<QueryPath>[]): Observable<Array<T | undefined>>;
-  queue<T extends object = GenericObject>(query: RciQuery<QueryPath>, options?: QueueOptions): Observable<T | undefined>;
-  queue<T extends object = GenericObject>(query: RciQuery<QueryPath>[], options?: QueueOptions): Observable<Array<T | undefined>>;
+  // `T` is optional: without it, the result type comes from the queries, see "Typed queries"
+  execute<T extends object>(query: RciQuery<QueryPath>): Observable<T | undefined>;
+  execute<T extends object>(query: readonly RciQuery<QueryPath>[]): Observable<Array<T | undefined>>;
+  queue<T extends object>(query: RciQuery<QueryPath>, options?: QueueOptions): Observable<T | undefined>;
+  queue<T extends object>(query: readonly RciQuery<QueryPath>[], options?: QueueOptions): Observable<Array<T | undefined>>;
   initBackgroundProcess(query: RciQuery<BackgroundQueryPath>, options?: RciBackgroundProcessOptions): RciBackgroundProcess;
   queueBackgroundProcess(query: RciQuery<BackgroundQueryPath>, options?: RciBackgroundProcessOptions): RciBackgroundProcess;
 
@@ -289,6 +290,51 @@ The `RciManager` provides two methods for sending API queries:
 
 Both methods return a [rxjs Observable](https://rxjs.dev/guide/observable)
 that you must subscribe to in order to receive the result. Below are a few usage examples.
+
+#### Typed queries
+
+`TypedRciQuery<T>` is an `RciQuery` that carries the type of its response. `queue()` and `execute()` infer the result
+type from it, so the type is declared once, next to the query, and the call needs no type argument or cast:
+
+```typescript
+import type {RciResponseOf, TypedRciQuery} from '@rci-tools/core';
+
+interface ShowVersion {
+  release: string;
+  title: string;
+}
+
+interface RrdResponse {
+  data?: Array<{t: number; v: number}>;
+}
+
+const SHOW_VERSION: TypedRciQuery<ShowVersion> = {path: 'show.version'};
+const interfaceRrd = (name: string, attribute: string): TypedRciQuery<RrdResponse> => ({
+  path: 'show.interface.rrd',
+  data: {name, attribute},
+});
+
+rciManager.queue(SHOW_VERSION); // Observable<ShowVersion | undefined>
+rciManager.queue([interfaceRrd('Bridge0', 'txspeed'), interfaceRrd('Bridge0', 'rxspeed')]);
+// Observable<[RrdResponse | undefined, RrdResponse | undefined]>
+
+type Version = RciResponseOf<typeof SHOW_VERSION>; // ShowVersion
+```
+
+- An array literal gives a tuple: one element per query, in the same order. A plain `RciQuery` gives
+  `GenericObject | undefined` at its position. An array built at runtime (`RciQuery[]`) still gives
+  `Array<GenericObject | undefined>`.
+- The response type is a type assertion, like `T` in `queue<T>()`: nothing is checked at runtime. A type from the
+  context (an annotation or `as`) takes precedence over the inferred one, as long as the tuple length matches the number
+  of queries; a different length is a compile error.
+- An explicit type argument, `queue<T>(...)`, takes precedence over the types in the queries; for an array it gives
+  `Array<T | undefined>`, as before.
+- With `extractData: false`, `T` describes the whole response object, not the value at the query path.
+- If your `RciManager` narrows `QueryPath`, pass it as the second parameter, e.g. through a local alias:
+  `type Query<T> = TypedRciQuery<T, MyQueryPath>`. `TypedRciQuery<T>` alone has `path: string`, which a narrowed
+  manager rejects.
+- The response type lives in an optional `'~response'` property that exists only in types. Do not set it on query
+  objects.
 
 #### Batch Scheduling
 

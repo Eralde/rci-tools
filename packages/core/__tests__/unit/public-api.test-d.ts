@@ -22,6 +22,8 @@ import type {
   RciQuery,
   RciQueueOptions,
   RciQueueState,
+  RciResponseOf,
+  RciResultsOf,
   RciStatusList,
   RciStatusObject,
   RciTask,
@@ -29,6 +31,7 @@ import type {
   SessionAuthProtocol,
   SessionManagerOptions,
   TaskResult,
+  TypedRciQuery,
   XHRTransportResponse,
 } from '../../src';
 
@@ -64,6 +67,8 @@ export type PublicTypes = [
   RciQuery,
   RciQueueOptions<BaseHttpResponse>,
   RciQueueState,
+  RciResponseOf<RciQuery>,
+  RciResultsOf<[]>,
   RciStatusList,
   RciStatusObject,
   RciTask,
@@ -71,6 +76,7 @@ export type PublicTypes = [
   SessionAuthProtocol,
   SessionManagerOptions,
   TaskResult,
+  TypedRciQuery<object>,
   XHRTransportResponse,
 ];
 
