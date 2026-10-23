@@ -3,7 +3,8 @@ import {resolve} from 'node:path';
 import {firstValueFrom} from 'rxjs';
 import {InspectableAxiosTransport, promptForCredentials} from './common';
 import {SessionManager} from '../../src';
-import {Ndw4AuthProtocol, SessionAuthContext} from '../../src/session-manager/auth-protocol';
+import type {SessionAuthContext} from '../../src/session-manager/auth-protocol/auth-protocol.types';
+import {Ndw4AuthProtocol} from '../../src/session-manager/auth-protocol/x-ndw4-interactive/ndw4-auth.protocol';
 
 type DeviceResponse = Awaited<ReturnType<InspectableAxiosTransport['inspectAuth']>>;
 

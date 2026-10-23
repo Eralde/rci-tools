@@ -99,6 +99,106 @@ built-in brute-force protection: too many failed logins from one client may get 
 Limit the number of `'rejected'` results in a row and space out attempts after **any** failure,
 not only after `'rejected'`.
 
+### Custom HTTP transport
+
+Implement [`HttpTransport`](./src/transport/http.transport.ts) for your response type. It requires
+`get`, `post`, `delete`, `getHeader`, `onAuthRequest`, `clearAuthData`, and `sendQueryArray`.
+
+Use `AuthErrorHandler` to turn HTTP 401 errors into `authError$` notifications. Its RxJS operator emits
+when an error has `status === 401` and notifications are not suspended, then rethrows the same error.
+`suspend()` and `resume()` maintain a nesting counter; `AuthErrorHandler.is401Error()` checks an error,
+and `destroy()` completes `authError$`.
+
+Expose the handler as `authErrorSuspension`. `SessionManager` calls `suspend()` during the login
+handshake and `resume()` in `finalize`, so a 401 from login itself is not treated as an expired session.
+The property is optional on `HttpTransport`.
+
+```typescript
+import {
+  AuthErrorHandler,
+  RciManager,
+  SessionManager,
+  type AuthErrorSuspension,
+  type BaseHttpResponse,
+  type GenericObject,
+  type HttpTransport,
+} from '@rci-tools/core';
+import {defer, map, mergeMap, type Observable} from 'rxjs';
+
+interface CustomResponse extends BaseHttpResponse {
+  headers: Headers;
+}
+
+class CustomHttpTransport implements HttpTransport<CustomResponse> {
+  private readonly authHandler = new AuthErrorHandler();
+  public readonly authError$: Observable<void> = this.authHandler.authError$;
+  public readonly authErrorSuspension: AuthErrorSuspension = this.authHandler;
+
+  public get(url: string): Observable<CustomResponse> {
+    return this.request(url);
+  }
+
+  public post(url: string, data: unknown): Observable<CustomResponse> {
+    return this.request(url, {method: 'POST', body: JSON.stringify(data)});
+  }
+
+  public delete(url: string): Observable<CustomResponse> {
+    return this.request(url, {method: 'DELETE'});
+  }
+
+  public getHeader(response: CustomResponse, name: string): string {
+    return response.headers.get(name) ?? '';
+  }
+
+  public onAuthRequest(): void {}
+
+  public clearAuthData(): void {}
+
+  public sendQueryArray(url: string, queries: GenericObject[]): Observable<GenericObject[]> {
+    return this.post(url, queries).pipe(map((response) => response.data as GenericObject[]));
+  }
+
+  private request(url: string, init: RequestInit = {}): Observable<CustomResponse> {
+    return defer(() => fetch(url, init))
+      .pipe(
+        mergeMap(async (response): Promise<CustomResponse> => {
+          const result: CustomResponse = {
+            status: response.status,
+            headers: response.headers,
+            data: {},
+          };
+
+          if (response.status !== 200) {
+            throw result;
+          }
+
+          const body = await response.text();
+
+          try {
+            result.data = JSON.parse(body);
+          } catch {
+            result.data = {};
+          }
+
+          return result;
+        }),
+        this.authHandler.handleAuthError<CustomResponse>(),
+      );
+  }
+}
+
+const host = 'http://192.168.1.1';
+const transport = new CustomHttpTransport();
+const sessionManager = new SessionManager(host, transport);
+const rciManager = new RciManager(host, transport);
+
+transport.authError$.subscribe(() => console.warn('Authentication expired'));
+```
+
+`FetchTransport` and `XHRTransport` expose `authError$` publicly. They emit on 401 outside login,
+signaling an expired session, so application code can subscribe directly. The package does not subscribe
+to `authError$`. `AxiosTransport` does not use `AuthErrorHandler` and exposes no `authError$`.
+
 ### `RciManager`
 
 The `RciManager` class is used to interact with the RCI API.

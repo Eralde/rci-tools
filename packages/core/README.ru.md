@@ -100,6 +100,112 @@ const sessionManager = new SessionManager('http://192.168.1.1', transport, {
 временно заблокирован. Ограничивайте число `'rejected'` подряд и делайте паузы после **любой** неудачи,
 а не только после `'rejected'`.
 
+### Собственный HTTP-транспорт
+
+Реализуйте [`HttpTransport`](./src/transport/http.transport.ts) для своего типа ответа.
+Интерфейс требует методы `get`, `post`, `delete`, `getHeader`, `onAuthRequest`,
+`clearAuthData` и `sendQueryArray`.
+
+С помощью `AuthErrorHandler` можно получать события `authError$` при HTTP 401.
+RxJS-оператор проверяет, что у ошибки `status === 401`
+и события не приостановлены.
+Тогда он отправляет событие, а затем пробрасывает ту же ошибку.
+`suspend()` и `resume()` ведут счётчик вложенности.
+`AuthErrorHandler.is401Error()` проверяет ошибку, а `destroy()` завершает `authError$`.
+
+Передайте обработчик в свойство `authErrorSuspension`.
+Во время входа `SessionManager` вызывает `suspend()`, а в `finalize` — `resume()`.
+HTTP 401 от запроса входа не считается истёкшей сессией.
+Это свойство в `HttpTransport` необязательно.
+
+```typescript
+import {
+  AuthErrorHandler,
+  RciManager,
+  SessionManager,
+  type AuthErrorSuspension,
+  type BaseHttpResponse,
+  type GenericObject,
+  type HttpTransport,
+} from '@rci-tools/core';
+import {defer, map, mergeMap, type Observable} from 'rxjs';
+
+interface CustomResponse extends BaseHttpResponse {
+  headers: Headers;
+}
+
+class CustomHttpTransport implements HttpTransport<CustomResponse> {
+  private readonly authHandler = new AuthErrorHandler();
+  public readonly authError$: Observable<void> = this.authHandler.authError$;
+  public readonly authErrorSuspension: AuthErrorSuspension = this.authHandler;
+
+  public get(url: string): Observable<CustomResponse> {
+    return this.request(url);
+  }
+
+  public post(url: string, data: unknown): Observable<CustomResponse> {
+    return this.request(url, {method: 'POST', body: JSON.stringify(data)});
+  }
+
+  public delete(url: string): Observable<CustomResponse> {
+    return this.request(url, {method: 'DELETE'});
+  }
+
+  public getHeader(response: CustomResponse, name: string): string {
+    return response.headers.get(name) ?? '';
+  }
+
+  public onAuthRequest(): void {}
+
+  public clearAuthData(): void {}
+
+  public sendQueryArray(url: string, queries: GenericObject[]): Observable<GenericObject[]> {
+    return this.post(url, queries).pipe(map((response) => response.data as GenericObject[]));
+  }
+
+  private request(url: string, init: RequestInit = {}): Observable<CustomResponse> {
+    return defer(() => fetch(url, init))
+      .pipe(
+        mergeMap(async (response): Promise<CustomResponse> => {
+          const result: CustomResponse = {
+            status: response.status,
+            headers: response.headers,
+            data: {},
+          };
+
+          if (response.status !== 200) {
+            throw result;
+          }
+
+          const body = await response.text();
+
+          try {
+            result.data = JSON.parse(body);
+          } catch {
+            result.data = {};
+          }
+
+          return result;
+        }),
+        this.authHandler.handleAuthError<CustomResponse>(),
+      );
+  }
+}
+
+const host = 'http://192.168.1.1';
+const transport = new CustomHttpTransport();
+const sessionManager = new SessionManager(host, transport);
+const rciManager = new RciManager(host, transport);
+
+transport.authError$.subscribe(() => console.warn('Сессия истекла'));
+```
+
+`FetchTransport` и `XHRTransport` публично предоставляют `authError$`.
+При HTTP 401 вне входа они эмитят событие — это означает,
+что сессия истекла. Приложение может подписаться напрямую.
+Пакет сам не подписывается на `authError$`.
+`AxiosTransport` не использует `AuthErrorHandler` и не предоставляет этот поток.
+
 ### `RciManager`
 
 Класс `RciManager` используется для взаимодействия с RCI API.

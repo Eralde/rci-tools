@@ -54,8 +54,6 @@ export type {
   AuthProtocolName,
   LoginFailureReason,
   LoginResult,
-  SessionAuthContext,
-  SessionAuthProtocol,
 } from './session-manager/auth-protocol/auth-protocol.types';
 
 // Transport
