@@ -46,6 +46,24 @@ describe('RciManager.destroy', () => {
     );
   });
 
+  it('subscribing after destroy to an Observable obtained before destroy errors and sends nothing', async () => {
+    const transport = makeTransport();
+    const manager = new RciManager('http://device', transport);
+
+    const execute$ = manager.execute({path: 'show.version'});
+    const queue$ = manager.queue({path: 'show.version'});
+    const priorityQueue$ = manager.queue({path: 'show.version'}, {isPriorityTask: true});
+    const swap$ = manager.replaceBatchScheduler(new TimerScheduler(0));
+
+    manager.destroy();
+
+    await expect(firstValueFrom(execute$)).rejects.toBeInstanceOf(RciManagerDestroyedError);
+    await expect(firstValueFrom(queue$)).rejects.toBeInstanceOf(RciManagerDestroyedError);
+    await expect(firstValueFrom(priorityQueue$)).rejects.toBeInstanceOf(RciManagerDestroyedError);
+    await expect(firstValueFrom(swap$)).rejects.toBeInstanceOf(RciManagerDestroyedError);
+    expect(transport.post).not.toHaveBeenCalled();
+  });
+
   it('background process factories throw RciManagerDestroyedError after destroy', () => {
     const {manager, transport} = makeDestroyedManager();
 

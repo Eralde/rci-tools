@@ -106,16 +106,16 @@ export class RciManager<
     // across multiple separate calls to `replaceBatchScheduler()`.
     let sharedSwap$: Observable<void> | null = null;
 
-    if (this.isDestroyed) {
-      return throwError(() => new RciManagerDestroyedError());
-    }
-
     return defer(() => {
       if (sharedSwap$) {
         return sharedSwap$;
       }
 
       sharedSwap$ = defer(() => {
+        if (this.isDestroyed) {
+          return throwError(() => new RciManagerDestroyedError());
+        }
+
         if (this.currentSchedulerSwapToken) {
           return throwError(() => new SchedulerReplacementInProgressError());
         }
@@ -163,10 +163,6 @@ export class RciManager<
   public execute(
     query: RciQuery<QueryPath> | readonly RciQuery<QueryPath>[],
   ): Observable<GenericObject | Array<GenericObject | undefined> | undefined> {
-    if (this.isDestroyed) {
-      return throwError(() => new RciManagerDestroyedError());
-    }
-
     const isSingleQuery = !isQueryList(query);
     const queryList: Array<RciQuery<QueryPath>> = isSingleQuery
       ? [query]
@@ -177,9 +173,14 @@ export class RciManager<
       queryMap,
     } = RciPayloadHelper.compactQueries(queryList);
 
-    // Moving catchError to the outer pipe
-    // will cancel the batch$ Observable if an error occurs
-    return sendQueryArray(this.httpTransport, this.rciPath, queryArray)
+    // The destroyed check runs on each subscription: a deferred subscribe or a retry() after destroy() sends nothing
+    return defer(() => {
+      if (this.isDestroyed) {
+        return throwError(() => new RciManagerDestroyedError());
+      }
+
+      return sendQueryArray(this.httpTransport, this.rciPath, queryArray);
+    })
       .pipe(
         timeout(RCI_QUERY_TIMEOUT),
         map((batchedResponse) => {
@@ -216,17 +217,19 @@ export class RciManager<
     query: RciQuery<QueryPath> | readonly RciQuery<QueryPath>[],
     options: QueueOptions = DEFAULT_QUEUE_OPTIONS,
   ): Observable<TaskResult> {
-    if (this.isDestroyed) {
-      return throwError(() => new RciManagerDestroyedError());
-    }
-
     const task = isQueryList(query) ? [...query] : query;
 
-    if (options.isPriorityTask) {
-      return this.priorityQueue.addTask(task, options.saveConfiguration);
-    } else {
-      return this.batchQueue.addTask(task, options.saveConfiguration);
-    }
+    return defer(() => {
+      if (this.isDestroyed) {
+        return throwError(() => new RciManagerDestroyedError());
+      }
+
+      if (options.isPriorityTask) {
+        return this.priorityQueue.addTask(task, options.saveConfiguration);
+      } else {
+        return this.batchQueue.addTask(task, options.saveConfiguration);
+      }
+    });
   }
 
   public initBackgroundProcess(

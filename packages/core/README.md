@@ -295,8 +295,9 @@ Additional members:
   Throws `SchedulerReplacementInProgressError` if another replacement is already in progress.
   See [Batch Scheduling](./docs/SCHEDULING.md).
 - `destroy()`: tears down internal queues, background process queues, and the stats collector.
-  Pending `queue()` results error with `QueueDestroyedError`. After `destroy()`, `execute()`, `queue()`
-  and `replaceBatchScheduler()` return Observables that error with `RciManagerDestroyedError`;
+  Pending `queue()` results error with `QueueDestroyedError`. After `destroy()`, Observables from `execute()`,
+  `queue()` and `replaceBatchScheduler()` error with `RciManagerDestroyedError` on subscription, including
+  Observables obtained before `destroy()`;
   `initBackgroundProcess()` and `queueBackgroundProcess()` throw it. Processes created with
   `initBackgroundProcess()` belong to the caller and are not destroyed. The transport is not owned by
   the manager either. Calling `destroy()` again does nothing.

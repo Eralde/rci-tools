@@ -302,9 +302,10 @@ interface RciManager<
   Выбрасывает `SchedulerReplacementInProgressError`, если другая замена уже выполняется.
   См. [Планировщик](./docs/SCHEDULING.ru.md).
 - `destroy()`: освобождает внутренние очереди, очереди фоновых процессов и сборщик статистики.
-  Ожидающие результаты `queue()` завершаются ошибкой `QueueDestroyedError`. После `destroy()` методы
-  `execute()`, `queue()` и `replaceBatchScheduler()` возвращают Observable, завершающийся ошибкой
-  `RciManagerDestroyedError`; `initBackgroundProcess()` и `queueBackgroundProcess()` выбрасывают её.
+  Ожидающие результаты `queue()` завершаются ошибкой `QueueDestroyedError`. После `destroy()` подписка на
+  Observable из `execute()`, `queue()` и `replaceBatchScheduler()` завершается ошибкой
+  `RciManagerDestroyedError`, даже если Observable получен до `destroy()`;
+  `initBackgroundProcess()` и `queueBackgroundProcess()` выбрасывают её.
   Процессы, созданные через `initBackgroundProcess()`, принадлежат вызывающему коду и не уничтожаются.
   Транспортом менеджер тоже не владеет. Повторный вызов `destroy()` ничего не делает.
 
