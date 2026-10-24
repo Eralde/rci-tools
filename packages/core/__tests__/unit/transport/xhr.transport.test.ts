@@ -160,6 +160,22 @@ describe('XHRTransport', () => {
 
       expect(xhrMock.instances[0]!.aborted).toBe(false);
     });
+
+    it('starts an independent request on each subscription', () => {
+      const request$ = transport.post('http://example.com/rci/', [{}]);
+
+      const first = request$.subscribe();
+      const second = request$.subscribe();
+
+      expect(xhrMock.instances).toHaveLength(2);
+
+      first.unsubscribe();
+
+      expect(xhrMock.instances[0]!.aborted).toBe(true);
+      expect(xhrMock.instances[1]!.aborted).toBe(false);
+
+      second.unsubscribe();
+    });
   });
 
   describe('response handling', () => {

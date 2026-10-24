@@ -60,6 +60,28 @@ describe('AxiosTransport', () => {
     expect(signal.aborted).toBe(true);
   });
 
+  it('starts an independent request on each subscription', () => {
+    const client = makeClient();
+    vi.mocked(client.post).mockReturnValue(new Promise(() => {}));
+    const transport = new AxiosTransport(client);
+    const request$ = transport.post('http://device/rci/', [{}]);
+
+    const first = request$.subscribe();
+    const second = request$.subscribe();
+
+    expect(client.post).toHaveBeenCalledTimes(2);
+
+    const firstSignal = vi.mocked(client.post).mock.calls[0]![2]!.signal as AbortSignal;
+    const secondSignal = vi.mocked(client.post).mock.calls[1]![2]!.signal as AbortSignal;
+
+    first.unsubscribe();
+
+    expect(firstSignal.aborted).toBe(true);
+    expect(secondSignal.aborted).toBe(false);
+
+    second.unsubscribe();
+  });
+
   it('treats any 2xx as success even if the client default rejects it', async () => {
     const response = makeResponse({}, 204);
     const client = makeClient(response);

@@ -41,6 +41,26 @@ describe('FetchTransport', () => {
 
       expect(signal.aborted).toBe(true);
     });
+
+    it('starts an independent request on each subscription', () => {
+      const fetchSpy = vi.spyOn(global, 'fetch').mockReturnValue(new Promise<Response>(() => {}));
+      const request$ = transport.post('http://example.com/rci/', [{}]);
+
+      const first = request$.subscribe();
+      const second = request$.subscribe();
+
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+
+      const firstSignal = fetchSpy.mock.calls[0]![1]!.signal!;
+      const secondSignal = fetchSpy.mock.calls[1]![1]!.signal!;
+
+      first.unsubscribe();
+
+      expect(firstSignal.aborted).toBe(true);
+      expect(secondSignal.aborted).toBe(false);
+
+      second.unsubscribe();
+    });
   });
 
   describe('auth error handling', () => {
@@ -129,6 +149,20 @@ describe('FetchTransport', () => {
       expect(error.status).toBe(200);
       expect(error.response).toBeNull();
       expect(error.cause).toBe(cause);
+    });
+
+    it('keeps a 401 status and emits authError$ when reading the body fails', async () => {
+      const cause = new TypeError('body stream failed');
+      const fetchResponse = makeResponse(401);
+      vi.spyOn(fetchResponse, 'text').mockRejectedValue(cause);
+      vi.spyOn(global, 'fetch').mockResolvedValue(fetchResponse);
+
+      const error = await firstValueFrom(transport.post('http://example.com/rci/', [{}])).catch((reason) => reason);
+
+      expect(error).toBeInstanceOf(RciHttpError);
+      expect(error.status).toBe(401);
+      expect(error.cause).toBe(cause);
+      expect(authErrorCount).toBe(1);
     });
 
     it('getHeader returns null for a missing header', async () => {
