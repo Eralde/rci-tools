@@ -1,4 +1,5 @@
 import {describe, expect, it, vi} from 'vitest';
+import {createHash} from 'node:crypto';
 import {NEVER, type Observable, Subject, catchError, firstValueFrom, of, throwError} from 'rxjs';
 import {
   AUTH_PROTOCOL,
@@ -264,10 +265,13 @@ describe('SessionManager', () => {
     expect(staleResults).toEqual([true]);
   });
 
-  it('uses first-subscribed login credentials structurally', () => {
+  it('sends one NDW2 handshake with the first subscriber credentials', async () => {
     const pending = new Subject<BaseHttpResponse>();
-    const get = vi.fn().mockReturnValue(pending);
-    const transport = makeTransport({get});
+    const get = vi.fn()
+      .mockReturnValueOnce(pending)
+      .mockReturnValueOnce(of({status: 200, data: {}}));
+    const post = vi.fn().mockReturnValue(of({status: 200, data: {}}));
+    const transport = makeTransport({get, post, getHeader: vi.fn(readHeader)});
     const session = new SessionManager('http://device', transport);
     const loginA = session.login('a', 'pa');
     const loginB = session.login('b', 'pb');
@@ -278,10 +282,15 @@ describe('SessionManager', () => {
 
     expect(get).toHaveBeenCalledTimes(1);
 
-    pending.next({status: 200, data: {}});
+    pending.next(ndw2Challenge);
     pending.complete();
 
-    expect(results).toEqual([true, true]);
+    await vi.waitFor(() => expect(results).toEqual([true, true]));
+
+    const md5 = createHash('md5').update('b:Keenetic:pb').digest('hex');
+    const expected = createHash('sha256').update(`challenge-token${md5}`).digest('hex');
+    expect(post).toHaveBeenCalledOnce();
+    expect(post).toHaveBeenCalledWith('http://device/auth', {login: 'b', password: expected});
   });
 
   it('starts a fresh flight for synchronous false retry', () => {
@@ -450,14 +459,20 @@ describe('SessionManager', () => {
     await expect(firstValueFrom(session.getRealmHeader())).resolves.toBeNull();
   });
 
-  it('login() completes when post errors and session is not authenticated', async () => {
-    const transport = makeTransport({
-      post: vi.fn().mockReturnValue(throwError(() => new RciHttpError('Network request failed', {status: null}))),
-      get: vi.fn().mockReturnValue(of({status: 401, data: {}})),
-    });
+  it('login() returns false when NDW2 POST /auth fails without a response', async () => {
+    const post = vi.fn().mockReturnValue(
+      throwError(() => new RciHttpError('Network request failed', {status: null})),
+    );
+    const get = vi.fn()
+      .mockReturnValueOnce(of(ndw2Challenge))
+      .mockReturnValueOnce(of({status: 401, data: {}, headers: {}}));
+    const transport = makeTransport({post, get, getHeader: vi.fn(readHeader)});
     const session = new SessionManager('http://device', transport);
 
     await expect(firstValueFrom(session.login('admin', 'password'))).resolves.toBe(false);
+    expect(post).toHaveBeenCalledOnce();
+    expect(post).toHaveBeenCalledWith('http://device/auth', expect.objectContaining({login: 'admin'}));
+    expect(get).toHaveBeenCalledTimes(2);
   });
 });
 

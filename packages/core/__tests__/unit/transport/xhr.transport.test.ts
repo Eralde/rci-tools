@@ -252,6 +252,7 @@ describe('XHRTransport', () => {
       await promise;
 
       expect(xhrMock.instances[0]!.method).toBe('DELETE');
+      expect(xhrMock.instances[0]!.url).toBe('http://example.com/auth');
     });
 
     it('sends JSON headers and body on POST', async () => {
@@ -260,9 +261,22 @@ describe('XHRTransport', () => {
       xhrMock.instances[0]!.respond(200, '{}', '');
       await promise;
 
+      expect(xhrMock.instances[0]!.method).toBe('POST');
+      expect(xhrMock.instances[0]!.url).toBe('http://example.com/rci/');
       expect(xhrMock.instances[0]!.requestHeaders['Content-Type']).toBe('application/json');
       expect(xhrMock.instances[0]!.requestHeaders['Accept']).toBe('application/json');
       expect(xhrMock.instances[0]!.body).toBe(JSON.stringify({a: 1}));
+    });
+
+    it('opens GET with the given URL', async () => {
+      const promise = firstValueFrom(transport.get('http://example.com/auth'));
+
+      xhrMock.instances[0]!.respond(200, '{}', '');
+      await promise;
+
+      expect(xhrMock.instances[0]!.method).toBe('GET');
+      expect(xhrMock.instances[0]!.url).toBe('http://example.com/auth');
+      expect(xhrMock.instances[0]!.body).toBeNull();
     });
   });
 

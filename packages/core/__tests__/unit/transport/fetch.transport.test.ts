@@ -63,6 +63,46 @@ describe('FetchTransport', () => {
     });
   });
 
+  describe('request shape', () => {
+    it('sends GET to the given URL without a body', async () => {
+      const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(makeResponse(200));
+
+      await firstValueFrom(transport.get('http://example.com/auth'));
+
+      const [url, init] = fetchSpy.mock.calls[0]!;
+
+      expect(url).toBe('http://example.com/auth');
+      expect(init!.method ?? 'GET').toBe('GET');
+      expect(init!.body).toBeUndefined();
+    });
+
+    it('sends POST with a JSON body and JSON headers', async () => {
+      const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(makeResponse(200));
+
+      await firstValueFrom(transport.post('http://example.com/rci/', [{show: {version: {}}}]));
+
+      const [url, init] = fetchSpy.mock.calls[0]!;
+
+      expect(url).toBe('http://example.com/rci/');
+      expect(init!.method).toBe('POST');
+      expect(init!.body).toBe(JSON.stringify([{show: {version: {}}}]));
+      expect(new Headers(init!.headers).get('Content-Type')).toBe('application/json');
+      expect(new Headers(init!.headers).get('Accept')).toBe('application/json');
+    });
+
+    it('sends DELETE to the given URL without a body', async () => {
+      const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(makeResponse(200));
+
+      await firstValueFrom(transport.delete('http://example.com/auth'));
+
+      const [url, init] = fetchSpy.mock.calls[0]!;
+
+      expect(url).toBe('http://example.com/auth');
+      expect(init!.method).toBe('DELETE');
+      expect(init!.body).toBeUndefined();
+    });
+  });
+
   describe('auth error handling', () => {
     it('should emit authError$ exactly once for a 401 from post', async () => {
       vi.spyOn(global, 'fetch').mockResolvedValue(makeResponse(401));

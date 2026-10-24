@@ -1,4 +1,4 @@
-import {describe, expect, it, vi} from 'vitest';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {NEVER, Subject, defer, firstValueFrom, of, throwError} from 'rxjs';
 import {
   type BaseHttpResponse,
@@ -252,5 +252,158 @@ describe('RciBackgroundTaskQueue cleanup', () => {
     queue.destroy();
 
     expect(completed).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('RciBackgroundProcess polling lifecycle', () => {
+  const URL = 'http://device/rci/tools/ping';
+  const S1 = {continued: true, step: 1};
+  const S2 = {continued: true, step: 2};
+  const S3 = {step: 3};
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('publishes polled data, the result and DONE', () => {
+    const transport = makeTransport();
+    vi.mocked(transport.post).mockReturnValueOnce(of({status: 200, data: S1}));
+    vi.mocked(transport.get)
+      .mockReturnValueOnce(of({status: 200, data: S2}))
+      .mockReturnValueOnce(of({status: 200, data: S3}));
+
+    const manager = new RciManager('http://device', transport);
+    const process = manager.initBackgroundProcess(
+      {path: 'tools.ping', data: {host: 'example.com'}},
+      {pollInterval: 1000},
+    );
+    const data: unknown[] = [];
+    const results: unknown[] = [];
+    const done: RCI_BACKGROUND_PROCESS_FINISH_REASON[] = [];
+    const states: RCI_BACKGROUND_PROCESS_STATE[] = [];
+    const dataComplete = vi.fn();
+    const resultComplete = vi.fn();
+    const doneComplete = vi.fn();
+
+    process.data$.subscribe({next: value => data.push(value), complete: dataComplete});
+    process.result$.subscribe({next: value => results.push(value), complete: resultComplete});
+    process.done$.subscribe({next: value => done.push(value), complete: doneComplete});
+    process.state$.subscribe(value => states.push(value));
+
+    process.start();
+    vi.advanceTimersByTime(1000);
+    vi.advanceTimersByTime(1);
+
+    expect(transport.post).toHaveBeenCalledOnce();
+    expect(transport.post).toHaveBeenCalledWith(URL, {host: 'example.com'});
+    expect(transport.get).toHaveBeenCalledTimes(2);
+    expect(transport.get).toHaveBeenNthCalledWith(1, URL);
+    expect(transport.get).toHaveBeenNthCalledWith(2, URL);
+    expect(data).toEqual([S1, S2, S3]);
+    expect(results).toEqual([S3]);
+    expect(done).toEqual([RCI_BACKGROUND_PROCESS_FINISH_REASON.DONE]);
+    expect(states).toEqual([
+      RCI_BACKGROUND_PROCESS_STATE.INIT,
+      RCI_BACKGROUND_PROCESS_STATE.RUNNING,
+      RCI_BACKGROUND_PROCESS_STATE.COMPLETED,
+    ]);
+    expect(dataComplete).toHaveBeenCalledOnce();
+    expect(resultComplete).toHaveBeenCalledOnce();
+    expect(doneComplete).toHaveBeenCalledOnce();
+    expect(process.error).toBeNull();
+
+    manager.destroy();
+  });
+
+  it('waits pollInterval between polls', () => {
+    const transport = makeTransport();
+    vi.mocked(transport.post).mockReturnValueOnce(of({status: 200, data: S1}));
+    vi.mocked(transport.get)
+      .mockReturnValueOnce(of({status: 200, data: S2}))
+      .mockReturnValueOnce(of({status: 200, data: S3}));
+
+    const manager = new RciManager('http://device', transport);
+    const process = manager.initBackgroundProcess(
+      {path: 'tools.ping', data: {host: 'example.com'}},
+      {pollInterval: 1000},
+    );
+    const data: unknown[] = [];
+    const results: unknown[] = [];
+    process.data$.subscribe(value => data.push(value));
+    process.result$.subscribe(value => results.push(value));
+
+    process.start();
+
+    expect(transport.get).toHaveBeenCalledTimes(1);
+    expect(data).toEqual([S1, S2]);
+    expect(results).toEqual([]);
+
+    vi.advanceTimersByTime(999);
+    expect(transport.get).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(1);
+    expect(transport.get).toHaveBeenCalledTimes(2);
+
+    manager.destroy();
+  });
+
+  it('finishes without polling when the first reply is final', () => {
+    const transport = makeTransport();
+    vi.mocked(transport.post).mockReturnValueOnce(of({status: 200, data: {step: 1}}));
+
+    const manager = new RciManager('http://device', transport);
+    const process = manager.initBackgroundProcess(
+      {path: 'tools.ping', data: {host: 'example.com'}},
+      {pollInterval: 1000},
+    );
+    const data: unknown[] = [];
+    const results: unknown[] = [];
+    const done: RCI_BACKGROUND_PROCESS_FINISH_REASON[] = [];
+    process.data$.subscribe(value => data.push(value));
+    process.result$.subscribe(value => results.push(value));
+    process.done$.subscribe(value => done.push(value));
+
+    process.start();
+
+    expect(transport.get).not.toHaveBeenCalled();
+    expect(data).toEqual([{step: 1}]);
+    expect(results).toEqual([{step: 1}]);
+    expect(done).toEqual([RCI_BACKGROUND_PROCESS_FINISH_REASON.DONE]);
+
+    manager.destroy();
+  });
+
+  it('emits the final payload of attachToRunning once', () => {
+    const transport = makeTransport();
+    vi.mocked(transport.get)
+      .mockReturnValueOnce(of({status: 200, data: {continued: true, step: 1}}))
+      .mockReturnValueOnce(of({status: 200, data: {step: 2}}));
+
+    const manager = new RciManager('http://device', transport);
+    const process = manager.initBackgroundProcess(
+      {path: 'tools.ping', data: {host: 'example.com'}},
+      {pollInterval: 1000},
+    );
+    const data: unknown[] = [];
+    const results: unknown[] = [];
+    const done: RCI_BACKGROUND_PROCESS_FINISH_REASON[] = [];
+    process.data$.subscribe(value => data.push(value));
+    process.result$.subscribe(value => results.push(value));
+    process.done$.subscribe(value => done.push(value));
+
+    process.attachToRunning();
+    vi.advanceTimersByTime(1000);
+    vi.advanceTimersByTime(1);
+
+    expect(transport.post).not.toHaveBeenCalled();
+    expect(data).toEqual([{continued: true, step: 1}, {step: 2}]);
+    expect(results).toEqual([{step: 2}]);
+    expect(done).toEqual([RCI_BACKGROUND_PROCESS_FINISH_REASON.DONE]);
+
+    manager.destroy();
   });
 });
