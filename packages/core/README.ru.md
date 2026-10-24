@@ -145,7 +145,6 @@ HTTP 401 от запроса входа не считается истёкшей
 ```typescript
 import {
   AuthErrorHandler,
-  isRciHttpError,
   RciHttpError,
   RciManager,
   SessionManager,
@@ -169,7 +168,14 @@ class CustomHttpTransport implements HttpTransport<CustomResponse> {
   }
 
   public post(url: string, data: unknown): Observable<CustomResponse> {
-    return this.request(url, {method: 'POST', body: JSON.stringify(data)});
+    return this.request(
+      url,
+      {
+        method: 'POST',
+        headers: {'Accept': 'application/json', 'Content-Type': 'application/json'},
+        body: JSON.stringify(data),
+      },
+    );
   }
 
   public delete(url: string): Observable<CustomResponse> {
@@ -187,42 +193,49 @@ class CustomHttpTransport implements HttpTransport<CustomResponse> {
   private request(url: string, init: RequestInit = {}): Observable<CustomResponse> {
     return defer(() => {
       const controller = new AbortController();
-      return from(fetch(url, {...init, signal: controller.signal})).pipe(
-        catchError((cause: unknown) =>
-          throwError(() => new RciHttpError<CustomResponse>('Network request failed', {status: null, cause})),
-        ),
-        mergeMap(async (response): Promise<CustomResponse> => {
-          const result: CustomResponse = {
-            status: response.status,
-            headers: response.headers,
-            data: {},
-          };
 
-          const body = await response.text();
-
-          try {
-            result.data = JSON.parse(body);
-          } catch {
-            result.data = {};
-          }
-
-          if (response.status < 200 || response.status >= 300) {
-            throw new RciHttpError<CustomResponse>(`HTTP ${response.status}`, {
+      return from(fetch(url, {...init, signal: controller.signal}))
+        .pipe(
+          catchError((cause: unknown) =>
+            throwError(() => new RciHttpError<CustomResponse>('Network request failed', {status: null, cause})),
+          ),
+          mergeMap(async (response): Promise<CustomResponse> => {
+            const result: CustomResponse = {
               status: response.status,
-              response: result,
-            });
-          }
+              headers: response.headers,
+              data: {},
+            };
 
-          return result;
-        }),
-        catchError((error: unknown) =>
-          isRciHttpError(error)
-            ? throwError(() => error)
-            : throwError(() => new RciHttpError<CustomResponse>('Request failed', {status: null, cause: error})),
-        ),
-        finalize(() => controller.abort()),
-      );
-    })
+            let body: string;
+
+            try {
+              body = await response.text();
+            } catch (cause) {
+              throw new RciHttpError<CustomResponse>('Failed to read the response body', {
+                status: response.status,
+                cause,
+              });
+            }
+
+            try {
+              result.data = JSON.parse(body);
+            } catch {
+              result.data = {};
+            }
+
+            if (response.status < 200 || response.status >= 300) {
+              throw new RciHttpError<CustomResponse>(`HTTP ${response.status}`, {
+                status: response.status,
+                response: result,
+              });
+            }
+
+            return result;
+          }),
+          finalize(() => controller.abort()),
+        );
+      })
+      // для `defer`
       .pipe(
         this.authHandler.handleAuthError<CustomResponse>(),
       );
