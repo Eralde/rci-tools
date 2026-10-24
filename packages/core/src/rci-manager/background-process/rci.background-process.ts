@@ -317,7 +317,9 @@ export class RciBackgroundProcess<CommandType extends string = string> {
             .pipe(
               switchMap(() => getQuery()),
               map((getResponse) => {
-                onDataUpdate(getResponse.data as GenericObject);
+                if (!isFinished(getResponse)) {
+                  onDataUpdate(getResponse.data as GenericObject);
+                }
 
                 return getResponse;
               }),
