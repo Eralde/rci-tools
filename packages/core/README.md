@@ -145,11 +145,13 @@ import {
   RciHttpError,
   RciManager,
   SessionManager,
+  isRciHttpError,
   type AuthErrorSuspension,
   type BaseHttpResponse,
   type HttpTransport,
 } from '@rci-tools/core';
-import {catchError, defer, finalize, from, mergeMap, throwError, type Observable} from 'rxjs';
+import {catchError, throwError, type Observable} from 'rxjs';
+import {fromFetch} from 'rxjs/fetch';
 
 interface CustomResponse extends BaseHttpResponse {
   headers: Headers;
@@ -187,53 +189,39 @@ class CustomHttpTransport implements HttpTransport<CustomResponse> {
 
   public clearAuthData(): void {}
 
+  // `fromFetch` sends the request on subscription and aborts it on unsubscribe
   private request(url: string, init: RequestInit = {}): Observable<CustomResponse> {
-    return defer(() => {
-      const controller = new AbortController();
+    return fromFetch(
+      url,
+      {
+        ...init,
+        selector: async (response): Promise<CustomResponse> => {
+          const text = await response.text();
+          let data: unknown = {};
 
-      return from(fetch(url, {...init, signal: controller.signal}))
-        .pipe(
-          catchError((cause: unknown) =>
-            throwError(() => new RciHttpError<CustomResponse>('Network request failed', {status: null, cause})),
-          ),
-          mergeMap(async (response): Promise<CustomResponse> => {
-            const result: CustomResponse = {
-              status: response.status,
-              headers: response.headers,
-              data: {},
-            };
+          try {
+            data = JSON.parse(text);
+          } catch {
+            // not JSON, e.g. an HTML error page
+          }
 
-            let body: string;
+          const result: CustomResponse = {status: response.status, headers: response.headers, data};
 
-            try {
-              body = await response.text();
-            } catch (cause) {
-              throw new RciHttpError<CustomResponse>('Failed to read the response body', {
-                status: response.status,
-                cause,
-              });
-            }
+          if (!response.ok) {
+            throw new RciHttpError(`HTTP ${response.status}`, {status: response.status, response: result});
+          }
 
-            try {
-              result.data = JSON.parse(body);
-            } catch {
-              result.data = {};
-            }
-
-            if (response.status < 200 || response.status >= 300) {
-              throw new RciHttpError<CustomResponse>(`HTTP ${response.status}`, {
-                status: response.status,
-                response: result,
-              });
-            }
-
-            return result;
-          }),
-          finalize(() => controller.abort()),
-        );
-      })
-      // for `defer`
+          return result;
+        },
+      },
+    )
       .pipe(
+        // no HTTP response: network error or failed body read
+        catchError((cause: unknown) =>
+          throwError(() =>
+            isRciHttpError(cause) ? cause : new RciHttpError('Network request failed', {status: null, cause})
+          )
+        ),
         this.authHandler.handleAuthError<CustomResponse>(),
       );
   }
