@@ -10,6 +10,7 @@ const PUBLIC_VALUES = [
   'FetchTransport',
   'LOGIN_FAILURE_REASON',
   'QueryStatsCollector',
+  'RciHttpError',
   'QueueDestroyedError',
   'QueueNotIdleError',
   'RCI_BACKGROUND_PROCESS_FINISH_REASON',
@@ -31,6 +32,7 @@ const PUBLIC_VALUES = [
   'queryCountAtLeast',
   'raceSchedulers',
   'when',
+  'isRciHttpError',
 ];
 
 describe('public API', () => {

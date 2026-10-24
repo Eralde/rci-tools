@@ -1,7 +1,7 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {Subject, of} from 'rxjs';
 import {type BatchScheduler, type BatchSnapshot, RciQueue} from '../../../../src';
-import {makeTransport} from '../../test.utils';
+import {makeTransport, respondToQueryArray} from '../../test.utils';
 
 describe('RciQueue scheduler integration', () => {
   beforeEach(() => {
@@ -20,10 +20,10 @@ describe('RciQueue scheduler integration', () => {
     queue.addTask({path: 'show.system'}).subscribe();
 
     vi.advanceTimersByTime(19);
-    expect(transport.sendQueryArray).not.toHaveBeenCalled();
+    expect(transport.post).not.toHaveBeenCalled();
 
     vi.advanceTimersByTime(1);
-    expect(transport.sendQueryArray).toHaveBeenCalledTimes(1);
+    expect(transport.post).toHaveBeenCalledTimes(1);
   });
 
   it('priority queue (timeout 0) stays immediate', () => {
@@ -31,10 +31,10 @@ describe('RciQueue scheduler integration', () => {
     const queue = new RciQueue('http://device/rci/', transport, {batchTimeout: 0});
 
     queue.addTask({path: 'show.version'}).subscribe();
-    expect(transport.sendQueryArray).not.toHaveBeenCalled();
+    expect(transport.post).not.toHaveBeenCalled();
 
     vi.advanceTimersByTime(0);
-    expect(transport.sendQueryArray).toHaveBeenCalledTimes(1);
+    expect(transport.post).toHaveBeenCalledTimes(1);
   });
 
   it('synchronous flush includes the triggering task in the sent HTTP batch', () => {
@@ -45,14 +45,14 @@ describe('RciQueue scheduler integration', () => {
     queue.addTask({path: 'show.version'}).subscribe();
     vi.advanceTimersByTime(0);
 
-    expect(transport.sendQueryArray).toHaveBeenCalledTimes(1);
+    expect(transport.post).toHaveBeenCalledTimes(1);
   });
 
   it('adding second task before timer fires sends HTTP batch with BOTH query paths', () => {
     const transport = makeTransport();
     const sentBatches: any[][] = [];
 
-    transport.sendQueryArray = vi.fn().mockImplementation((_url, queryArray: any[]) => {
+    respondToQueryArray(transport, queryArray => {
       sentBatches.push(queryArray);
       return of(queryArray.map(() => ({})));
     });
@@ -64,7 +64,7 @@ describe('RciQueue scheduler integration', () => {
 
     vi.advanceTimersByTime(100);
 
-    expect(transport.sendQueryArray).toHaveBeenCalledTimes(1);
+    expect(transport.post).toHaveBeenCalledTimes(1);
     expect(sentBatches).toHaveLength(1);
     expect(sentBatches[0]).toHaveLength(2);
   });
@@ -105,7 +105,7 @@ describe('RciQueue scheduler integration', () => {
     const transport = makeTransport();
     const sentBatches: any[][] = [];
 
-    transport.sendQueryArray = vi.fn().mockImplementation((_url, queryArray: any[]) => {
+    respondToQueryArray(transport, queryArray => {
       sentBatches.push(queryArray);
       return of(queryArray.map(() => ({})));
     });
@@ -119,7 +119,7 @@ describe('RciQueue scheduler integration', () => {
     queue.addTask({path: 'show.version'}).subscribe();
     oldFlush$.next();
 
-    expect(transport.sendQueryArray).toHaveBeenCalledTimes(1);
+    expect(transport.post).toHaveBeenCalledTimes(1);
     expect(sentBatches[0]).toHaveLength(1);
 
     const newFlush$ = new Subject<void>();
@@ -129,10 +129,10 @@ describe('RciQueue scheduler integration', () => {
     queue.addTask({path: 'show.interface'}).subscribe();
 
     oldFlush$.next();
-    expect(transport.sendQueryArray).toHaveBeenCalledTimes(1);
+    expect(transport.post).toHaveBeenCalledTimes(1);
 
     newFlush$.next();
-    expect(transport.sendQueryArray).toHaveBeenCalledTimes(2);
+    expect(transport.post).toHaveBeenCalledTimes(2);
     expect(sentBatches[1]).toHaveLength(2);
   });
 });

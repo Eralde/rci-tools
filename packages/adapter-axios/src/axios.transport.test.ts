@@ -1,12 +1,13 @@
 import {firstValueFrom} from 'rxjs';
 import {describe, expect, it, vi} from 'vitest';
 import {AxiosError, AxiosHeaders, type AxiosInstance, type AxiosResponse} from 'axios';
+import {RciHttpError} from '@rci-tools/core';
 import {AxiosTransport} from './axios.transport';
 
-const makeResponse = (data: unknown = {ok: true}): AxiosResponse => ({
+const makeResponse = (data: unknown = {ok: true}, status = 200): AxiosResponse => ({
   data,
-  status: 200,
-  statusText: 'OK',
+  status,
+  statusText: status === 200 ? 'OK' : '',
   headers: new AxiosHeaders({'X-Test': 'yes'}),
   config: {headers: new AxiosHeaders()},
 });
@@ -59,26 +60,77 @@ describe('AxiosTransport', () => {
     expect(signal.aborted).toBe(true);
   });
 
-  it('extracts response data in sendQueryArray()', async () => {
-    const transport = new AxiosTransport(makeClient(makeResponse([{show: {version: '1'}}])));
+  it('treats any 2xx as success even if the client default rejects it', async () => {
+    const response = makeResponse({}, 204);
+    const client = makeClient(response);
+    vi.mocked(client.get).mockImplementation((_url, config) => {
+      const validateStatus = config?.validateStatus ?? ((status) => status === 200);
 
-    await expect(firstValueFrom(transport.sendQueryArray('http://device/rci/', [{}]))).resolves.toEqual([
-      {show: {version: '1'}},
-    ]);
+      return validateStatus(response.status)
+        ? Promise.resolve(response)
+        : Promise.reject(new AxiosError('Request failed', 'ERR_BAD_REQUEST'));
+    });
+    const transport = new AxiosTransport(client);
+
+    await expect(firstValueFrom(transport.get('http://device/auth'))).resolves.toBe(response);
+    expect(client.get).toHaveBeenCalledWith(
+      'http://device/auth',
+      expect.objectContaining({
+        validateStatus: expect.any(Function),
+      }),
+    );
   });
 
-  it('reads headers case-insensitively', () => {
+  it('wraps an HTTP error response', async () => {
+    const response = makeResponse({error: 'server'}, 500);
+    const cause = new AxiosError('Request failed', 'ERR_BAD_RESPONSE', undefined, undefined, response);
+    const client = makeClient();
+    vi.mocked(client.get).mockRejectedValue(cause);
+    const transport = new AxiosTransport(client);
+
+    const error = await firstValueFrom(transport.get('http://device/auth')).catch((reason) => reason);
+
+    expect(error).toBeInstanceOf(RciHttpError);
+    expect(error.status).toBe(500);
+    expect(error.response).toBe(response);
+    expect(error.cause).toBe(cause);
+  });
+
+  it('wraps a network failure as status null', async () => {
+    const cause = new AxiosError('connect ECONNREFUSED', 'ECONNREFUSED');
+    const client = makeClient();
+    vi.mocked(client.get).mockRejectedValue(cause);
+    const transport = new AxiosTransport(client);
+
+    const error = await firstValueFrom(transport.get('http://device/auth')).catch((reason) => reason);
+
+    expect(error).toBeInstanceOf(RciHttpError);
+    expect(error.status).toBeNull();
+    expect(error.response).toBeNull();
+    expect(error.cause).toBe(cause);
+  });
+
+  it('emits authError$ for a 401 unless suspended', async () => {
+    const response = makeResponse({error: 'unauthorized'}, 401);
+    const cause = new AxiosError('Unauthorized', 'ERR_BAD_REQUEST', undefined, undefined, response);
+    const client = makeClient();
+    vi.mocked(client.get).mockRejectedValue(cause);
+    const transport = new AxiosTransport(client);
+    const emitted = vi.fn();
+    transport.authError$.subscribe(emitted);
+
+    await firstValueFrom(transport.get('http://device/auth')).catch(() => {});
+    expect(emitted).toHaveBeenCalledTimes(1);
+
+    transport.authErrorSuspension.suspend();
+    await firstValueFrom(transport.get('http://device/auth')).catch(() => {});
+    expect(emitted).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads headers case-insensitively and returns null for a missing header', () => {
     const transport = new AxiosTransport(makeClient());
 
     expect(transport.getHeader(makeResponse(), 'x-test')).toBe('yes');
-  });
-
-  it('detects Axios network errors by error.code', () => {
-    const transport = new AxiosTransport(makeClient());
-
-    expect(transport.isNetworkError(new AxiosError('connect ECONNREFUSED', 'ECONNREFUSED'))).toBe(true);
-    expect(transport.isNetworkError(new AxiosError('timeout', 'ETIMEDOUT'))).toBe(true);
-    expect(transport.isNetworkError(new AxiosError('bad response', 'ERR_BAD_RESPONSE'))).toBe(false);
-    expect(transport.isNetworkError({code: 'ECONNREFUSED'})).toBe(false);
+    expect(transport.getHeader(makeResponse(), 'missing')).toBeNull();
   });
 });

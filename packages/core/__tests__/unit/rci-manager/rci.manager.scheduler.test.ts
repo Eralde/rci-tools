@@ -33,10 +33,10 @@ describe('RciManager scheduler wiring', () => {
     manager.queue({path: 'show.system'}).subscribe();
 
     vi.advanceTimersByTime(RCI_QUEUE_DEFAULT_BATCH_TIMEOUT - 1);
-    expect(transport.sendQueryArray).not.toHaveBeenCalled();
+    expect(transport.post).not.toHaveBeenCalled();
 
     vi.advanceTimersByTime(1);
-    expect(transport.sendQueryArray).toHaveBeenCalledTimes(1);
+    expect(transport.post).toHaveBeenCalledTimes(1);
   });
 
   it('uses options.batchScheduler for batch queue', () => {
@@ -51,7 +51,7 @@ describe('RciManager scheduler wiring', () => {
     vi.advanceTimersByTime(0);
 
     expect(batchScheduler.schedule).toHaveBeenCalledTimes(1);
-    expect(transport.sendQueryArray).toHaveBeenCalledTimes(1);
+    expect(transport.post).toHaveBeenCalledTimes(1);
   });
 
   it('clamps options.batchTimeout to non-negative', () => {
@@ -61,7 +61,7 @@ describe('RciManager scheduler wiring', () => {
     manager.queue({path: 'show.version'}).subscribe();
     vi.advanceTimersByTime(0);
 
-    expect(transport.sendQueryArray).toHaveBeenCalledTimes(1);
+    expect(transport.post).toHaveBeenCalledTimes(1);
   });
 
   it('waits for READY before replacing scheduler', () => {

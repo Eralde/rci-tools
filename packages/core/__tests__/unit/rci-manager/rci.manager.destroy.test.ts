@@ -25,7 +25,7 @@ describe('RciManager.destroy', () => {
     await expect(firstValueFrom(manager.execute({path: 'show.version'}))).rejects.toBeInstanceOf(
       RciManagerDestroyedError,
     );
-    expect(transport.sendQueryArray).not.toHaveBeenCalled();
+    expect(transport.post).not.toHaveBeenCalled();
   });
 
   it('queue after destroy errors with RciManagerDestroyedError', async () => {

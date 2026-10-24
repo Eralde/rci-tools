@@ -1,4 +1,4 @@
-import {describe, expect, it} from 'vitest';
+import {describe, expect, it, vi} from 'vitest';
 import {RciQueue, RuleScheduler, when} from '../../../../src';
 import {makeTransport} from '../../test.utils';
 
@@ -14,11 +14,11 @@ describe('RuleScheduler integration', () => {
     const queue = new RciQueue(FAKE_RIC_ENDPOINT, transport, {batchTimeout: 20, scheduler});
 
     queue.addTask({path: 'show.version'}).subscribe();
-    expect(transport.sendQueryArray).not.toHaveBeenCalled();
+    expect(transport.post).not.toHaveBeenCalled();
 
     queue.addTask({path: 'show.interface.stat'}).subscribe();
-    expect(transport.sendQueryArray).toHaveBeenCalledTimes(1);
-    expect((transport.sendQueryArray as any).mock.calls[0][1]).toHaveLength(2);
+    expect(transport.post).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(transport.post).mock.calls[0]![1]).toHaveLength(2);
   });
 
   it('does not flush if no rule matches', () => {
@@ -32,7 +32,7 @@ describe('RuleScheduler integration', () => {
     queue.addTask({path: 'show.version'}).subscribe();
     queue.addTask({path: 'show.system'}).subscribe();
 
-    expect(transport.sendQueryArray).not.toHaveBeenCalled();
+    expect(transport.post).not.toHaveBeenCalled();
   });
 
   it('trigger task stays in flushed batch', () => {
@@ -45,7 +45,7 @@ describe('RuleScheduler integration', () => {
     queue.addTask({path: 'show.version'}).subscribe();
     queue.addTask({path: 'show.interface.stat'}).subscribe();
 
-    expect(transport.sendQueryArray).toHaveBeenCalledTimes(1);
-    expect((transport.sendQueryArray as any).mock.calls[0][1]).toHaveLength(2);
+    expect(transport.post).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(transport.post).mock.calls[0]![1]).toHaveLength(2);
   });
 });
