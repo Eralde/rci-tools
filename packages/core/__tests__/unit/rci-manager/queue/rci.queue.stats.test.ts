@@ -105,7 +105,7 @@ describe('RciQueue stats collection', () => {
     const transport = makeTransport();
     const error = new Error('transport failed');
 
-    transport.sendQueryArray = vi.fn().mockReturnValue(throwError(() => error));
+    vi.mocked(transport.post).mockReturnValue(throwError(() => error));
 
     const collector = new QueryStatsCollector();
 

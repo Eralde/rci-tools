@@ -10,7 +10,7 @@ interface PendingCall {
   respond: () => void;
 }
 
-// Transport whose sendQueryArray responses are resolved manually,
+// Transport whose post responses are resolved manually,
 // so a queue can be held in AWAITING_RESPONSE for as long as the test needs
 function makeDeferredTransport(): {transport: HttpTransport<BaseHttpResponse>; calls: PendingCall[]} {
   const calls: PendingCall[] = [];
@@ -22,20 +22,21 @@ function makeDeferredTransport(): {transport: HttpTransport<BaseHttpResponse>; c
     getHeader: vi.fn(),
     onAuthRequest: vi.fn(),
     clearAuthData: vi.fn(),
-    sendQueryArray: vi.fn().mockImplementation((_url: string, queryArray: GenericObject[]) => {
-      const response$ = new Subject<GenericObject[]>();
-
-      calls.push({
-        queryArray,
-        respond: () => {
-          response$.next(queryArray.map(() => ({})));
-          response$.complete();
-        },
-      });
-
-      return response$.asObservable();
-    }),
   };
+
+  transport.post = vi.fn().mockImplementation((_url: string, queryArray: GenericObject[]) => {
+    const response$ = new Subject<BaseHttpResponse<GenericObject[]>>();
+
+    calls.push({
+      queryArray,
+      respond: () => {
+        response$.next({status: 200, data: queryArray.map(() => ({}))});
+        response$.complete();
+      },
+    });
+
+    return response$.asObservable();
+  });
 
   return {transport, calls};
 }

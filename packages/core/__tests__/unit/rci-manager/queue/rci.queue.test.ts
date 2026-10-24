@@ -1,15 +1,16 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {NEVER, Subject, firstValueFrom, of, throwError} from 'rxjs';
-import {take, toArray} from 'rxjs/operators';
+import {map, take, toArray} from 'rxjs/operators';
 import {
   type BatchScheduler,
   type BatchSnapshot,
   type GenericObject,
   QueueNotIdleError,
+  RciHttpError,
   RciQueue,
   TimerScheduler,
 } from '../../../../src';
-import {makeTransport} from '../../test.utils';
+import {makeTransport, respondToQueryArray} from '../../test.utils';
 
 const FAKE_RCI = 'http://device/rci/';
 
@@ -217,7 +218,7 @@ describe('RciQueue', () => {
 
       queue.addTask({path: 'first'}).subscribe();
       oldFlush$.next();
-      expect(transport.sendQueryArray).toHaveBeenCalledTimes(1);
+      expect(transport.post).toHaveBeenCalledTimes(1);
 
       const newFlush$ = new Subject<void>();
 
@@ -225,10 +226,10 @@ describe('RciQueue', () => {
       queue.addTask({path: 'second'}).subscribe();
 
       oldFlush$.next(); // old scheduler firing must do nothing
-      expect(transport.sendQueryArray).toHaveBeenCalledTimes(1);
+      expect(transport.post).toHaveBeenCalledTimes(1);
 
       newFlush$.next();
-      expect(transport.sendQueryArray).toHaveBeenCalledTimes(2);
+      expect(transport.post).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -244,7 +245,7 @@ describe('RciQueue', () => {
       queue.addTask({path: 'show.version'});
 
       expect(states).toEqual(['READY']);
-      expect(transport.sendQueryArray).not.toHaveBeenCalled();
+      expect(transport.post).not.toHaveBeenCalled();
     });
 
     it('does not mutate caller query array when saveConfiguration is true', () => {
@@ -256,7 +257,7 @@ describe('RciQueue', () => {
       vi.advanceTimersByTime(0);
 
       expect(queries).toEqual([{path: 'show.version'}]);
-      expect(transport.sendQueryArray).toHaveBeenCalledWith(FAKE_RCI, [
+      expect(transport.post).toHaveBeenCalledWith(FAKE_RCI, [
         {show: {version: {}}},
         {system: {configuration: {save: {}}}},
       ]);
@@ -275,7 +276,7 @@ describe('RciQueue', () => {
       queue.addTask({path: 'show.system'}).subscribe();
       vi.advanceTimersByTime(100);
 
-      expect(transport.sendQueryArray).toHaveBeenCalledTimes(1);
+      expect(transport.post).toHaveBeenCalledTimes(1);
 
       vi.useRealTimers();
     });
@@ -299,10 +300,25 @@ describe('RciQueue', () => {
   });
 
   describe('scheduler error handling', () => {
+    it('delivers a malformed batch reply to queue subscribers as RciHttpError', () => {
+      const transport = makeTransport();
+      vi.mocked(transport.post).mockReturnValue(of({status: 200, data: {}}));
+      const queue = new RciQueue(FAKE_RCI, transport, {batchTimeout: 0});
+      const error = vi.fn();
+
+      queue.addTask({path: 'show.version'}).subscribe({error});
+      vi.advanceTimersByTime(0);
+
+      expect(error).toHaveBeenCalledTimes(1);
+      expect(error.mock.calls[0]![0]).toBeInstanceOf(RciHttpError);
+      expect(error.mock.calls[0]![0].status).toBe(200);
+      expect(error.mock.calls[0]![0].response.data).toEqual({});
+    });
+
     it('errors tasks instead of losing them when the transport throws synchronously', () => {
       const transport = {
         ...makeTransport(),
-        sendQueryArray: vi.fn().mockImplementation(() => {
+        post: vi.fn().mockImplementation(() => {
           throw new Error('sync transport failure');
         }),
       };
@@ -325,7 +341,7 @@ describe('RciQueue', () => {
 
       queue.addTask({path: 'show.version'}).subscribe();
 
-      expect(transport.sendQueryArray).toHaveBeenCalledTimes(1);
+      expect(transport.post).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -333,7 +349,7 @@ describe('RciQueue', () => {
     const makeEchoTransport = () => {
       const transport = makeTransport();
 
-      vi.mocked(transport.sendQueryArray).mockImplementation((_, queryArray) => of(queryArray));
+      respondToQueryArray(transport, queryArray => of(queryArray));
 
       return transport;
     };
@@ -381,7 +397,7 @@ describe('RciQueue', () => {
       queue.addTask(NAME, true).subscribe((result) => results.push(result));
       vi.advanceTimersByTime(100);
 
-      const [, payload] = vi.mocked(transport.sendQueryArray).mock.calls[0]!;
+      const [, payload] = vi.mocked(transport.post).mock.calls[0]!;
 
       expect(JSON.stringify(payload).match(/"save"/g)).toHaveLength(1);
       expect(results).toEqual([['Home', {}], 'router']);
@@ -402,7 +418,7 @@ describe('RciQueue', () => {
       const queue = new RciQueue(FAKE_RCI, transport, {batchTimeout: 0});
       const results: unknown[] = [];
 
-      vi.mocked(transport.sendQueryArray).mockReturnValue(of([]));
+      vi.mocked(transport.post).mockReturnValue(of({status: 200, data: []}));
 
       queue.addTask([DESCRIPTION, NAME], true).subscribe((result) => results.push(result));
       vi.advanceTimersByTime(0);
@@ -418,9 +434,9 @@ describe('RciQueue', () => {
       const results: unknown[] = [];
 
       // first send of the batch queue hangs, then the blocker preempts it
-      vi.mocked(transport.sendQueryArray)
-        .mockImplementationOnce(() => pending$.asObservable())
-        .mockImplementation((_, queryArray) => of(queryArray));
+      vi.mocked(transport.post)
+        .mockImplementation((_url, queryArray) => of({status: 200, data: queryArray}))
+        .mockImplementationOnce(() => pending$.pipe(map(data => ({status: 200, data}))));
 
       queue.addTask([DESCRIPTION, NAME], true).subscribe((result) => results.push(result));
       vi.advanceTimersByTime(0);

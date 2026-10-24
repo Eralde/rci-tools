@@ -95,14 +95,16 @@ describe('RciQueue blocker semantics (device)', () => {
 
       sentBodies.push(body);
 
+      // each hold is one-shot and belongs to the request that matched it when sent:
+      // an aborted request must not leave its hold for the re-sent one
+      const holdIndex = holds.findIndex((hold) => body.includes(hold.match));
+      const [hold] = holdIndex === -1 ? [] : holds.splice(holdIndex, 1);
+
       // @ts-ignore
       const response = await originalFetch(...args);
-      const holdIndex = holds.findIndex((hold) => body.includes(hold.match));
 
-      if (holdIndex !== -1) {
-        const [hold] = holds.splice(holdIndex, 1); // each hold is one-shot
-
-        await hold!.open;
+      if (hold) {
+        await hold.open;
       }
 
       return response;

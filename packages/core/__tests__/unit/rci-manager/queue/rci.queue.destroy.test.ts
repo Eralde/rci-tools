@@ -46,13 +46,13 @@ describe('RciQueue.destroy', () => {
 
     vi.advanceTimersByTime(100);
 
-    expect(transport.sendQueryArray).not.toHaveBeenCalled();
+    expect(transport.post).not.toHaveBeenCalled();
   });
 
   it('destroy during AWAITING_RESPONSE errors pending task subjects', () => {
     const transport = {
       ...makeTransport(),
-      sendQueryArray: vi.fn().mockReturnValue(NEVER),
+      post: vi.fn().mockReturnValue(NEVER),
     };
     const queue = new RciQueue('http://device/rci/', transport, {batchTimeout: 0});
 
@@ -64,7 +64,7 @@ describe('RciQueue.destroy', () => {
 
     vi.advanceTimersByTime(0);
 
-    expect(transport.sendQueryArray).toHaveBeenCalledTimes(1);
+    expect(transport.post).toHaveBeenCalledTimes(1);
     expect(next).not.toHaveBeenCalled();
 
     queue.destroy();
@@ -109,7 +109,7 @@ describe('RciQueue.destroy', () => {
 
     expect(error).toHaveBeenCalledTimes(1);
     expect(error.mock.calls[0]![0]).toBeInstanceOf(QueueDestroyedError);
-    expect(transport.sendQueryArray).not.toHaveBeenCalled();
+    expect(transport.post).not.toHaveBeenCalled();
   });
 
   it('subscribing after destroy to an Observable obtained before destroy errors with QueueDestroyedError', () => {
@@ -127,6 +127,6 @@ describe('RciQueue.destroy', () => {
 
     expect(error).toHaveBeenCalledTimes(1);
     expect(error.mock.calls[0]![0]).toBeInstanceOf(QueueDestroyedError);
-    expect(transport.sendQueryArray).not.toHaveBeenCalled();
+    expect(transport.post).not.toHaveBeenCalled();
   });
 });

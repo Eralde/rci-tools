@@ -1,5 +1,5 @@
 import {argon2id} from 'hash-wasm';
-import {Observable, defer, of} from 'rxjs';
+import {Observable, defer, of, throwError} from 'rxjs';
 import {catchError, exhaustMap, map} from 'rxjs/operators';
 import type {BaseHttpResponse, HttpTransport} from '../../../transport/http.transport';
 import {AUTH_PROTOCOL, LOGIN_FAILURE_REASON} from '../auth-protocol.types';
@@ -78,7 +78,7 @@ export class Ndw4AuthProtocol<ResponseType extends BaseHttpResponse = BaseHttpRe
   public isSupported(response: ResponseType): boolean {
     const header = this.httpTransport.getHeader(response, 'WWW-Authenticate');
 
-    return header.includes(this.schema);
+    return header?.includes(this.schema) ?? false;
   }
 
   public authenticate(
@@ -163,7 +163,7 @@ export class Ndw4AuthProtocol<ResponseType extends BaseHttpResponse = BaseHttpRe
         exhaustMap((response) => {
           // The server signature has matched, so the password is right:
           // a non-200 here is not a password issue (e.g. the device has dropped the handshake state).
-          return response.status === 200
+          return response.status >= 200 && response.status < 300
             ? checkFinalLoginResult(context)
             : of(toLoginFailure(LOGIN_FAILURE_REASON.UNAVAILABLE));
         }),
@@ -194,6 +194,11 @@ export class Ndw4AuthProtocol<ResponseType extends BaseHttpResponse = BaseHttpRe
 
   private getAuthEndpoint(response: ResponseType): string | null {
     const header = this.httpTransport.getHeader(response, 'WWW-Authenticate');
+
+    if (!header) {
+      return null;
+    }
+
     const chunks = header.split(',');
     const schemaChunk = chunks.find((chunk) => chunk.includes(this.schema));
 
@@ -325,12 +330,8 @@ export class Ndw4AuthProtocol<ResponseType extends BaseHttpResponse = BaseHttpRe
         catchError((error) => {
           const response = context.errorToResponse(error);
 
-          // Every reply but the last one is a non-200 response, which the transport throws
-          // and `errorToResponse` unwraps, so a response-shaped error is business as usual.
-          // Anything else is a transport failure that would otherwise be reported only as a
-          // missing X-NDM-Data header, with the original cause lost.
-          if (typeof response?.status !== 'number') {
-            context.logError(error);
+          if (!response) {
+            return throwError(() => error);
           }
 
           return of(response);

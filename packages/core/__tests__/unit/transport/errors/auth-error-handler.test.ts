@@ -1,17 +1,21 @@
 import {describe, expect, it, vi} from 'vitest';
 import {firstValueFrom, of, throwError} from 'rxjs';
 import {catchError, toArray} from 'rxjs/operators';
-import {AuthErrorHandler} from '../../../../src';
+import {AuthErrorHandler, RciHttpError} from '../../../../src';
 
 describe('AuthErrorHandler', () => {
   describe('is401Error', () => {
-    it('returns true for {status: 401}', () => {
-      expect(AuthErrorHandler.is401Error({status: 401})).toBe(true);
+    it('returns true for RciHttpError with status 401', () => {
+      expect(AuthErrorHandler.is401Error(new RciHttpError('HTTP 401', {status: 401}))).toBe(true);
+    });
+
+    it('returns false for a plain object with status 401', () => {
+      expect(AuthErrorHandler.is401Error({status: 401})).toBe(false);
     });
 
     it('returns false for non-401 status', () => {
-      expect(AuthErrorHandler.is401Error({status: 500})).toBe(false);
-      expect(AuthErrorHandler.is401Error({status: 200})).toBe(false);
+      expect(AuthErrorHandler.is401Error(new RciHttpError('HTTP 500', {status: 500}))).toBe(false);
+      expect(AuthErrorHandler.is401Error(new RciHttpError('HTTP 200', {status: 200}))).toBe(false);
     });
 
     it('returns false for non-object errors', () => {
@@ -28,7 +32,7 @@ describe('AuthErrorHandler', () => {
       const spy = vi.fn();
       handler.authError$.subscribe(spy);
 
-      const err = {status: 401};
+      const err = new RciHttpError('HTTP 401', {status: 401});
       const run = firstValueFrom(
         throwError(() => err)
           .pipe(handler.handleAuthError<unknown>(), catchError((e) => of(e))),
@@ -43,7 +47,7 @@ describe('AuthErrorHandler', () => {
       const spy = vi.fn();
       handler.authError$.subscribe(spy);
 
-      const err = {status: 500};
+      const err = new RciHttpError('HTTP 500', {status: 500});
       const run = firstValueFrom(
         throwError(() => err)
           .pipe(handler.handleAuthError<unknown>(), catchError((e) => of(e))),
@@ -65,7 +69,7 @@ describe('AuthErrorHandler', () => {
       const handler = new AuthErrorHandler();
       const emitted = vi.fn();
       handler.authError$.subscribe(emitted);
-      const error = {status: 401};
+      const error = new RciHttpError('HTTP 401', {status: 401});
 
       handler.suspend();
 
@@ -82,7 +86,7 @@ describe('AuthErrorHandler', () => {
       const handler = new AuthErrorHandler();
       const emitted = vi.fn();
       handler.authError$.subscribe(emitted);
-      const error = {status: 401};
+      const error = new RciHttpError('HTTP 401', {status: 401});
 
       handler.suspend();
       handler.suspend();
@@ -107,7 +111,7 @@ describe('AuthErrorHandler', () => {
       const handler = new AuthErrorHandler();
       const emitted = vi.fn();
       handler.authError$.subscribe(emitted);
-      const error = {status: 401};
+      const error = new RciHttpError('HTTP 401', {status: 401});
 
       handler.resume();
       await firstValueFrom(

@@ -1,7 +1,7 @@
-import {Observable, defer, exhaustMap, finalize, from, map} from 'rxjs';
-import type {GenericObject} from '../../type.utils';
+import {Observable, catchError, defer, exhaustMap, finalize, from, map, throwError} from 'rxjs';
 import type {AuthErrorSuspension, BaseHttpResponse, HttpTransport} from '../http.transport';
 import {AuthErrorHandler} from '../errors/auth-error-handler';
+import {RciHttpError} from '../errors/rci-http-error';
 
 export interface FetchTransportResponse extends BaseHttpResponse {
   headers: Headers;
@@ -20,8 +20,8 @@ export class FetchTransport implements HttpTransport<FetchTransportResponse> {
     // noop; handled by the browser
   }
 
-  public getHeader(response: FetchTransportResponse, name: string): string {
-    return response?.headers?.get(name) ?? '';
+  public getHeader(response: FetchTransportResponse, name: string): string | null {
+    return response?.headers?.get(name) ?? null;
   }
 
   public get(url: string): Observable<FetchTransportResponse> {
@@ -45,21 +45,25 @@ export class FetchTransport implements HttpTransport<FetchTransportResponse> {
     return this.request(url, {method: 'DELETE'});
   }
 
-  public sendQueryArray(url: string, queryArray: GenericObject[]): Observable<GenericObject[]> {
-    return this.post(url, queryArray)
-      .pipe(
-        map((response) => (response.data as GenericObject[])),
-      );
-  }
-
   // `fetch` starts on subscription; unsubscribing before completion aborts the request
   protected request(url: string, init: RequestInit): Observable<FetchTransportResponse> {
     return defer(() => {
       const controller = new AbortController();
       const promise = fetch(url, {...init, signal: controller.signal});
 
-      return from(promise)
+      return defer(() => from(promise))
         .pipe(
+          catchError((cause: unknown) => {
+            return throwError(() => {
+              return new RciHttpError(
+                'Network request failed',
+                {
+                  status: null,
+                  cause,
+                },
+              );
+            });
+          }),
           exhaustMap((fetchResponse: Response) => this.processResponse(fetchResponse)),
           finalize(() => controller.abort()),
         );
@@ -70,12 +74,19 @@ export class FetchTransport implements HttpTransport<FetchTransportResponse> {
   }
 
   protected processResponse(fetchResponse: Response): Observable<FetchTransportResponse> {
-    if (fetchResponse?.status !== 200) {
-      throw fetchResponse;
-    }
-
     return from(fetchResponse.text())
       .pipe(
+        catchError((cause: unknown) => {
+          return throwError(() => {
+            return new RciHttpError(
+              'Failed to read the response body',
+              {
+                status: fetchResponse.status,
+                cause,
+              },
+            );
+          });
+        }),
         map((text: string) => {
           let data: any;
 
@@ -85,11 +96,23 @@ export class FetchTransport implements HttpTransport<FetchTransportResponse> {
             data = {};
           }
 
-          return {
+          const response: FetchTransportResponse = {
             status: fetchResponse.status,
             headers: fetchResponse.headers,
             data,
           };
+
+          if (response.status >= 200 && response.status < 300) {
+            return response;
+          }
+
+          throw new RciHttpError(
+            `HTTP ${response.status}`,
+            {
+              status: response.status,
+              response,
+            },
+          );
         }),
       );
   }

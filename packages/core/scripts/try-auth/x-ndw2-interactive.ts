@@ -3,7 +3,8 @@ import {resolve} from 'node:path';
 import {firstValueFrom} from 'rxjs';
 import {DeviceResponse, InspectableAxiosTransport, promptForCredentials} from './common';
 import {SessionManager} from '../../src';
-import {Ndw2AuthProtocol, SessionAuthContext} from '../../src/session-manager/auth-protocol';
+import type {SessionAuthContext} from '../../src/session-manager/auth-protocol/auth-protocol.types';
+import {Ndw2AuthProtocol} from '../../src/session-manager/auth-protocol/x-ndw2-interactive/ndw2-auth.protocol';
 
 export const AUTH_SCHEMA = 'x-ndw2-interactive';
 

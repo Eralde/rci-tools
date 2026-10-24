@@ -18,6 +18,8 @@ import type {
   QueueOptions,
   RciBackgroundProcessOptions,
   RciError,
+  RciHttpError,
+  RciHttpErrorOptions,
   RciManagerOptions,
   RciQuery,
   RciQueueOptions,
@@ -27,8 +29,6 @@ import type {
   RciStatusList,
   RciStatusObject,
   RciTask,
-  SessionAuthContext,
-  SessionAuthProtocol,
   SessionManagerOptions,
   TaskResult,
   TypedRciQuery,
@@ -42,6 +42,10 @@ import type {ObjectOrArray} from '../../src';
 import type {QueueTask} from '../../src';
 // @ts-expect-error internal
 import type {RciBackgroundTaskQueueState} from '../../src';
+// @ts-expect-error internal
+import type {SessionAuthContext} from '../../src';
+// @ts-expect-error internal
+import type {SessionAuthProtocol} from '../../src';
 // @ts-expect-error internal
 import type {Values} from '../../src';
 
@@ -63,6 +67,8 @@ export type PublicTypes = [
   QueueOptions,
   RciBackgroundProcessOptions,
   RciError,
+  RciHttpError,
+  RciHttpErrorOptions,
   RciManagerOptions,
   RciQuery,
   RciQueueOptions<BaseHttpResponse>,
@@ -72,12 +78,17 @@ export type PublicTypes = [
   RciStatusList,
   RciStatusObject,
   RciTask,
-  SessionAuthContext,
-  SessionAuthProtocol,
   SessionManagerOptions,
   TaskResult,
   TypedRciQuery<object>,
   XHRTransportResponse,
 ];
 
-export type InternalTypes = [ObjectOrArray, QueueTask, RciBackgroundTaskQueueState, Values<{}>];
+export type InternalTypes = [
+  ObjectOrArray,
+  QueueTask,
+  RciBackgroundTaskQueueState,
+  SessionAuthContext,
+  SessionAuthProtocol,
+  Values<{}>,
+];

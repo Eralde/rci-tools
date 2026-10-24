@@ -1,15 +1,17 @@
 import {z} from 'zod';
 import {LOG_ITEM_LEVEL} from './show-log.response';
 
-export const logItemLevelSchema = z.enum(LOG_ITEM_LEVEL);
+const LOG_ITEM_LEVEL_BY_LOWERCASE = new Map(
+  Object.values(LOG_ITEM_LEVEL).map((level) => [level.toLowerCase(), level]),
+);
 
-export const logItemLabelSchema = z.union([
-  z.literal('I'),
-  z.literal('W'),
-  z.literal('E'),
-  z.literal('C'),
-  z.literal('\u2014'),
-]);
+// Known levels are normalized to `LOG_ITEM_LEVEL` regardless of case; unknown levels are kept as is,
+// so that a single unexpected value does not fail parsing of the whole log
+export const logItemLevelSchema = z.string().transform((level): LOG_ITEM_LEVEL | string => {
+  return LOG_ITEM_LEVEL_BY_LOWERCASE.get(level.toLowerCase()) ?? level;
+});
+
+export const logItemLabelSchema = z.string();
 
 export const logItemSchema = z.object({
   message: z.object({

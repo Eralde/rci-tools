@@ -1,19 +1,31 @@
 import {describe, expect, it, vi} from 'vitest';
 import {firstValueFrom, of} from 'rxjs';
-import {RciManager} from '../../../src';
-import {makeTransport} from '../test.utils';
+import {RciHttpError, RciManager} from '../../../src';
+import {makeTransport, respondToQueryArray} from '../test.utils';
 
 const VERSION_DATA = {release: '4.3.1', title: 'test-device'};
 
 function makeVersionTransport() {
   const transport = makeTransport();
 
-  transport.sendQueryArray = vi.fn().mockReturnValue(of([{show: {version: VERSION_DATA}}]));
+  respondToQueryArray(transport, () => of([{show: {version: VERSION_DATA}}]));
 
   return transport;
 }
 
 describe('RciManager.execute extractData handling', () => {
+  it('delivers a malformed batch reply to execute subscribers as RciHttpError', async () => {
+    const transport = makeTransport();
+    vi.mocked(transport.post).mockReturnValue(of({status: 200, data: {}}));
+    const manager = new RciManager('http://device', transport);
+
+    const error = await firstValueFrom(manager.execute({path: 'show.version'})).catch(value => value);
+
+    expect(error).toBeInstanceOf(RciHttpError);
+    expect(error.status).toBe(200);
+    expect(error.response.data).toEqual({});
+  });
+
   it('unwraps the response at the query path by default', async () => {
     const manager = new RciManager('http://device', makeVersionTransport());
 
@@ -33,7 +45,7 @@ describe('RciManager.execute extractData handling', () => {
   it('yields undefined for a query path missing from the response', async () => {
     const transport = makeTransport();
 
-    transport.sendQueryArray = vi.fn().mockReturnValue(of([{show: {version: VERSION_DATA}}, {}]));
+    respondToQueryArray(transport, () => of([{show: {version: VERSION_DATA}}, {}]));
 
     const manager = new RciManager('http://device', transport);
 
@@ -52,8 +64,8 @@ describe('RciManager readonly query arrays', () => {
     const executeTransport = makeTransport();
     const queueTransport = makeTransport();
 
-    executeTransport.sendQueryArray = vi.fn().mockReturnValue(of([{show: {version: VERSION_DATA}}, {}]));
-    queueTransport.sendQueryArray = vi.fn().mockReturnValue(of([{show: {version: VERSION_DATA}}, {}]));
+    respondToQueryArray(executeTransport, () => of([{show: {version: VERSION_DATA}}, {}]));
+    respondToQueryArray(queueTransport, () => of([{show: {version: VERSION_DATA}}, {}]));
 
     const executed = await firstValueFrom(new RciManager('http://device', executeTransport).execute(queries));
     const queued = await firstValueFrom(new RciManager('http://device', queueTransport).queue(queries));

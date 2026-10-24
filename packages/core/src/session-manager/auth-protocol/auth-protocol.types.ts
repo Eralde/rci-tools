@@ -25,7 +25,7 @@ export type LoginResult =
 
 export interface SessionAuthContext<ResponseType extends BaseHttpResponse = BaseHttpResponse> {
   isAuthenticated(): Observable<boolean>;
-  errorToResponse(error: unknown): ResponseType;
+  errorToResponse(error: unknown): ResponseType | null;
   logError(error: unknown): void;
 }
 

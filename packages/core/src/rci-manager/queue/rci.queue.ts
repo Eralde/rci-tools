@@ -14,6 +14,7 @@ import {RCI_QUEUE_STATE} from './rci.queue.types';
 import {RCI_QUEUE_BUSY_STATES, RCI_QUEUE_DEFAULT_BATCH_TIMEOUT, clampNonNegativeTimeout} from './rci.queue.constants';
 import {QueueNotIdleError} from './queue-not-idle.error';
 import {QueueDestroyedError} from './queue-destroyed.error';
+import {sendQueryArray} from '../../transport/send-query-array';
 
 interface InFlightBatch<QueryPath extends string = string> {
   tasks: QueueTask<QueryPath>[];
@@ -285,7 +286,7 @@ export class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends s
 
     let isSettled = false;
 
-    const subscription = defer(() => this.httpTransport.sendQueryArray(this.rciPath, queryArray))
+    const subscription = defer(() => sendQueryArray(this.httpTransport, this.rciPath, queryArray))
       .pipe(
         timeout(RCI_QUERY_TIMEOUT),
         map((batchedResponse): [GenericObject[], unknown] => [batchedResponse, null]),

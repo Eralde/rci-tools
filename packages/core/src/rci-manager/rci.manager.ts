@@ -1,8 +1,9 @@
-import {Observable, defer, throwError} from 'rxjs';
+import {defer, Observable, throwError} from 'rxjs';
 import {filter, finalize, map, shareReplay, take, tap, timeout} from 'rxjs/operators';
 import type {BaseHttpResponse, HttpTransport} from '../transport/http.transport';
+import {sendQueryArray} from '../transport/send-query-array';
 import type {RciQuery, RciResponseOf, RciResultsOf} from './query/rci.query';
-import {RCI_QUEUE_DEFAULT_BATCH_TIMEOUT, clampNonNegativeTimeout} from './queue/rci.queue.constants';
+import {clampNonNegativeTimeout, RCI_QUEUE_DEFAULT_BATCH_TIMEOUT} from './queue/rci.queue.constants';
 import {RCI_QUEUE_STATE} from './queue/rci.queue.types';
 import {RciQueue} from './queue/rci.queue';
 import type {BatchScheduler} from './scheduler/scheduler.types';
@@ -10,19 +11,16 @@ import {RciBackgroundProcess, type RciBackgroundProcessOptions} from './backgrou
 import {RciBackgroundTaskQueue} from './background-process/rci.background-task.queue';
 import {RciPayloadHelper} from './payload/rci.payload.helper';
 import type {GenericObject, TaskResult} from '../type.utils';
-import type {QueueOptions, RciManagerOptions} from './rci.manager.types';
+import type {QueueOptions, RciBatchResultsConstraint, RciManagerOptions} from './rci.manager.types';
 import {DEFAULT_QUEUE_OPTIONS, RCI_QUERY_TIMEOUT, RCI_SCHEDULER_SWAP_DEFAULT_TIMEOUT_MS} from './rci.manager.constants';
 import type {QueryStats} from './stats/query-stats';
 import {QueryStatsCollector} from './stats/query-stats-collector';
 
-// `T = never` marks "no explicit response type": the result is then inferred from the queries
-type RciBatchResultsConstraint<T, Q extends readonly unknown[]> = [T] extends [never]
-  ? { -readonly [K in keyof Q]: unknown }
-  : Array<T | undefined>;
-
 const isQueryList = <P extends string>(
   query: RciQuery<P> | readonly RciQuery<P>[],
-): query is readonly RciQuery<P>[] => Array.isArray(query);
+): query is readonly RciQuery<P>[] => {
+  return Array.isArray(query);
+};
 
 export class SchedulerReplacementInProgressError extends Error {
   constructor() {
@@ -108,16 +106,16 @@ export class RciManager<
     // across multiple separate calls to `replaceBatchScheduler()`.
     let sharedSwap$: Observable<void> | null = null;
 
-    if (this.isDestroyed) {
-      return throwError(() => new RciManagerDestroyedError());
-    }
-
     return defer(() => {
       if (sharedSwap$) {
         return sharedSwap$;
       }
 
       sharedSwap$ = defer(() => {
+        if (this.isDestroyed) {
+          return throwError(() => new RciManagerDestroyedError());
+        }
+
         if (this.currentSchedulerSwapToken) {
           return throwError(() => new SchedulerReplacementInProgressError());
         }
@@ -165,10 +163,6 @@ export class RciManager<
   public execute(
     query: RciQuery<QueryPath> | readonly RciQuery<QueryPath>[],
   ): Observable<GenericObject | Array<GenericObject | undefined> | undefined> {
-    if (this.isDestroyed) {
-      return throwError(() => new RciManagerDestroyedError());
-    }
-
     const isSingleQuery = !isQueryList(query);
     const queryList: Array<RciQuery<QueryPath>> = isSingleQuery
       ? [query]
@@ -179,9 +173,14 @@ export class RciManager<
       queryMap,
     } = RciPayloadHelper.compactQueries(queryList);
 
-    // Moving catchError to the outer pipe
-    // will cancel the batch$ Observable if an error occurs
-    return this.httpTransport.sendQueryArray(this.rciPath, queryArray)
+    // The destroyed check runs on each subscription: a deferred subscribe or a retry() after destroy() sends nothing
+    return defer(() => {
+      if (this.isDestroyed) {
+        return throwError(() => new RciManagerDestroyedError());
+      }
+
+      return sendQueryArray(this.httpTransport, this.rciPath, queryArray);
+    })
       .pipe(
         timeout(RCI_QUERY_TIMEOUT),
         map((batchedResponse) => {
@@ -218,17 +217,19 @@ export class RciManager<
     query: RciQuery<QueryPath> | readonly RciQuery<QueryPath>[],
     options: QueueOptions = DEFAULT_QUEUE_OPTIONS,
   ): Observable<TaskResult> {
-    if (this.isDestroyed) {
-      return throwError(() => new RciManagerDestroyedError());
-    }
-
     const task = isQueryList(query) ? [...query] : query;
 
-    if (options.isPriorityTask) {
-      return this.priorityQueue.addTask(task, options.saveConfiguration);
-    } else {
-      return this.batchQueue.addTask(task, options.saveConfiguration);
-    }
+    return defer(() => {
+      if (this.isDestroyed) {
+        return throwError(() => new RciManagerDestroyedError());
+      }
+
+      if (options.isPriorityTask) {
+        return this.priorityQueue.addTask(task, options.saveConfiguration);
+      } else {
+        return this.batchQueue.addTask(task, options.saveConfiguration);
+      }
+    });
   }
 
   public initBackgroundProcess(

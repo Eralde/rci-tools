@@ -1,5 +1,5 @@
 import {describe, expect, it, vi} from 'vitest';
-import {NEVER, Subject, catchError, firstValueFrom, of, throwError} from 'rxjs';
+import {NEVER, type Observable, Subject, catchError, firstValueFrom, of, throwError} from 'rxjs';
 import {
   AUTH_PROTOCOL,
   AuthErrorHandler,
@@ -7,17 +7,19 @@ import {
   type BaseHttpResponse,
   type HttpTransport,
   LOGIN_FAILURE_REASON,
+  RciHttpError,
   SessionManager,
+  isRciHttpError,
 } from '../../../src';
+import {Ndw4AuthProtocol} from '../../../src/session-manager/auth-protocol/x-ndw4-interactive/ndw4-auth.protocol';
 
 const makeTransport = (overrides: Partial<HttpTransport<BaseHttpResponse>> = {}): HttpTransport<BaseHttpResponse> => ({
   get: vi.fn().mockReturnValue(of({status: 200, data: {}})),
   post: vi.fn().mockReturnValue(of({status: 200, data: {}})),
   delete: vi.fn().mockReturnValue(of({status: 200, data: {}})),
-  getHeader: vi.fn().mockReturnValue(''),
+  getHeader: vi.fn().mockReturnValue(null),
   onAuthRequest: vi.fn(),
   clearAuthData: vi.fn(),
-  sendQueryArray: vi.fn(),
   ...overrides,
 });
 
@@ -27,13 +29,26 @@ const makeSuspension = () => ({
 });
 
 describe('SessionManager', () => {
-  it('isAuthenticated() treats error.response as auth response', async () => {
+  it('isAuthenticated() treats RciHttpError.response as auth response', async () => {
     const response = {status: 401, data: {}};
-    const transport = makeTransport({get: vi.fn().mockReturnValue(throwError(() => ({response})))});
+    const transport = makeTransport({
+      get: vi.fn().mockReturnValue(throwError(() => new RciHttpError('HTTP 401', {status: 401, response}))),
+    });
     const session = new SessionManager('http://device', transport);
 
     await expect(firstValueFrom(session.isAuthenticated())).resolves.toBe(false);
     expect(transport.onAuthRequest).toHaveBeenCalledWith(response);
+  });
+
+  it('handles a request without a response', async () => {
+    const failure = new RciHttpError('Network request failed', {status: null});
+    const transport = makeTransport({get: vi.fn().mockReturnValue(throwError(() => failure))});
+    const session = new SessionManager('http://device', transport);
+
+    await expect(firstValueFrom(session.isAuthenticated())).resolves.toBe(false);
+    await expect(firstValueFrom(session.loginDetailed('u', 'p'))).resolves.toEqual(unavailable(null));
+    await expect(firstValueFrom(session.getRealmHeader())).resolves.toBeNull();
+    expect(transport.onAuthRequest).not.toHaveBeenCalled();
   });
 
   it('login() returns true when auth endpoint already returns 200', async () => {
@@ -335,7 +350,7 @@ describe('SessionManager', () => {
     const session = new SessionManager('http://device', transport);
     const emit401 = async () => {
       await firstValueFrom(
-        throwError(() => ({status: 401}))
+        throwError(() => new RciHttpError('HTTP 401', {status: 401}))
           .pipe(handler.handleAuthError<unknown>(), catchError((error) => of(error))),
       );
     };
@@ -371,13 +386,16 @@ describe('SessionManager', () => {
     const unauthorizedResponse = {status: 401, data: {}, headers: {}};
     const get = vi.fn()
       .mockReturnValueOnce(
-        throwError(() => initialResponse).pipe(handler.handleAuthError<BaseHttpResponse>()),
+        throwError(() => new RciHttpError('HTTP 401', {status: 401, response: initialResponse}))
+          .pipe(handler.handleAuthError<BaseHttpResponse>()),
       )
       .mockReturnValueOnce(
-        throwError(() => unauthorizedResponse).pipe(handler.handleAuthError<BaseHttpResponse>()),
+        throwError(() => new RciHttpError('HTTP 401', {status: 401, response: unauthorizedResponse}))
+          .pipe(handler.handleAuthError<BaseHttpResponse>()),
       )
       .mockReturnValueOnce(
-        throwError(() => unauthorizedResponse).pipe(handler.handleAuthError<BaseHttpResponse>()),
+        throwError(() => new RciHttpError('HTTP 401', {status: 401, response: unauthorizedResponse}))
+          .pipe(handler.handleAuthError<BaseHttpResponse>()),
       );
     const transport = makeTransport({
       get,
@@ -398,10 +416,12 @@ describe('SessionManager', () => {
 
   it('logout() clears auth data even when DELETE fails', async () => {
     const transport = makeTransport({
-      delete: vi.fn().mockReturnValue(throwError(() => ({
-        status: 500,
-        data: {},
-      }))),
+      delete: vi.fn().mockReturnValue(throwError(() =>
+        new RciHttpError('HTTP 500', {
+          status: 500,
+          response: {status: 500, data: {}},
+        })
+      )),
     });
     const session = new SessionManager('http://device', transport);
 
@@ -420,9 +440,19 @@ describe('SessionManager', () => {
     expect(transport.getHeader).toHaveBeenCalledWith(expect.anything(), 'X-NDM-Realm');
   });
 
+  it('getRealmHeader() emits null when the header is missing', async () => {
+    const transport = makeTransport({
+      get: vi.fn().mockReturnValue(of({status: 401, data: {}})),
+      getHeader: vi.fn().mockReturnValue(null),
+    });
+    const session = new SessionManager('http://device', transport);
+
+    await expect(firstValueFrom(session.getRealmHeader())).resolves.toBeNull();
+  });
+
   it('login() completes when post errors and session is not authenticated', async () => {
     const transport = makeTransport({
-      post: vi.fn().mockReturnValue(throwError(() => new Error('network'))),
+      post: vi.fn().mockReturnValue(throwError(() => new RciHttpError('Network request failed', {status: null}))),
       get: vi.fn().mockReturnValue(of({status: 401, data: {}})),
     });
     const session = new SessionManager('http://device', transport);
@@ -431,10 +461,10 @@ describe('SessionManager', () => {
   });
 });
 
-const readHeader = (response: BaseHttpResponse, name: string): string => {
+const readHeader = (response: BaseHttpResponse, name: string): string | null => {
   const headers = (response as {headers?: Record<string, string>} | undefined)?.headers;
 
-  return headers?.[name] ?? '';
+  return headers?.[name] ?? null;
 };
 
 const ndw2Challenge = {
@@ -457,13 +487,13 @@ const ndw4Challenge = {
 
 // NDW4 replies come as non-200 responses with a base64-encoded JSON in `X-NDM-Data`
 const ndw4Reply = (reply: object) => {
-  return throwError(() => ({
-    response: {
-      status: 401,
-      data: {},
-      headers: {'X-NDM-Data': Buffer.from(JSON.stringify(reply)).toString('base64')},
-    },
-  }));
+  const response = {
+    status: 401,
+    data: {},
+    headers: {'X-NDM-Data': Buffer.from(JSON.stringify(reply)).toString('base64')},
+  };
+
+  return throwError(() => new RciHttpError('HTTP 401', {status: 401, response}));
 };
 
 // A valid phase 1 reply with the cheapest Argon2id parameters the protocol accepts
@@ -507,6 +537,47 @@ describe('SessionManager.loginDetailed()', () => {
     await expect(firstValueFrom(session.loginDetailed('admin', 'password'))).resolves.toEqual(unavailable(null));
   });
 
+  it('reads an NDW2 challenge from RciHttpError.response', async () => {
+    const get = vi.fn().mockReturnValue(throwError(() =>
+      new RciHttpError('HTTP 401', {
+        status: 401,
+        response: ndw2Challenge,
+      })
+    ));
+    const transport = makeTransport({
+      get,
+      post: vi.fn().mockReturnValue(throwError(() =>
+        new RciHttpError('HTTP 401', {
+          status: 401,
+          response: {status: 401, data: {}, headers: {}},
+        })
+      )),
+      getHeader: vi.fn(readHeader),
+    });
+    const session = new SessionManager('http://device', transport);
+
+    await expect(firstValueFrom(session.loginDetailed('admin', 'password'))).resolves.toEqual(rejected(NDW2));
+    expect(get).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads an NDW4 challenge from RciHttpError.response', async () => {
+    const get = vi.fn().mockReturnValue(throwError(() =>
+      new RciHttpError('HTTP 401', {
+        status: 401,
+        response: ndw4Challenge,
+      })
+    ));
+    const transport = makeTransport({
+      get,
+      post: vi.fn().mockReturnValue(ndw4Reply({error: 'unknown login'})),
+      getHeader: vi.fn(readHeader),
+    });
+    const session = new SessionManager('http://device', transport);
+
+    await expect(firstValueFrom(session.loginDetailed('admin', 'password'))).resolves.toEqual(rejected(NDW4));
+    expect(get).toHaveBeenCalledTimes(1);
+  });
+
   it('reports an unavailable device when NDW2 challenge headers are missing', async () => {
     const transport = makeTransport({
       get: vi.fn().mockReturnValue(of({status: 401, data: {}, headers: {'WWW-Authenticate': 'x-ndw2-interactive'}})),
@@ -522,7 +593,12 @@ describe('SessionManager.loginDetailed()', () => {
     const get = vi.fn().mockReturnValue(of(ndw2Challenge));
     const transport = makeTransport({
       get,
-      post: vi.fn().mockReturnValue(throwError(() => ({response: {status: 401, data: {}, headers: {}}}))),
+      post: vi.fn().mockReturnValue(throwError(() =>
+        new RciHttpError('HTTP 401', {
+          status: 401,
+          response: {status: 401, data: {}, headers: {}},
+        })
+      )),
       getHeader: vi.fn(readHeader),
     });
     const session = new SessionManager('http://device', transport);
@@ -536,7 +612,12 @@ describe('SessionManager.loginDetailed()', () => {
     const get = vi.fn().mockReturnValue(of(ndw2Challenge));
     const transport = makeTransport({
       get,
-      post: vi.fn().mockReturnValue(throwError(() => ({status: 401, data: {}, headers: {}}))),
+      post: vi.fn().mockReturnValue(throwError(() =>
+        new RciHttpError('HTTP 401', {
+          status: 401,
+          response: {status: 401, data: {}, headers: {}},
+        })
+      )),
       getHeader: vi.fn(readHeader),
     });
     const session = new SessionManager('http://device', transport);
@@ -549,8 +630,13 @@ describe('SessionManager.loginDetailed()', () => {
     const transport = makeTransport({
       get: vi.fn()
         .mockReturnValueOnce(of(ndw2Challenge))
-        .mockReturnValueOnce(throwError(() => ({response: {status: 401, data: {}, headers: {}}}))),
-      post: vi.fn().mockReturnValue(throwError(() => new Error('network error'))),
+        .mockReturnValueOnce(throwError(() =>
+          new RciHttpError('HTTP 401', {
+            status: 401,
+            response: {status: 401, data: {}, headers: {}},
+          })
+        )),
+      post: vi.fn().mockReturnValue(throwError(() => new RciHttpError('Network request failed', {status: null}))),
       getHeader: vi.fn(readHeader),
     });
     const session = new SessionManager('http://device', transport);
@@ -646,7 +732,12 @@ describe('SessionManager.loginDetailed()', () => {
   it('reports an unavailable device when an NDW4 reply has no X-NDM-Data', async () => {
     const transport = makeTransport({
       get: vi.fn().mockReturnValue(of(ndw4Challenge)),
-      post: vi.fn().mockReturnValue(throwError(() => ({response: {status: 502, data: {}, headers: {}}}))),
+      post: vi.fn().mockReturnValue(throwError(() =>
+        new RciHttpError('HTTP 502', {
+          status: 502,
+          response: {status: 502, data: {}, headers: {}},
+        })
+      )),
       getHeader: vi.fn(readHeader),
     });
     const session = new SessionManager('http://device', transport);
@@ -657,12 +748,117 @@ describe('SessionManager.loginDetailed()', () => {
   it('reports an unavailable device when an NDW4 request fails without a response', async () => {
     const transport = makeTransport({
       get: vi.fn().mockReturnValue(of(ndw4Challenge)),
-      post: vi.fn().mockReturnValue(throwError(() => new Error('network error'))),
+      post: vi.fn().mockReturnValue(throwError(() => new RciHttpError('Network request failed', {status: null}))),
       getHeader: vi.fn(readHeader),
     });
     const session = new SessionManager('http://device', transport);
 
     await expect(firstValueFrom(session.loginDetailed('admin', 'password'))).resolves.toEqual(unavailable(NDW4));
+  });
+
+  it('logs an NDW4 challenge-step network error once', async () => {
+    const failure = new RciHttpError('Network request failed', {status: null});
+    const transport = makeTransport({
+      get: vi.fn().mockReturnValue(of(ndw4Challenge)),
+      post: vi.fn().mockReturnValue(throwError(() => failure)),
+      getHeader: vi.fn(readHeader),
+    });
+    const session = new SessionManager('http://device', transport);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    session.toggleErrorLogging(true);
+
+    try {
+      await expect(firstValueFrom(session.loginDetailed('admin', 'password'))).resolves.toEqual(unavailable(NDW4));
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenCalledWith(failure);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('does not log the 401 challenge that starts a login', async () => {
+    const failure = new RciHttpError('Network request failed', {status: null});
+    const transport = makeTransport({
+      get: vi.fn().mockReturnValue(throwError(() => new RciHttpError('HTTP 401', {
+        status: 401,
+        response: ndw4Challenge,
+      }))),
+      post: vi.fn().mockReturnValue(throwError(() => failure)),
+      getHeader: vi.fn(readHeader),
+    });
+    const session = new SessionManager('http://device', transport);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    session.toggleErrorLogging(true);
+
+    try {
+      await expect(firstValueFrom(session.loginDetailed('admin', 'password'))).resolves.toEqual(unavailable(NDW4));
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenCalledWith(failure);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('logs an NDW4 signature-proof network error once', async () => {
+    const failure = new RciHttpError('Network request failed', {status: null});
+    const transport = makeTransport({
+      post: vi.fn((_url: string, data: Ndw4RequestData) => {
+        if (data.proof === undefined && data['signature-proof'] === undefined) {
+          return ndw4FirstReply(data.nonce);
+        }
+
+        if (data['signature-proof'] === undefined) {
+          return ndw4Reply({signature: 'server-signature'});
+        }
+
+        return throwError(() => failure);
+      }),
+      getHeader: vi.fn(readHeader),
+    });
+    const protocol = new Ndw4AuthProtocol('http://device', transport);
+    const testableProtocol = protocol as unknown as {
+      verifyServerSignature: (secrets: Record<string, unknown>) => Observable<unknown>;
+    };
+    testableProtocol.verifyServerSignature = (secrets) => of({...secrets, signatureBase64: 'server-signature'});
+    const logError = vi.fn();
+    const context = {
+      isAuthenticated: () => of(false),
+      errorToResponse: (error: unknown) => isRciHttpError(error) ? error.response : null,
+      logError,
+    };
+    const result = await firstValueFrom(protocol.authenticate(ndw4Challenge, context, 'admin', 'password'));
+
+    expect(result).toEqual({success: false, reason: LOGIN_FAILURE_REASON.UNAVAILABLE});
+    expect(logError).toHaveBeenCalledTimes(1);
+    expect(logError).toHaveBeenCalledWith(failure);
+  });
+
+  it('accepts a 2xx NDW4 signature-proof response', async () => {
+    const transport = makeTransport({
+      post: vi.fn((_url: string, data: Ndw4RequestData) => {
+        if (data.proof === undefined && data['signature-proof'] === undefined) {
+          return ndw4FirstReply(data.nonce);
+        }
+
+        return data['signature-proof'] === undefined
+          ? ndw4Reply({signature: 'server-signature'})
+          : of({status: 201, data: {}});
+      }),
+      getHeader: vi.fn(readHeader),
+    });
+    const protocol = new Ndw4AuthProtocol('http://device', transport);
+    const testableProtocol = protocol as unknown as {
+      verifyServerSignature: (secrets: Record<string, unknown>) => Observable<unknown>;
+    };
+    testableProtocol.verifyServerSignature = (secrets) => of({...secrets, signatureBase64: 'server-signature'});
+    const context = {
+      isAuthenticated: () => of(true),
+      errorToResponse: (error: unknown) => isRciHttpError(error) ? error.response : null,
+      logError: vi.fn(),
+    };
+
+    await expect(firstValueFrom(protocol.authenticate(ndw4Challenge, context, 'admin', 'password')))
+      .resolves.toEqual({success: true});
   });
 
   // a caller that bounds the attempt with its own timeout
@@ -781,7 +977,12 @@ describe('SessionManager auth protocols', () => {
   });
 
   it('follows the order of the allowed protocols', async () => {
-    const post = vi.fn().mockReturnValue(throwError(() => ({response: {status: 401, data: {}, headers: {}}})));
+    const post = vi.fn().mockReturnValue(throwError(() =>
+      new RciHttpError('HTTP 401', {
+        status: 401,
+        response: {status: 401, data: {}, headers: {}},
+      })
+    ));
     const transport = makeTransport({
       get: vi.fn().mockReturnValue(of(dualChallenge)),
       post,
@@ -808,7 +1009,12 @@ describe('SessionManager auth protocols', () => {
   });
 
   it('does not fall back to another protocol after an unavailable result', async () => {
-    const post = vi.fn().mockReturnValue(throwError(() => ({response: {status: 502, data: {}, headers: {}}})));
+    const post = vi.fn().mockReturnValue(throwError(() =>
+      new RciHttpError('HTTP 502', {
+        status: 502,
+        response: {status: 502, data: {}, headers: {}},
+      })
+    ));
     const transport = makeTransport({
       get: vi.fn().mockReturnValue(of(dualChallenge)),
       post,
@@ -823,7 +1029,7 @@ describe('SessionManager auth protocols', () => {
 
   it('reports no protocol when the initial GET /auth fails without a response', async () => {
     const transport = makeTransport({
-      get: vi.fn().mockReturnValue(throwError(() => new Error('network error'))),
+      get: vi.fn().mockReturnValue(throwError(() => new RciHttpError('Network request failed', {status: null}))),
       getHeader: vi.fn(readHeader),
     });
     const session = new SessionManager('http://device', transport);

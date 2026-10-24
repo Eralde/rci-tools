@@ -1,6 +1,6 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {firstValueFrom} from 'rxjs';
-import {XHRTransport} from '../../../src';
+import {RciHttpError, XHRTransport, type XHRTransportResponse} from '../../../src';
 
 class FakeXHR {
   public static DONE = 4;
@@ -100,8 +100,8 @@ describe('XHRTransport', () => {
   });
 
   describe('auth error handling', () => {
-    it('should emit authError$ exactly once for a 401 from sendQueryArray', async () => {
-      const promise = firstValueFrom(transport.sendQueryArray('http://example.com/rci/', [{}])).catch(() => {});
+    it('should emit authError$ exactly once for a 401 from post', async () => {
+      const promise = firstValueFrom(transport.post('http://example.com/rci/', [{}])).catch(() => {});
 
       xhrMock.instances[0]!.respond(401, '', '');
 
@@ -111,7 +111,7 @@ describe('XHRTransport', () => {
     });
 
     it('should not emit authError$ for a non-401 error', async () => {
-      const promise = firstValueFrom(transport.sendQueryArray('http://example.com/rci/', [{}])).catch(() => {});
+      const promise = firstValueFrom(transport.post('http://example.com/rci/', [{}])).catch(() => {});
 
       xhrMock.instances[0]!.respond(500, '', '');
 
@@ -123,14 +123,14 @@ describe('XHRTransport', () => {
     it('suspends and resumes authError$ through authErrorSuspension', async () => {
       transport.authErrorSuspension.suspend();
 
-      const suspended = firstValueFrom(transport.sendQueryArray('http://example.com/rci/', [{}])).catch(() => {});
+      const suspended = firstValueFrom(transport.post('http://example.com/rci/', [{}])).catch(() => {});
       xhrMock.instances[0]!.respond(401, '', '');
       await suspended;
       expect(authErrorCount).toBe(0);
 
       transport.authErrorSuspension.resume();
 
-      const resumed = firstValueFrom(transport.sendQueryArray('http://example.com/rci/', [{}])).catch(() => {});
+      const resumed = firstValueFrom(transport.post('http://example.com/rci/', [{}])).catch(() => {});
       xhrMock.instances[1]!.respond(401, '', '');
       await resumed;
       expect(authErrorCount).toBe(1);
@@ -160,6 +160,22 @@ describe('XHRTransport', () => {
 
       expect(xhrMock.instances[0]!.aborted).toBe(false);
     });
+
+    it('starts an independent request on each subscription', () => {
+      const request$ = transport.post('http://example.com/rci/', [{}]);
+
+      const first = request$.subscribe();
+      const second = request$.subscribe();
+
+      expect(xhrMock.instances).toHaveLength(2);
+
+      first.unsubscribe();
+
+      expect(xhrMock.instances[0]!.aborted).toBe(true);
+      expect(xhrMock.instances[1]!.aborted).toBe(false);
+
+      second.unsubscribe();
+    });
   });
 
   describe('response handling', () => {
@@ -172,23 +188,61 @@ describe('XHRTransport', () => {
       await promise;
     });
 
-    it('rejects network failures as errors rather than status-0 responses', async () => {
+    it('reports onerror network failures as status null', async () => {
       const promise = firstValueFrom(transport.get('http://example.com/auth'));
 
       xhrMock.instances[0]!.fail();
 
       const error = await promise.catch((reason) => reason);
 
-      expect(error).toBeInstanceOf(Error);
-      expect(error.message).toBe('XMLHttpRequest request failed');
+      expect(error).toBeInstanceOf(RciHttpError);
+      expect(error.status).toBeNull();
+      expect(error.response).toBeNull();
+      expect(error.cause).toBeInstanceOf(Error);
     });
 
-    it('resolves a 200 with parsed JSON data', async () => {
-      const promise = firstValueFrom(transport.sendQueryArray('http://example.com/rci/', [{}]));
+    it('reports status 0 as a network failure', async () => {
+      const promise = firstValueFrom(transport.get('http://example.com/auth'));
 
-      xhrMock.instances[0]!.respond(200, JSON.stringify([{ok: true}]), 'Content-Type: application/json');
+      xhrMock.instances[0]!.respond(0, '', '');
 
-      await expect(promise).resolves.toEqual([{ok: true}]);
+      const error = await promise.catch((reason) => reason);
+
+      expect(error).toBeInstanceOf(RciHttpError);
+      expect(error.status).toBeNull();
+      expect(error.response).toBeNull();
+    });
+
+    it('treats 204 with an empty body as success', async () => {
+      const promise = firstValueFrom(transport.get('http://example.com/auth'));
+
+      xhrMock.instances[0]!.respond(204, '', 'X-Reply: empty');
+
+      const response = await promise;
+
+      expect(response).toMatchObject({status: 204, data: {}});
+      expect(transport.getHeader(response, 'X-Reply')).toBe('empty');
+    });
+
+    it('treats 201 as success', async () => {
+      const promise = firstValueFrom(transport.post('http://example.com/rci/', {}));
+
+      xhrMock.instances[0]!.respond(201, '{"created":true}', '');
+
+      await expect(promise).resolves.toMatchObject({status: 201, data: {created: true}});
+    });
+
+    it('exposes the parsed body of a non-2xx reply', async () => {
+      const promise = firstValueFrom(transport.get('http://example.com/auth'));
+
+      xhrMock.instances[0]!.respond(500, '{"error":"x"}', 'X-Error: server');
+
+      const error = await promise.catch((reason) => reason);
+
+      expect(error).toBeInstanceOf(RciHttpError);
+      expect(error.status).toBe(500);
+      expect(error.response.data).toEqual({error: 'x'});
+      expect(transport.getHeader(error.response as XHRTransportResponse, 'X-Error')).toBe('server');
     });
 
     it('issues a DELETE request', async () => {
@@ -213,22 +267,22 @@ describe('XHRTransport', () => {
   });
 
   describe('header access', () => {
-    it('getHeader is case-insensitive and returns "" for missing', async () => {
-      const promise = firstValueFrom(transport.get('http://example.com/auth')).catch((response) => response);
+    it('getHeader is case-insensitive and returns null for missing', async () => {
+      const promise = firstValueFrom(transport.get('http://example.com/auth'));
 
-      xhrMock.instances[0]!.respond(401, '', 'X-NDM-Data: e30=');
+      xhrMock.instances[0]!.respond(200, '', 'X-NDM-Data: e30=');
 
       const response = await promise;
 
       expect(transport.getHeader(response, 'x-ndm-data')).toBe('e30=');
       expect(transport.getHeader(response, 'X-NDM-Data')).toBe('e30=');
-      expect(transport.getHeader(response, 'Missing')).toBe('');
+      expect(transport.getHeader(response, 'Missing')).toBeNull();
     });
 
     it('preserves multiple WWW-Authenticate headers (Firefox fetch bug workaround)', async () => {
-      const promise = firstValueFrom(transport.get('http://example.com/auth')).catch((response) => response);
+      const promise = firstValueFrom(transport.get('http://example.com/auth'));
 
-      xhrMock.instances[0]!.respond(401, '', AUTH_CHALLENGE_HEADERS);
+      xhrMock.instances[0]!.respond(200, '', AUTH_CHALLENGE_HEADERS);
 
       const response = await promise;
       const header = transport.getHeader(response, 'WWW-Authenticate');

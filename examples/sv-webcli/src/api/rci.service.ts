@@ -1,8 +1,8 @@
-import {Observable} from 'rxjs';
+import {Observable, map} from 'rxjs';
 import {
   FetchTransport,
   RciBackgroundProcess,
-  RciBackgroundProcessOptions,
+  type RciBackgroundProcessOptions,
   RciManager,
   RciQuery,
   SessionManager,
@@ -24,7 +24,10 @@ export class RciService {
   }
 
   public getDeviceName(): Observable<string> {
-    return this.auth.getRealmHeader();
+    return this.auth.getRealmHeader()
+      .pipe(
+        map((realm) => realm ?? ''),
+      );
   }
 
   public isAuthenticated(): Observable<boolean> {
@@ -45,7 +48,7 @@ export class RciService {
 
   public queueBackgroundProcess(
     query: RciQuery,
-    options: RciBackgroundTaskOptions = {},
+    options: RciBackgroundProcessOptions = {},
   ): RciBackgroundProcess {
     return this.driver.queueBackgroundProcess(query, options);
   }
