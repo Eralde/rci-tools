@@ -247,7 +247,8 @@ const rciManager = new RciManager(host, transport);
 transport.authError$.subscribe(() => console.warn('Authentication expired'));
 ```
 
-The built-in `FetchTransport`, `XHRTransport`, and `AxiosTransport` also expose `authError$`.
+The built-in `FetchTransport` and `XHRTransport` also expose `authError$`, as does `AxiosTransport`
+from `@rci-tools/adapter-axios`.
 An application can subscribe to it to learn that the session has expired. The package itself does not
 subscribe to `authError$`.
 

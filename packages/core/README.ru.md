@@ -250,7 +250,8 @@ const rciManager = new RciManager(host, transport);
 transport.authError$.subscribe(() => console.warn('Сессия истекла'));
 ```
 
-Встроенные `FetchTransport`, `XHRTransport` и `AxiosTransport` тоже предоставляют `authError$`.
+Встроенные `FetchTransport` и `XHRTransport` тоже предоставляют `authError$`. Так же делает `AxiosTransport`
+из пакета `@rci-tools/adapter-axios`.
 Приложение может подписаться на него, чтобы узнать об истёкшей сессии. Сам пакет на `authError$`
 не подписывается.
 
