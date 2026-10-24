@@ -101,18 +101,39 @@ not only after `'rejected'`.
 
 ### Custom HTTP transport
 
-Implement [`HttpTransport`](./src/transport/http.transport.ts) for your response type. It requires
-`get`, `post`, `delete`, `getHeader`, `onAuthRequest`, and `clearAuthData`.
+Implement [`HttpTransport`](./src/transport/http.transport.ts) for your response type.
+It needs the methods `get`, `post`, `delete`, `getHeader`, `onAuthRequest`, and `clearAuthData`.
 
-Transport Observables must be cold and abort the request on unsubscribe. Any 2xx status is success;
-every failed request must error with `RciHttpError`. `getHeader()` returns `null` when a header is missing.
-`authError$` is optional; when provided, it emits on a 401 outside a login handshake (an expired session).
-Timeouts that core adds to `execute()` and `queue()` remain RxJS `TimeoutError`, not `RciHttpError`.
+What a transport must do:
 
-Use `AuthErrorHandler` to turn `RciHttpError` responses with status 401 into `authError$` notifications.
-Its RxJS operator emits when notifications are not suspended, then rethrows the same error.
-`suspend()` and `resume()` maintain a nesting counter; `AuthErrorHandler.is401Error()` recognizes
-`RciHttpError` by its shared brand, and `destroy()` completes `authError$`.
+- send the request only when the Observable is subscribed, and abort it on unsubscribe;
+- treat any response with a 2xx status as success;
+- fail every unsuccessful request with `RciHttpError` (see below);
+- return `null` from `getHeader()` when the response has no such header;
+- `authError$` is optional. If present, it reports an HTTP 401 outside a login, that is, an expired session.
+
+The 60-second timeout in `execute()` and `queue()` is added by core, not by the transport.
+It arrives as an RxJS `TimeoutError`, not as `RciHttpError`.
+
+`RciHttpError` has three fields:
+
+- `status`: the HTTP status of the response; `null` if there was no response (for example, no network);
+- `response`: the transport response, if there was one: `response.data` holds the parsed body of the error reply.
+  Otherwise `null`;
+- `cause`: the original error, for example the `fetch` error.
+
+Check errors with `isRciHttpError(error)`, not with `instanceof`. An application can end up with two copies of
+`@rci-tools/core`, for example one used by the transport and one by the application. `instanceof` does not
+recognize an error from the other copy, while `isRciHttpError()` does: it relies on a shared `Symbol.for` brand.
+
+`AuthErrorHandler` helps implement `authError$`. Its RxJS operator `handleAuthError()` watches request errors.
+If an error is an `RciHttpError` with status 401 and notifications are not suspended, it emits on `authError$`.
+The error itself then passes on unchanged. Other methods:
+
+- `suspend()` and `resume()` pause and resume notifications. Calls can be nested:
+  notifications come back after the last `resume()`;
+- `AuthErrorHandler.is401Error(error)` checks that the error is an `RciHttpError` with status 401;
+- `destroy()` completes `authError$`.
 
 Expose the handler as `authErrorSuspension`. `SessionManager` calls `suspend()` during the login
 handshake and `resume()` in `finalize`, so a 401 from login itself is not treated as an expired session.
@@ -213,13 +234,9 @@ const rciManager = new RciManager(host, transport);
 transport.authError$.subscribe(() => console.warn('Authentication expired'));
 ```
 
-`FetchTransport`, `XHRTransport`, and `AxiosTransport` expose `authError$` publicly. They emit on 401
-outside login, signaling an expired session, so application code can subscribe directly. The package
-does not subscribe to `authError$`.
-
-`RciHttpError` has `status` (`null` when there was no HTTP response), `response` (`null` when unavailable),
-and `cause`. Use `isRciHttpError(error)` to recognize it: the check uses a shared `Symbol.for` brand, so it
-also works when the consumer and transport load separate copies of `@rci-tools/core`; `instanceof` does not.
+The built-in `FetchTransport`, `XHRTransport`, and `AxiosTransport` also expose `authError$`.
+An application can subscribe to it to learn that the session has expired. The package itself does not
+subscribe to `authError$`.
 
 ### `RciManager`
 
@@ -412,8 +429,8 @@ The `RciManager` provides two methods for sending API queries:
 
 Both methods return a [rxjs Observable](https://rxjs.dev/guide/observable)
 that you must subscribe to in order to receive the result. Below are a few usage examples.
-They error with `RciHttpError` for a failed request or malformed batch reply, and with RxJS `TimeoutError`
-if the request does not complete within 60 seconds.
+If the HTTP request fails or the batch reply is not an array, the Observable errors with `RciHttpError`.
+If there is no reply for more than 60 seconds, it errors with an RxJS `TimeoutError`.
 
 #### Typed queries
 
@@ -660,10 +677,11 @@ Both methods return a `RciBackgroundProcess` object with:
   then completes
 - `error: unknown`: The error that ended the process with `ERROR` (`done$` emits
   `RCI_BACKGROUND_PROCESS_FINISH_REASON.ERROR`), `null` for any other outcome or while the process is running.
-  It is set before `done$` emits and stays available after `destroy()`. A failed request is a `RciHttpError`;
-  `status` is `null` when there was no HTTP response. The process `timeout` option is a finish reason, not an error.
-  Errors reported by the device inside a `2xx` reply (RCI `status` entries) do not end the process with `ERROR`; they
-  arrive in `data$` / `result$`.
+  It is set before `done$` emits and stays available after `destroy()`.
+  If an HTTP request failed, this is an `RciHttpError` (`status` is `null` if there was no response).
+  The `timeout` option firing is not an error: the process finishes with `TIMED_OUT`, and `error` stays `null`.
+  Errors reported by the device inside a successful reply (RCI `status` entries) do not end the process with `ERROR`:
+  they arrive in `data$` / `result$`.
 - `destroy(): void`: Releases local resources: stops polling, cancels the in-flight HTTP request,
   and completes all streams (`done$` completes without emitting). It does **not** stop the process
   on the device; call `abort()` first if you need that. A destroyed process no longer blocks its
