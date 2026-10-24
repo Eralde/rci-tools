@@ -1,4 +1,5 @@
 import {Observable, OperatorFunction, Subject, catchError, throwError} from 'rxjs';
+import {isRciHttpError} from './rci-http-error';
 
 export class AuthErrorHandler {
   protected readonly authErrorSub$ = new Subject<void>();
@@ -15,10 +16,7 @@ export class AuthErrorHandler {
   }
 
   public static is401Error(error: unknown): boolean {
-    return !!error
-      && typeof error === 'object'
-      && 'status' in error
-      && (error as {status: number}).status === 401;
+    return isRciHttpError(error) && error.status === 401;
   }
 
   public handleAuthError<T>(): OperatorFunction<T, T> {

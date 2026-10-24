@@ -1,5 +1,6 @@
 import {Observable, defer, of} from 'rxjs';
 import {catchError, finalize, map, shareReplay, switchMap, tap} from 'rxjs/operators';
+import {isRciHttpError} from '../transport/errors/rci-http-error';
 import type {BaseHttpResponse, HttpTransport} from '../transport/http.transport';
 import {AUTH_PROTOCOL, LOGIN_FAILURE_REASON} from './auth-protocol/auth-protocol.types';
 import type {AuthProtocolName, SessionAuthContext, SessionAuthProtocol} from './auth-protocol/auth-protocol.types';
@@ -58,6 +59,10 @@ export class SessionManager<ResponseType extends BaseHttpResponse = BaseHttpResp
           return of(this.errorToResponse(error));
         }),
         map((response) => {
+          if (!response) {
+            return false;
+          }
+
           this.httpTransport.onAuthRequest(response);
 
           return response?.status === 200;
@@ -65,11 +70,11 @@ export class SessionManager<ResponseType extends BaseHttpResponse = BaseHttpResp
       );
   }
 
-  public getRealmHeader(): Observable<string> {
+  public getRealmHeader(): Observable<string | null> {
     return this.httpTransport.get(this.authUri)
       .pipe(
         catchError((error) => of(this.errorToResponse(error))),
-        map((response) => this.httpTransport.getHeader(response, 'X-NDM-Realm')),
+        map((response) => response ? this.httpTransport.getHeader(response, 'X-NDM-Realm') : null),
       );
   }
 
@@ -119,8 +124,21 @@ export class SessionManager<ResponseType extends BaseHttpResponse = BaseHttpResp
 
       return this.httpTransport.get(this.authUri)
         .pipe(
-          catchError((error) => of(this.errorToResponse(error))),
+          catchError((error) => {
+            const response = this.errorToResponse(error);
+
+            // a 401 with a challenge is the expected start of a login; only a missing response is a failure
+            if (!response) {
+              this.logError(error);
+            }
+
+            return of(response);
+          }),
           switchMap((response): Observable<LoginDetails> => {
+            if (!response) {
+              return of({...toLoginFailure(LOGIN_FAILURE_REASON.UNAVAILABLE), protocol: null});
+            }
+
             this.httpTransport.onAuthRequest(response);
 
             if (response.status === 200) {
@@ -183,17 +201,8 @@ export class SessionManager<ResponseType extends BaseHttpResponse = BaseHttpResp
     }
   }
 
-  private errorToResponse(error: unknown): ResponseType {
-    if (
-      error
-      && typeof error === 'object'
-      && 'response' in error
-      && error.response
-    ) {
-      return error.response as ResponseType;
-    }
-
-    return error as ResponseType;
+  private errorToResponse(error: unknown): ResponseType | null {
+    return isRciHttpError(error) ? error.response as ResponseType | null : null;
   }
 
   private getAuthContext(): SessionAuthContext<ResponseType> {

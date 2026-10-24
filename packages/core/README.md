@@ -49,7 +49,7 @@ interface SessionManager<ResponseType extends BaseHttpResponse = BaseHttpRespons
   loginDetailed(username: string, password: string): Observable<LoginDetails>;
   logout(): Observable<unknown>;
 
-  getRealmHeader(): Observable<string>;
+  getRealmHeader(): Observable<string | null>;
   toggleErrorLogging(isEnabled: boolean): void;
 }
 ```
@@ -102,12 +102,17 @@ not only after `'rejected'`.
 ### Custom HTTP transport
 
 Implement [`HttpTransport`](./src/transport/http.transport.ts) for your response type. It requires
-`get`, `post`, `delete`, `getHeader`, `onAuthRequest`, `clearAuthData`, and `sendQueryArray`.
+`get`, `post`, `delete`, `getHeader`, `onAuthRequest`, and `clearAuthData`.
 
-Use `AuthErrorHandler` to turn HTTP 401 errors into `authError$` notifications. Its RxJS operator emits
-when an error has `status === 401` and notifications are not suspended, then rethrows the same error.
-`suspend()` and `resume()` maintain a nesting counter; `AuthErrorHandler.is401Error()` checks an error,
-and `destroy()` completes `authError$`.
+Transport Observables must be cold and abort the request on unsubscribe. Any 2xx status is success;
+every failed request must error with `RciHttpError`. `getHeader()` returns `null` when a header is missing.
+`authError$` is optional; when provided, it emits on a 401 outside a login handshake (an expired session).
+Timeouts that core adds to `execute()` and `queue()` remain RxJS `TimeoutError`, not `RciHttpError`.
+
+Use `AuthErrorHandler` to turn `RciHttpError` responses with status 401 into `authError$` notifications.
+Its RxJS operator emits when notifications are not suspended, then rethrows the same error.
+`suspend()` and `resume()` maintain a nesting counter; `AuthErrorHandler.is401Error()` recognizes
+`RciHttpError` by its shared brand, and `destroy()` completes `authError$`.
 
 Expose the handler as `authErrorSuspension`. `SessionManager` calls `suspend()` during the login
 handshake and `resume()` in `finalize`, so a 401 from login itself is not treated as an expired session.
@@ -116,14 +121,15 @@ The property is optional on `HttpTransport`.
 ```typescript
 import {
   AuthErrorHandler,
+  isRciHttpError,
+  RciHttpError,
   RciManager,
   SessionManager,
   type AuthErrorSuspension,
   type BaseHttpResponse,
-  type GenericObject,
   type HttpTransport,
 } from '@rci-tools/core';
-import {defer, map, mergeMap, type Observable} from 'rxjs';
+import {catchError, defer, finalize, from, mergeMap, throwError, type Observable} from 'rxjs';
 
 interface CustomResponse extends BaseHttpResponse {
   headers: Headers;
@@ -146,31 +152,27 @@ class CustomHttpTransport implements HttpTransport<CustomResponse> {
     return this.request(url, {method: 'DELETE'});
   }
 
-  public getHeader(response: CustomResponse, name: string): string {
-    return response.headers.get(name) ?? '';
+  public getHeader(response: CustomResponse, name: string): string | null {
+    return response.headers.get(name);
   }
 
   public onAuthRequest(): void {}
 
   public clearAuthData(): void {}
 
-  public sendQueryArray(url: string, queries: GenericObject[]): Observable<GenericObject[]> {
-    return this.post(url, queries).pipe(map((response) => response.data as GenericObject[]));
-  }
-
   private request(url: string, init: RequestInit = {}): Observable<CustomResponse> {
-    return defer(() => fetch(url, init))
-      .pipe(
+    return defer(() => {
+      const controller = new AbortController();
+      return from(fetch(url, {...init, signal: controller.signal})).pipe(
+        catchError((cause: unknown) =>
+          throwError(() => new RciHttpError<CustomResponse>('Network request failed', {status: null, cause})),
+        ),
         mergeMap(async (response): Promise<CustomResponse> => {
           const result: CustomResponse = {
             status: response.status,
             headers: response.headers,
             data: {},
           };
-
-          if (response.status !== 200) {
-            throw result;
-          }
 
           const body = await response.text();
 
@@ -180,8 +182,24 @@ class CustomHttpTransport implements HttpTransport<CustomResponse> {
             result.data = {};
           }
 
+          if (response.status < 200 || response.status >= 300) {
+            throw new RciHttpError<CustomResponse>(`HTTP ${response.status}`, {
+              status: response.status,
+              response: result,
+            });
+          }
+
           return result;
         }),
+        catchError((error: unknown) =>
+          isRciHttpError(error)
+            ? throwError(() => error)
+            : throwError(() => new RciHttpError<CustomResponse>('Request failed', {status: null, cause: error})),
+        ),
+        finalize(() => controller.abort()),
+      );
+    })
+      .pipe(
         this.authHandler.handleAuthError<CustomResponse>(),
       );
   }
@@ -195,9 +213,13 @@ const rciManager = new RciManager(host, transport);
 transport.authError$.subscribe(() => console.warn('Authentication expired'));
 ```
 
-`FetchTransport` and `XHRTransport` expose `authError$` publicly. They emit on 401 outside login,
-signaling an expired session, so application code can subscribe directly. The package does not subscribe
-to `authError$`. `AxiosTransport` does not use `AuthErrorHandler` and exposes no `authError$`.
+`FetchTransport`, `XHRTransport`, and `AxiosTransport` expose `authError$` publicly. They emit on 401
+outside login, signaling an expired session, so application code can subscribe directly. The package
+does not subscribe to `authError$`.
+
+`RciHttpError` has `status` (`null` when there was no HTTP response), `response` (`null` when unavailable),
+and `cause`. Use `isRciHttpError(error)` to recognize it: the check uses a shared `Symbol.for` brand, so it
+also works when the consumer and transport load separate copies of `@rci-tools/core`; `instanceof` does not.
 
 ### `RciManager`
 
@@ -390,6 +412,8 @@ The `RciManager` provides two methods for sending API queries:
 
 Both methods return a [rxjs Observable](https://rxjs.dev/guide/observable)
 that you must subscribe to in order to receive the result. Below are a few usage examples.
+They error with `RciHttpError` for a failed request or malformed batch reply, and with RxJS `TimeoutError`
+if the request does not complete within 60 seconds.
 
 #### Typed queries
 
@@ -636,11 +660,9 @@ Both methods return a `RciBackgroundProcess` object with:
   then completes
 - `error: unknown`: The error that ended the process with `ERROR` (`done$` emits
   `RCI_BACKGROUND_PROCESS_FINISH_REASON.ERROR`), `null` for any other outcome or while the process is running.
-  It is set before `done$` emits and stays available after `destroy()`. This is the value the transport errored with,
-  passed through as is, so its type depends on the transport: `FetchTransport` gives the `Response` of a non-200 reply,
-  `XHRTransport` gives an `XHRTransportResponse` for a non-200 reply or an `Error` for a network failure, the axios
-  adapter gives an `AxiosError` (for a network failure, a plain object with its fields and `response.status` `503`).
-  Errors reported by the device inside a `200` reply (RCI `status` entries) do not end the process with `ERROR`; they
+  It is set before `done$` emits and stays available after `destroy()`. A failed request is a `RciHttpError`;
+  `status` is `null` when there was no HTTP response. The process `timeout` option is a finish reason, not an error.
+  Errors reported by the device inside a `2xx` reply (RCI `status` entries) do not end the process with `ERROR`; they
   arrive in `data$` / `result$`.
 - `destroy(): void`: Releases local resources: stops polling, cancels the in-flight HTTP request,
   and completes all streams (`done$` completes without emitting). It does **not** stop the process

@@ -59,6 +59,8 @@ export type {
 // Transport
 export type { AuthErrorSuspension, BaseHttpResponse, HttpTransport } from './transport/http.transport';
 export { AuthErrorHandler } from './transport/errors/auth-error-handler';
+export { RciHttpError, isRciHttpError } from './transport/errors/rci-http-error';
+export type { RciHttpErrorOptions } from './transport/errors/rci-http-error';
 export { FetchTransport } from './transport/fetch/fetch.transport';
 export type { FetchTransportResponse } from './transport/fetch/fetch.transport';
 export { XHRHeaders, XHRTransport } from './transport/xhr/xhr.transport';

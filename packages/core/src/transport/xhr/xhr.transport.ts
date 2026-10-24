@@ -1,7 +1,7 @@
-import {Observable, map} from 'rxjs';
-import type {GenericObject} from '../../type.utils';
+import {Observable} from 'rxjs';
 import type {AuthErrorSuspension, BaseHttpResponse, HttpTransport} from '../http.transport';
 import {AuthErrorHandler} from '../errors/auth-error-handler';
+import {RciHttpError} from '../errors/rci-http-error';
 
 export interface XHRTransportResponse extends BaseHttpResponse {
   headers: XHRHeaders;
@@ -56,8 +56,8 @@ export class XHRTransport implements HttpTransport<XHRTransportResponse> {
     // noop; handled by the browser
   }
 
-  public getHeader(response: XHRTransportResponse, name: string): string {
-    return response?.headers?.get(name) ?? '';
+  public getHeader(response: XHRTransportResponse, name: string): string | null {
+    return response?.headers?.get(name) ?? null;
   }
 
   public get(url: string): Observable<XHRTransportResponse> {
@@ -78,13 +78,6 @@ export class XHRTransport implements HttpTransport<XHRTransportResponse> {
 
   public delete(url: string): Observable<XHRTransportResponse> {
     return this.request('DELETE', url, undefined, undefined);
-  }
-
-  public sendQueryArray(url: string, queryArray: GenericObject[]): Observable<GenericObject[]> {
-    return this.post(url, queryArray)
-      .pipe(
-        map((response: XHRTransportResponse) => response.data as GenericObject[]),
-      );
   }
 
   protected request(
@@ -122,18 +115,33 @@ export class XHRTransport implements HttpTransport<XHRTransportResponse> {
           return;
         }
 
+        if (xhr.status === 0) {
+          subscriber.error(new RciHttpError('Network request failed', {status: null}));
+          return;
+        }
+
         const response = this.toResponse(xhr);
 
-        if (response.status === 200) {
+        if (response.status >= 200 && response.status < 300) {
           subscriber.next(response);
           subscriber.complete();
         } else {
-          subscriber.error(response);
+          const rciHttpError = new RciHttpError(
+            `HTTP ${response.status}`,
+            {
+              status: response.status,
+              response,
+            },
+          );
+
+          subscriber.error(rciHttpError);
         }
       };
 
       xhr.onerror = () => {
-        subscriber.error(new Error('XMLHttpRequest request failed'));
+        const cause = new Error('XMLHttpRequest request failed');
+
+        subscriber.error(new RciHttpError('Network request failed', {status: null, cause}));
       };
 
       xhr.send(body);

@@ -29,7 +29,7 @@ export class Ndw2AuthProtocol<ResponseType extends BaseHttpResponse = BaseHttpRe
   public isSupported(response: ResponseType): boolean {
     const header = this.httpTransport.getHeader(response, 'WWW-Authenticate');
 
-    return header.includes(this.schema);
+    return header?.includes(this.schema) ?? false;
   }
 
   public authenticate(
