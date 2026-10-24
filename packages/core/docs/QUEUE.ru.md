@@ -38,6 +38,7 @@ class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends string =
 ```typescript
 interface RciQueueOptions<ResponseType extends BaseHttpResponse, QueryPath extends string = string> {
   batchTimeout: number;                          // окно в мс для TimerScheduler по умолчанию
+  requestTimeout?: number;                       // мс на HTTP-запрос, 0 — без таймаута (по умолчанию 60000)
   blockerQueue: RciQueue<ResponseType, QueryPath> | null; // другая очередь, блокирующая эту, пока занята
   queueName?: string;                            // метка, передаваемая в сборщик статистики
   scheduler?: BatchScheduler<QueryPath>;         // свой планировщик (перекрывает `batchTimeout`)

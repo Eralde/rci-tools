@@ -112,8 +112,8 @@ What a transport must do:
 - return `null` from `getHeader()` when the response has no such header;
 - `authError$` is optional. If present, it reports an HTTP 401 outside a login, that is, an expired session.
 
-The 60-second timeout in `execute()` and `queue()` is added by core, not by the transport.
-It arrives as an RxJS `TimeoutError`, not as `RciHttpError`.
+Core adds a request timeout to `execute()` and `queue()`: 60 seconds by default, configurable with
+`RciManagerOptions.requestTimeout`. It arrives as an RxJS `TimeoutError`, not as `RciHttpError`.
 
 `RciHttpError` has three fields:
 
@@ -286,6 +286,20 @@ interface RciManager<
 }
 ```
 
+#### `RciManagerOptions`
+
+```typescript
+interface RciManagerOptions {
+  batchTimeout?: number;           // ms to collect a batch; default 20, 0 sends immediately
+  batchScheduler?: BatchScheduler; // optional override; default: TimerScheduler
+  requestTimeout?: number;         // ms per HTTP request; default 60000, 0 disables the timeout
+}
+```
+
+Times are in milliseconds. `batchTimeout` and `requestTimeout` must be finite numbers from 0 to 2147483647
+(the largest `setTimeout` delay); otherwise, the `RciManager` constructor throws `RangeError`.
+The manager reads these options once when it is created.
+
 Additional members:
 
 - `stats$`: emits a `QueryStats` object for each completed batch when stats collection is enabled.
@@ -445,7 +459,7 @@ The `RciManager` provides two methods for sending API queries:
 Both methods return a [rxjs Observable](https://rxjs.dev/guide/observable)
 that you must subscribe to in order to receive the result. Below are a few usage examples.
 If the HTTP request fails or the batch reply is not an array, the Observable errors with `RciHttpError`.
-If there is no reply for more than 60 seconds, it errors with an RxJS `TimeoutError`.
+If there is no reply within `requestTimeout` (60 seconds by default), it errors with an RxJS `TimeoutError`.
 
 #### Typed queries
 
@@ -661,6 +675,10 @@ interface RciBackgroundProcessOptions {
   timeout?: number;      // ms before DELETE is sent to stop the process. Default: 0 (no timeout)
 }
 ```
+
+Times must be finite numbers in milliseconds. `pollInterval` must be greater than 0, `timeout` 0 or more,
+and neither may exceed 2147483647. Invalid values make `initBackgroundProcess()` and `queueBackgroundProcess()`
+throw `RangeError`.
 
 The main difference between the two methods is how the background process is started:
 

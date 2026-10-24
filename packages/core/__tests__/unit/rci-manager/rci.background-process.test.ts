@@ -407,3 +407,131 @@ describe('RciBackgroundProcess polling lifecycle', () => {
     manager.destroy();
   });
 });
+
+describe('RciBackgroundProcess options', () => {
+  const URL = 'http://device/rci/tools/ping';
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it.each([0, -1, NaN, Infinity, 2_147_483_648])('rejects pollInterval %s', (value) => {
+    const transport = makeTransport();
+    const manager = new RciManager('http://device', transport);
+
+    expect(() => manager.initBackgroundProcess({path: 'tools.ping'}, {pollInterval: value}))
+      .toThrow(RangeError);
+    expect(() => manager.initBackgroundProcess({path: 'tools.ping'}, {pollInterval: value}))
+      .toThrow('pollInterval');
+    expect(() => manager.queueBackgroundProcess({path: 'tools.ping'}, {pollInterval: value}))
+      .toThrow(RangeError);
+    expect(() => manager.queueBackgroundProcess({path: 'tools.ping'}, {pollInterval: value}))
+      .toThrow('pollInterval');
+    expect(transport.post).not.toHaveBeenCalled();
+
+    manager.destroy();
+  });
+
+  it.each([-1, NaN, Infinity, 2_147_483_648])('rejects timeout %s', (value) => {
+    const transport = makeTransport();
+    const manager = new RciManager('http://device', transport);
+
+    expect(() => manager.initBackgroundProcess({path: 'tools.ping'}, {timeout: value}))
+      .toThrow(RangeError);
+    expect(() => manager.initBackgroundProcess({path: 'tools.ping'}, {timeout: value}))
+      .toThrow('timeout');
+    expect(() => manager.queueBackgroundProcess({path: 'tools.ping'}, {timeout: value}))
+      .toThrow(RangeError);
+    expect(() => manager.queueBackgroundProcess({path: 'tools.ping'}, {timeout: value}))
+      .toThrow('timeout');
+    expect(transport.post).not.toHaveBeenCalled();
+
+    manager.destroy();
+  });
+
+  it('an invalid queued process does not block the queue', () => {
+    const transport = makeTransport();
+    const manager = new RciManager('http://device', transport);
+
+    expect(() => manager.queueBackgroundProcess({path: 'tools.ping'}, {pollInterval: 0}))
+      .toThrow(RangeError);
+
+    manager.queueBackgroundProcess({path: 'tools.ping', data: {}});
+
+    expect(transport.post).toHaveBeenCalledWith(URL, {});
+
+    manager.destroy();
+  });
+
+  it('timeout 0 means no timeout', () => {
+    const transport = makeTransport();
+    vi.mocked(transport.post).mockReturnValue(of({status: 200, data: {continued: true}}));
+    vi.mocked(transport.get).mockReturnValue(of({status: 200, data: {continued: true}}));
+    vi.mocked(transport.delete).mockReturnValue(of({status: 200, data: {}}));
+
+    const manager = new RciManager('http://device', transport);
+    const process = manager.initBackgroundProcess(
+      {path: 'tools.ping'},
+      {timeout: 0, pollInterval: 1000},
+    );
+
+    process.start();
+    vi.advanceTimersByTime(600_000);
+
+    expect(process.getState()).toBe(RCI_BACKGROUND_PROCESS_STATE.RUNNING);
+    expect(transport.delete).not.toHaveBeenCalled();
+
+    manager.destroy();
+  });
+
+  it('stops the process when timeout expires', () => {
+    const transport = makeTransport();
+    vi.mocked(transport.post).mockReturnValue(of({status: 200, data: {continued: true}}));
+    vi.mocked(transport.get).mockReturnValue(of({status: 200, data: {continued: true}}));
+    vi.mocked(transport.delete).mockReturnValue(of({status: 200, data: {}}));
+
+    const manager = new RciManager('http://device', transport);
+    const process = manager.initBackgroundProcess({path: 'tools.ping'}, {timeout: 5000});
+    const done: RCI_BACKGROUND_PROCESS_FINISH_REASON[] = [];
+    process.done$.subscribe(reason => done.push(reason));
+
+    process.start();
+    vi.advanceTimersByTime(4999);
+    expect(process.getState()).toBe(RCI_BACKGROUND_PROCESS_STATE.RUNNING);
+    expect(transport.delete).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(1);
+
+    expect(process.getState()).toBe(RCI_BACKGROUND_PROCESS_STATE.TIMED_OUT);
+    expect(done).toEqual([RCI_BACKGROUND_PROCESS_FINISH_REASON.TIMED_OUT]);
+    expect(transport.delete).toHaveBeenCalledWith(URL);
+
+    manager.destroy();
+  });
+
+  it('copies options at construction', () => {
+    const transport = makeTransport();
+    vi.mocked(transport.post).mockReturnValue(of({status: 200, data: {continued: true}}));
+    vi.mocked(transport.get).mockReturnValue(of({status: 200, data: {continued: true}}));
+    const manager = new RciManager('http://device', transport);
+    const options = {pollInterval: 1000};
+    const process = manager.initBackgroundProcess({path: 'tools.ping'}, options);
+    options.pollInterval = 10;
+
+    process.start();
+    expect(transport.get).toHaveBeenCalledTimes(1);
+    expect(process.options).not.toBe(options);
+
+    vi.advanceTimersByTime(999);
+    expect(transport.get).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(1);
+    expect(transport.get).toHaveBeenCalledTimes(2);
+
+    manager.destroy();
+  });
+});

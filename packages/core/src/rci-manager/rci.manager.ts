@@ -1,9 +1,9 @@
-import {defer, Observable, throwError} from 'rxjs';
+import {Observable, defer, throwError} from 'rxjs';
 import {filter, finalize, map, shareReplay, take, tap, timeout} from 'rxjs/operators';
 import type {BaseHttpResponse, HttpTransport} from '../transport/http.transport';
 import {sendQueryArray} from '../transport/send-query-array';
 import type {RciQuery, RciResponseOf, RciResultsOf} from './query/rci.query';
-import {clampNonNegativeTimeout, RCI_QUEUE_DEFAULT_BATCH_TIMEOUT} from './queue/rci.queue.constants';
+import {RCI_QUEUE_DEFAULT_BATCH_TIMEOUT} from './queue/rci.queue.constants';
 import {RCI_QUEUE_STATE} from './queue/rci.queue.types';
 import {RciQueue} from './queue/rci.queue';
 import type {BatchScheduler} from './scheduler/scheduler.types';
@@ -15,6 +15,7 @@ import type {QueueOptions, RciBatchResultsConstraint, RciManagerOptions} from '.
 import {DEFAULT_QUEUE_OPTIONS, RCI_QUERY_TIMEOUT, RCI_SCHEDULER_SWAP_DEFAULT_TIMEOUT_MS} from './rci.manager.constants';
 import type {QueryStats} from './stats/query-stats';
 import {QueryStatsCollector} from './stats/query-stats-collector';
+import {resolveDuration, withRequestTimeout} from './rci.timing';
 
 const isQueryList = <P extends string>(
   query: RciQuery<P> | readonly RciQuery<P>[],
@@ -46,6 +47,7 @@ export class RciManager<
   protected readonly priorityQueue: RciQueue<BaseHttpResponse, QueryPath>;
   protected readonly backgroundQueues: Record<string, RciBackgroundTaskQueue<BackgroundQueryPath>> = {};
   protected readonly statsCollector = new QueryStatsCollector<QueryPath>();
+  private readonly requestTimeout: number;
   protected currentSchedulerSwapToken: symbol | null = null;
   protected isDestroyed = false;
 
@@ -56,7 +58,21 @@ export class RciManager<
     private httpTransport: HttpTransport<BaseHttpResponse>,
     private options: RciManagerOptions<QueryPath> = {},
   ) {
-    const batchTimeout = this.options.batchTimeout ?? RCI_QUEUE_DEFAULT_BATCH_TIMEOUT;
+    const batchTimeout = resolveDuration(
+      'batchTimeout',
+      this.options.batchTimeout,
+      {
+        fallback: RCI_QUEUE_DEFAULT_BATCH_TIMEOUT,
+      },
+    );
+
+    this.requestTimeout = resolveDuration(
+      'requestTimeout',
+      this.options.requestTimeout,
+      {
+        fallback: RCI_QUERY_TIMEOUT,
+      },
+    );
 
     this.rciPath = `${this.host}/rci/`;
 
@@ -65,6 +81,7 @@ export class RciManager<
       this.httpTransport,
       {
         batchTimeout: 0,
+        requestTimeout: this.requestTimeout,
         queueName: 'priority',
         statsCollector: this.statsCollector,
       },
@@ -74,7 +91,8 @@ export class RciManager<
       this.rciPath,
       this.httpTransport,
       {
-        batchTimeout: clampNonNegativeTimeout(batchTimeout),
+        batchTimeout,
+        requestTimeout: this.requestTimeout,
         // the priority queue preempts the batch queue whenever it is busy:
         // an in-flight batch query is abandoned and re-sent afterward
         // (see "Blocker queue semantics" in docs/QUEUE.md)
@@ -182,7 +200,7 @@ export class RciManager<
       return sendQueryArray(this.httpTransport, this.rciPath, queryArray);
     })
       .pipe(
-        timeout(RCI_QUERY_TIMEOUT),
+        withRequestTimeout(this.requestTimeout),
         map((batchedResponse) => {
           const allResponses = RciPayloadHelper.inflateResponse(batchedResponse, queryMap);
           const extracted = allResponses.map((response, index) => {

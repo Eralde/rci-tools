@@ -37,6 +37,7 @@ The constructor options are:
 ```typescript
 interface RciQueueOptions<ResponseType extends BaseHttpResponse, QueryPath extends string = string> {
   batchTimeout: number;                          // ms window used by the default TimerScheduler
+  requestTimeout?: number;                       // ms per HTTP request, 0 = no timeout (default 60000)
   blockerQueue: RciQueue<ResponseType, QueryPath> | null; // another queue that blocks this one while busy
   queueName?: string;                            // label reported to the stats collector
   scheduler?: BatchScheduler<QueryPath>;         // custom scheduler (overrides `batchTimeout`)

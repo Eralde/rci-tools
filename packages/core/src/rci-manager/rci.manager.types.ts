@@ -8,6 +8,8 @@ export interface QueueOptions {
 export interface RciManagerOptions<QueryPath extends string = string> {
   batchTimeout?: number;
   batchScheduler?: BatchScheduler<QueryPath>;
+  /** Timeout in milliseconds per RCI HTTP request. Defaults to 60000; 0 disables the timeout. */
+  requestTimeout?: number;
 }
 
 // `T = never` marks "no explicit response type": the result is then inferred from the queries

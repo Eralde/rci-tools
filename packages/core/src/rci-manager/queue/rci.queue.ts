@@ -1,9 +1,11 @@
 import {BehaviorSubject, Observable, ReplaySubject, Subject, Subscription, defer, of, throwError} from 'rxjs';
-import {catchError, distinctUntilChanged, map, take, timeout} from 'rxjs/operators';
+import {catchError, distinctUntilChanged, map, take} from 'rxjs/operators';
 import {RciPayloadHelper} from '../payload/rci.payload.helper';
 import type {QueryMap} from '../payload/rci.payload.types';
 import type {BaseHttpResponse, HttpTransport} from '../../transport/http.transport';
 import type {GenericObject, TaskResult} from '../../type.utils';
+import {sendQueryArray} from '../../transport/send-query-array';
+import {resolveDuration, withRequestTimeout} from '../rci.timing';
 import {RCI_QUERY_TIMEOUT, SAVE_CONFIGURATION_QUERY} from '../rci.manager.constants';
 import type {RciQuery, RciTask} from '../query/rci.query';
 import type {BatchScheduler, BatchSnapshot} from '../scheduler/scheduler.types';
@@ -11,10 +13,9 @@ import {TimerScheduler} from '../scheduler/timer-scheduler';
 import type {QueryStatsCollector} from '../stats/query-stats-collector';
 import type {QueueTask, RciQueueOptions, RciQueueState} from './rci.queue.types';
 import {RCI_QUEUE_STATE} from './rci.queue.types';
-import {RCI_QUEUE_BUSY_STATES, RCI_QUEUE_DEFAULT_BATCH_TIMEOUT, clampNonNegativeTimeout} from './rci.queue.constants';
+import {RCI_QUEUE_BUSY_STATES, RCI_QUEUE_DEFAULT_BATCH_TIMEOUT} from './rci.queue.constants';
 import {QueueNotIdleError} from './queue-not-idle.error';
 import {QueueDestroyedError} from './queue-destroyed.error';
-import {sendQueryArray} from '../../transport/send-query-array';
 
 interface InFlightBatch<QueryPath extends string = string> {
   tasks: QueueTask<QueryPath>[];
@@ -50,6 +51,7 @@ export class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends s
   private scheduler: BatchScheduler<QueryPath>;
   private readonly queueName: string;
   private readonly statsCollector: QueryStatsCollector<QueryPath> | null;
+  private readonly requestTimeout: number;
 
   // tasks waiting for the next HTTP query, in insertion order;
   // tasks recalled from a preempted in-flight query go back to the head
@@ -67,7 +69,12 @@ export class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends s
     private httpTransport: HttpTransport<ResponseType>,
     private initOptions: Partial<RciQueueOptions<ResponseType, QueryPath>> = {},
   ) {
-    const batchTimeout = clampNonNegativeTimeout(this.initOptions.batchTimeout ?? RCI_QUEUE_DEFAULT_BATCH_TIMEOUT);
+    const batchTimeout = resolveDuration('batchTimeout', this.initOptions.batchTimeout, {
+      fallback: RCI_QUEUE_DEFAULT_BATCH_TIMEOUT,
+    });
+    this.requestTimeout = resolveDuration('requestTimeout', this.initOptions.requestTimeout, {
+      fallback: RCI_QUERY_TIMEOUT,
+    });
 
     this.blockerQueue = this.initOptions.blockerQueue ?? null;
     this.queueName = this.initOptions.queueName ?? 'unknown';
@@ -288,7 +295,7 @@ export class RciQueue<ResponseType extends BaseHttpResponse, QueryPath extends s
 
     const subscription = defer(() => sendQueryArray(this.httpTransport, this.rciPath, queryArray))
       .pipe(
-        timeout(RCI_QUERY_TIMEOUT),
+        withRequestTimeout(this.requestTimeout),
         map((batchedResponse): [GenericObject[], unknown] => [batchedResponse, null]),
         catchError((httpClientError) => of([[], httpClientError] as [GenericObject[], unknown])),
       )

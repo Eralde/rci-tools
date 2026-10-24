@@ -20,6 +20,7 @@ import {
 import type {GenericObject, ObjectOrArray} from '../../type.utils';
 import type {BaseHttpResponse, HttpTransport} from '../../transport/http.transport';
 import type {RciQuery} from '../query/rci.query';
+import {resolveDuration} from '../rci.timing';
 
 export interface RciBackgroundProcessOptions {
   pollInterval?: number; // time between polling requests to check for updates
@@ -77,6 +78,8 @@ export class RciBackgroundProcess<CommandType extends string = string> {
 
   private readonly rciPath: string;
   private readonly httpTransport: HttpTransport<BaseHttpResponse>;
+  private readonly pollIntervalMs: number;
+  private readonly timeoutMs: number;
 
   private readonly stateSub$ = new BehaviorSubject<RCI_BACKGROUND_PROCESS_STATE>(RCI_BACKGROUND_PROCESS_STATE.INIT);
   private readonly startTrigger$: Subject<void> = new Subject<void>();
@@ -91,9 +94,26 @@ export class RciBackgroundProcess<CommandType extends string = string> {
   ) {
     this.command = command;
     this.data = data;
-    this.options = options;
+    this.options = {...options};
     this.rciPath = rciPath;
     this.httpTransport = httpTransport;
+
+    this.pollIntervalMs = resolveDuration(
+      'pollInterval',
+      options.pollInterval,
+      {
+        fallback: DEFAULT_BACKGROUND_PROCESS_OPTIONS.pollInterval,
+        positive: true,
+      },
+    );
+
+    this.timeoutMs = resolveDuration(
+      'timeout',
+      options.timeout,
+      {
+        fallback: DEFAULT_BACKGROUND_PROCESS_OPTIONS.timeout,
+      },
+    );
 
     this.data$ = this.responseSub$.asObservable().pipe(filter(Boolean));
     this.result$ = this.resultSub$.asObservable();
@@ -246,8 +266,8 @@ export class RciBackgroundProcess<CommandType extends string = string> {
   }
 
   protected execute(): void {
-    const timeoutTrigger$ = this.options.timeout
-      ? timer(this.options.timeout)
+    const timeoutTrigger$ = this.timeoutMs
+      ? timer(this.timeoutMs)
       : NEVER;
 
     const timeout$ = timeoutTrigger$.pipe(
@@ -295,7 +315,6 @@ export class RciBackgroundProcess<CommandType extends string = string> {
     path: string,
     data: RciQuery['data'],
   ): Observable<GenericObject> {
-    const pollInterval = Math.max(1, this.options.pollInterval ?? DEFAULT_BACKGROUND_PROCESS_OPTIONS.pollInterval);
     const url = this.getProcessUrl(path);
 
     const onDataUpdate: (data: GenericObject) => void = (data) => this.responseSub$.next(data);
@@ -323,7 +342,7 @@ export class RciBackgroundProcess<CommandType extends string = string> {
 
                 return getResponse;
               }),
-              delayWhen((getResponse) => timer(isFinished(getResponse) ? 0 : pollInterval)),
+              delayWhen((getResponse) => timer(isFinished(getResponse) ? 0 : this.pollIntervalMs)),
               repeat(),
             );
 

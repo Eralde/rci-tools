@@ -8,6 +8,7 @@ import type {RciQueue} from './rci.queue';
 
 export interface RciQueueOptions<ResponseType extends BaseHttpResponse, QueryPath extends string = string> {
   batchTimeout: number;
+  requestTimeout?: number;
   blockerQueue: RciQueue<ResponseType, QueryPath> | null;
   queueName?: string;
   scheduler?: BatchScheduler<QueryPath> | undefined;

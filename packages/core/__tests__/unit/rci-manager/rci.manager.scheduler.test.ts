@@ -54,14 +54,9 @@ describe('RciManager scheduler wiring', () => {
     expect(transport.post).toHaveBeenCalledTimes(1);
   });
 
-  it('clamps options.batchTimeout to non-negative', () => {
-    const transport = makeTransport();
-    const manager = new RciManager(FAKE_HOST, transport, {batchTimeout: -100});
-
-    manager.queue({path: 'show.version'}).subscribe();
-    vi.advanceTimersByTime(0);
-
-    expect(transport.post).toHaveBeenCalledTimes(1);
+  it('rejects negative options.batchTimeout', () => {
+    expect(() => new RciManager(FAKE_HOST, makeTransport(), {batchTimeout: -100}))
+      .toThrow('batchTimeout');
   });
 
   it('waits for READY before replacing scheduler', () => {

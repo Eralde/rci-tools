@@ -114,8 +114,9 @@ const sessionManager = new SessionManager('http://192.168.1.1', transport, {
 - поток `authError$` можно не делать. Если он есть, он сообщает об HTTP 401 вне входа,
   то есть об истёкшей сессии.
 
-Таймаут 60 секунд в `execute()` и `queue()` добавляет сам core, а не транспорт.
-Он приходит как RxJS `TimeoutError`, а не как `RciHttpError`.
+Таймаут запросов `execute()` и `queue()` добавляет core, а не транспорт: по умолчанию 60 секунд,
+значение задаётся через `RciManagerOptions.requestTimeout`. При срабатывании приходит RxJS `TimeoutError`,
+а не `RciHttpError`.
 
 У `RciHttpError` три поля:
 
@@ -293,6 +294,20 @@ interface RciManager<
 }
 ```
 
+#### `RciManagerOptions`
+
+```typescript
+interface RciManagerOptions {
+  batchTimeout?: number;           // окно сбора батча в мс; по умолчанию 20, 0 — отправить сразу
+  batchScheduler?: BatchScheduler; // переопределение; по умолчанию TimerScheduler
+  requestTimeout?: number;         // мс на HTTP-запрос; по умолчанию 60000, 0 — без таймаута
+}
+```
+
+Время указывается в миллисекундах. `batchTimeout` и `requestTimeout` должны быть конечными числами
+от 0 до 2147483647 (наибольшая задержка `setTimeout`); иначе конструктор `RciManager` выбрасывает `RangeError`.
+Менеджер читает эти опции один раз при создании.
+
 Дополнительные члены класса:
 
 - `stats$`: выдаёт объект `QueryStats` для каждого завершённого батча, если сбор статистики включён.
@@ -451,7 +466,7 @@ const query = {path: 'ip', data: {telnet: {session: {timeout: 123456}}}};
 на который нужно подписаться, чтобы получить результат. Ниже приведено несколько примеров
 использования.
 Если HTTP-запрос не удался или ответ на батч не является массивом, Observable завершается ошибкой
-`RciHttpError`. Если ответа нет дольше 60 секунд — ошибкой RxJS `TimeoutError`.
+`RciHttpError`. Если ответ не пришёл за `requestTimeout` (по умолчанию 60 секунд), будет ошибка RxJS `TimeoutError`.
 
 #### Типизированные запросы
 
@@ -667,6 +682,10 @@ interface RciBackgroundProcessOptions {
   timeout?: number;      // мс до отправки DELETE для остановки процесса. По умолчанию: 0 (без таймаута)
 }
 ```
+
+Время указывается в миллисекундах; все значения должны быть конечными числами. `pollInterval` должен быть больше 0,
+`timeout` — не меньше 0, и оба не больше 2147483647. При неверных значениях `initBackgroundProcess()`
+и `queueBackgroundProcess()` выбрасывают `RangeError`.
 
 Разница между двумя методами заключается в том, когда фоновый процесс будет запущен:
 
