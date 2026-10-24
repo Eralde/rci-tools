@@ -95,15 +95,15 @@ let showClearDialog = $state(false);
 
 const systemLogClearService = new SystemLogClearService(rciService);
 
-const lowerCaseActiveLogLevels = $derived(
-  activeLogLevels.map(level => level.toLowerCase()),
+const allLogLevelsActive = $derived(
+  activeLogLevels.length === logLevelOptions.length,
 );
 
 const filteredLog = $derived(() => {
   return shared.log.filter(item => {
-    const levelMatch = lowerCaseActiveLogLevels.includes(
-      item.message.level.toLowerCase(),
-    );
+    // levels missing from `LOG_ITEM_LEVEL` have no filter button: shown only while level filtering is off
+    const levelMatch = allLogLevelsActive
+      || activeLogLevels.includes(item.message.level);
 
     if (!levelMatch) {
       return false;
@@ -125,9 +125,8 @@ const filteredLogLength = $derived(filteredLog().length);
 
 const isFilteringActive = $derived(() => {
   const hasSubstringFilter = substringFilter.trim().length > 0;
-  const allLevelsActive = activeLogLevels.length === logLevelOptions.length;
 
-  return hasSubstringFilter || !allLevelsActive;
+  return hasSubstringFilter || !allLogLevelsActive;
 });
 
 const highlightMatch = (text: string, filter: string): string => {
