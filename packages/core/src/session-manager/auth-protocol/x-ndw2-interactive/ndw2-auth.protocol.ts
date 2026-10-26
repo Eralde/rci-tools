@@ -91,8 +91,13 @@ export class Ndw2AuthProtocol<ResponseType extends BaseHttpResponse = BaseHttpRe
           return of(context.errorToResponse(error));
         }),
         exhaustMap((response) => {
+          // no HTTP response (e.g. a network error): the final check would fail the same way
+          if (!response) {
+            return of(toLoginFailure(LOGIN_FAILURE_REASON.UNAVAILABLE));
+          }
+
           // the device answers `401` to credentials it does not accept
-          if (response?.status === 401) {
+          if (response.status === 401) {
             return of(toLoginFailure(LOGIN_FAILURE_REASON.REJECTED));
           }
 

@@ -459,20 +459,18 @@ describe('SessionManager', () => {
     await expect(firstValueFrom(session.getRealmHeader())).resolves.toBeNull();
   });
 
-  it('login() returns false when NDW2 POST /auth fails without a response', async () => {
+  it('login() returns false when NDW2 POST /auth fails without a response, with no final GET /auth', async () => {
     const post = vi.fn().mockReturnValue(
       throwError(() => new RciHttpError('Network request failed', {status: null})),
     );
-    const get = vi.fn()
-      .mockReturnValueOnce(of(ndw2Challenge))
-      .mockReturnValueOnce(of({status: 401, data: {}, headers: {}}));
+    const get = vi.fn().mockReturnValueOnce(of(ndw2Challenge));
     const transport = makeTransport({post, get, getHeader: vi.fn(readHeader)});
     const session = new SessionManager('http://device', transport);
 
     await expect(firstValueFrom(session.login('admin', 'password'))).resolves.toBe(false);
     expect(post).toHaveBeenCalledOnce();
     expect(post).toHaveBeenCalledWith('http://device/auth', expect.objectContaining({login: 'admin'}));
-    expect(get).toHaveBeenCalledTimes(2);
+    expect(get).toHaveBeenCalledOnce();
   });
 });
 
@@ -642,21 +640,16 @@ describe('SessionManager.loginDetailed()', () => {
   });
 
   it('reports an unavailable device when NDW2 POST /auth fails without a response', async () => {
+    const get = vi.fn().mockReturnValueOnce(of(ndw2Challenge));
     const transport = makeTransport({
-      get: vi.fn()
-        .mockReturnValueOnce(of(ndw2Challenge))
-        .mockReturnValueOnce(throwError(() =>
-          new RciHttpError('HTTP 401', {
-            status: 401,
-            response: {status: 401, data: {}, headers: {}},
-          })
-        )),
+      get,
       post: vi.fn().mockReturnValue(throwError(() => new RciHttpError('Network request failed', {status: null}))),
       getHeader: vi.fn(readHeader),
     });
     const session = new SessionManager('http://device', transport);
 
     await expect(firstValueFrom(session.loginDetailed('admin', 'password'))).resolves.toEqual(unavailable(NDW2));
+    expect(get).toHaveBeenCalledOnce();
   });
 
   it('reports an unavailable device when NDW2 POST is accepted but the final check finds no session', async () => {
