@@ -1,0 +1,23 @@
+{
+  "name": "try-auth",
+  "private": true,
+  "author": "Eralde",
+  "license": "ISC",
+  "scripts": {
+    "ndw2": "tsx src/x-ndw2-interactive.ts",
+    "ndw4": "tsx src/x-ndw4-interactive.ts",
+    "poll-login": "tsx src/poll-login.ts",
+    "typecheck": "tsc --noEmit",
+    "fmt": "dprint fmt \"./src/**/*.ts\""
+  },
+  "dependencies": {
+    "@rci-tools/adapter-axios": "workspace:*",
+    "@rci-tools/core": "workspace:*",
+    "inquirer": "^12.11.1",
+    "rxjs": "^7.8.2"
+  },
+  "devDependencies": {
+    "@types/node": "22.13.14",
+    "tsx": "^4.23.0"
+  }
+}

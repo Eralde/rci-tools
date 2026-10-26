@@ -213,10 +213,13 @@ source ndw2_auth_fn.sh
 ndw2_auth --username <username> --password <password> [--addr <address>]
 ```
 
-Both schemas can also be tried against a real device with the scripts from `packages/core`
+Both schemas can also be tried against a real device with the scripts in `examples/try-auth`
 (they prompt for the address and the credentials):
 
 ```bash
-pnpm test:ndw2-auth
-pnpm test:ndw4-auth
+pnpm --filter try-auth ndw2
+pnpm --filter try-auth ndw4
 ```
+
+To poll login while a device reboots, run `pnpm --filter try-auth poll-login`. It sends a login
+attempt every 5 seconds and has a lockout guard. These scripts send real requests to the device.

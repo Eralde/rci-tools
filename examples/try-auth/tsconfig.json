@@ -1,0 +1,21 @@
+{
+  "extends": "@tsconfig/strictest/tsconfig.json",
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@rci-tools/core": [
+        "../../packages/core/src/index.ts"
+      ],
+      "@rci-tools/adapter-axios": [
+        "../../packages/adapter-axios/src/index.ts"
+      ]
+    }
+  },
+  "include": [
+    "src"
+  ]
+}

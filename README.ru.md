@@ -72,5 +72,6 @@
 
 - [Пример использования в браузере](./examples/simple-browser-demo/README.ru.md)
 - [Пример использования с Node.js](./examples/simple-nodejs-demo/README.ru.md)
+- [Проверка аутентификации](./examples/try-auth/README.ru.md)
 - [Local Monitor (Node.js)](./examples/local-monitor/README.ru.md)
 - [WebCLI (Svelte)](./examples/sv-webcli/README.ru.md)
