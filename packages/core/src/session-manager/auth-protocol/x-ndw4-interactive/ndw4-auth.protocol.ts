@@ -348,7 +348,7 @@ export class Ndw4AuthProtocol<ResponseType extends BaseHttpResponse = BaseHttpRe
     const encodedPayload = this.httpTransport.getHeader(response, NDW4_REPLY_HEADER);
 
     if (!encodedPayload) {
-      throw new Error(`NDW4 auth failed: missing ${NDW4_REPLY_HEADER} header.`);
+      throw new Error(`NDW4 auth failed: missing ${NDW4_REPLY_HEADER} header (HTTP ${response.status}).`);
     }
 
     const payload = decodeBase64(encodedPayload);

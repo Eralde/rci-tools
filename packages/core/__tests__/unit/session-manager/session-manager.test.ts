@@ -753,6 +753,32 @@ describe('SessionManager.loginDetailed()', () => {
     await expect(firstValueFrom(session.loginDetailed('admin', 'password'))).resolves.toEqual(unavailable(NDW4));
   });
 
+  it('logs the HTTP status of an NDW4 reply without X-NDM-Data', async () => {
+    const transport = makeTransport({
+      post: vi.fn().mockReturnValue(throwError(() =>
+        new RciHttpError('HTTP 502', {
+          status: 502,
+          response: {status: 502, data: {}, headers: {}},
+        })
+      )),
+      getHeader: vi.fn(readHeader),
+    });
+    const protocol = new Ndw4AuthProtocol('http://device', transport);
+    const logError = vi.fn();
+    const context = {
+      isAuthenticated: () => of(false),
+      errorToResponse: (error: unknown) => isRciHttpError(error) ? error.response : null,
+      logError,
+    };
+    const result = await firstValueFrom(protocol.authenticate(ndw4Challenge, context, 'admin', 'password'));
+
+    expect(result).toEqual({success: false, reason: LOGIN_FAILURE_REASON.UNAVAILABLE});
+    expect(logError).toHaveBeenCalledOnce();
+    expect(logError.mock.calls[0]?.[0]).toEqual(
+      new Error('NDW4 auth failed: missing X-NDM-Data header (HTTP 502).'),
+    );
+  });
+
   it('reports an unavailable device when an NDW4 request fails without a response', async () => {
     const transport = makeTransport({
       get: vi.fn().mockReturnValue(of(ndw4Challenge)),
