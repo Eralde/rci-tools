@@ -10,6 +10,7 @@
     "build": "pnpm -r run build",
     "test": "vitest run",
     "typecheck": "pnpm -r --filter \"./packages/*\" run typecheck",
+    "lint": "pnpm -r --filter \"./packages/*\" --if-present run lint",
     "dev:simple-browser-demo": "pnpm --filter simple-browser-demo run dev",
     "dev:simple-nodejs-demo": "pnpm --filter simple-nodejs-demo run dev",
     "dev:local-monitor": "pnpm -r --filter \"./examples/local-monitor\" run dev"

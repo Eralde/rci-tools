@@ -1,0 +1,17 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "baseUrl": ".",
+    "moduleResolution": "bundler",
+    "module": "esnext",
+    // ts-mixer traits rely on [[Set]] semantics for class fields (as in the original codebase)
+    "useDefineForClassFields": false,
+    "paths": {
+      "@rci-tools/core": ["../core/src"]
+    }
+  },
+  "include": [
+    "src/**/*"
+  ]
+}

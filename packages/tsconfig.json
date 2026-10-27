@@ -6,6 +6,9 @@
     },
     {
       "path": "./adapter-axios"
+    },
+    {
+      "path": "./interfaces"
     }
   ]
 }

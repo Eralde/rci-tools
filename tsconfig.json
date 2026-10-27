@@ -7,6 +7,9 @@
       ],
       "@rci-tools/adapter-axios": [
         "packages/adapter-axios/src"
+      ],
+      "@rci-tools/interfaces": [
+        "packages/interfaces/src"
       ]
     }
   },
