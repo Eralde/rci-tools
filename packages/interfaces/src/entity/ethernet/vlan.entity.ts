@@ -10,7 +10,7 @@ import {
 } from '../../entity-model.types';
 import {
   BaseTrait,
-  type CreateDeleteTrait,
+  CreateDeleteTrait,
   IgmpTrait,
   IpDnsTrait,
   IpMtuTrait,
@@ -42,6 +42,7 @@ export interface VlanEntity extends
 export const VlanEntityMixin = Mixin(
   Mixin(
     BaseTrait,
+    CreateDeleteTrait,
     IgmpTrait,
     IpDnsTrait,
     IpMtuTrait,
