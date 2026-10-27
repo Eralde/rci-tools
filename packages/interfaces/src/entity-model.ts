@@ -156,14 +156,6 @@ export const createEntityModel = (options: EntityModelOptions): EntityModel => {
     // VLAN interface index must be positive
     const startIndex = type === NDM_INTERFACE_TYPE.Vlan ? 1 : 0;
     const prefix = parent ? `${parent.name}/` : '';
-    const isIndexUsed = usedNames
-      .map((name) => Number.parseInt(name.replace(/^\D+/g, ''), 10))
-      .includes(index || -1);
-
-    if (isIndexUsed) {
-      throw new Error(`Can't create ${type} entity with used index = ${index}`);
-    }
-
     // Changing `name` once an entity is created won't work as expected:
     // `this.entity.name` inside field properties will reference the initial name value (an empty string).
     //
@@ -171,6 +163,10 @@ export const createEntityModel = (options: EntityModelOptions): EntityModel => {
     const id = index !== null
       ? `${prefix}${type}${index}`
       : getNextName(type, usedNames, {prefix, startIndex});
+
+    if (usedNames.includes(id)) {
+      throw new Error(`Can't create ${type} entity with used index = ${index}`);
+    }
 
     // Minimal proper DTO object
     const dto = {sc: {}, show: {type, id}, allIpoe, allIpvc};
